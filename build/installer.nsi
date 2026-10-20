@@ -55,6 +55,43 @@ VIAddVersionKey "CompanyName" "SlopAMP"
 
 Var UpdateMode
 
+; Append "[UTC time] installer: <message>" to SlopAMP's own log (only if SlopAMP's data folder exists),
+; so an update's whole story (app quitting, installer steps, app starting) reads in one place.
+; Usage: Push "message"  then  Call SlopLog
+Function SlopLog
+  Exch $R0
+  Push $0
+  Push $1
+  Push $2
+  Push $3
+  Push $4
+  Push $5
+  Push $6
+  Push $7
+  IfFileExists "$APPDATA\SlopAMP\*.*" 0 slopLogDone
+  ${GetTime} "" "LS" $0 $1 $2 $3 $4 $5 $6
+  FileOpen $7 "$APPDATA\SlopAMP\slopamp.log" a
+  FileSeek $7 0 END
+  FileWrite $7 "[$2-$1-$0T$4:$5:$6Z] installer: $R0$\n"
+  FileClose $7
+  slopLogDone:
+  Pop $7
+  Pop $6
+  Pop $5
+  Pop $4
+  Pop $3
+  Pop $2
+  Pop $1
+  Pop $0
+  Pop $R0
+FunctionEnd
+!macro SLOPLOG PFX MSG
+  !if "${PFX}" == ""
+    Push "${MSG}"
+    Call SlopLog
+  !endif
+!macroend
+
 ; Close a running SlopAMP before replacing or removing its files. Also finds copies with no visible window
 ; (a hidden or stuck SlopAMP, or one running from the portable exe's temp folder): first it asks them to
 ; quit, and if they're still there after 10 s it ends them. Interactive installs ask the user first.
@@ -80,6 +117,7 @@ FunctionEnd
 Function ${PFX}CloseSlopAMP
   Call ${PFX}IsSlopAMPRunning
   StrCmp $R9 0 closed
+  !insertmacro SLOPLOG "${PFX}" "SlopAMP is still running; asking it to close"
   IfSilent asked
     MessageBox MB_OKCANCEL|MB_ICONINFORMATION "SlopAMP is running (maybe hidden in the background).$\r$\n$\r$\nClick OK to close it. Your playlists and settings are kept." IDOK asked
     Abort
@@ -90,20 +128,24 @@ Function ${PFX}CloseSlopAMP
     StrCmp $R8 0 +2
       SendMessage $R8 0x0010 0 0 /TIMEOUT=1000   ; WM_CLOSE: quit normally (saves playlists)
     Call ${PFX}IsSlopAMPRunning
-    StrCmp $R9 0 closed
+    StrCmp $R9 0 closedasked
     IntOp $R6 $R6 + 1
     IntCmp $R6 20 force
     Sleep 500
     Goto askloop
   force:
+    !insertmacro SLOPLOG "${PFX}" "SlopAMP didn't close within 10 s; ending its processes"
     DetailPrint "SlopAMP didn't quit; ending its processes."
     nsExec::Exec '"$SYSDIR\taskkill.exe" /F /T /IM SlopAMP.exe'
     Pop $R8
     Sleep 1500
     Call ${PFX}IsSlopAMPRunning
     StrCmp $R9 0 closed
+    !insertmacro SLOPLOG "${PFX}" "SlopAMP could not be closed; install stopped"
     MessageBox MB_OK|MB_ICONEXCLAMATION "SlopAMP is still running and couldn't be closed. Restart Windows, then try again." /SD IDOK
     Abort
+  closedasked:
+    !insertmacro SLOPLOG "${PFX}" "SlopAMP closed after $R6 check(s)"
   closed:
 FunctionEnd
 !macroend
@@ -175,9 +217,11 @@ SectionEnd
 
 ; Update mode (SlopAMP's updater runs "Setup.exe /S /UPDATE /PID=<pid>"): reopen SlopAMP when done.
 Section "-Relaunch"
-  StrCmp $UpdateMode 1 0 +3
+  StrCmp $UpdateMode 1 0 norelaunch
+    !insertmacro SLOPLOG "" "update installed in $INSTDIR; reopening SlopAMP"
     SetOutPath "$INSTDIR"
     Exec '"$INSTDIR\${EXE}"'
+  norelaunch:
 SectionEnd
 
 Function .onInit
@@ -192,9 +236,13 @@ Function .onInit
   ${GetOptions} $R0 "/PID=" $R2
   IfErrors waitwin
   System::Call 'kernel32::OpenProcess(i 0x00100000, i 0, i R2) p.R3'
-  StrCmp $R3 0 waitwin
-  System::Call 'kernel32::WaitForSingleObject(p R3, i 30000) i'
+  StrCmp $R3 0 0 pidopen
+    !insertmacro SLOPLOG "" "update: SlopAMP (pid $R2) already gone"
+    Goto waitwin
+  pidopen:
+  System::Call 'kernel32::WaitForSingleObject(p R3, i 30000) i.R4'
   System::Call 'kernel32::CloseHandle(p R3)'
+  !insertmacro SLOPLOG "" "update: waited for SlopAMP (pid $R2) to exit, result $R4 (0 = exited, 258 = still running after 30 s)"
   waitwin:
   ; Keep the user's choice: no desktop shortcut on update unless there was one.
   IfFileExists "$DESKTOP\SlopAMP.lnk" normal

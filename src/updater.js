@@ -195,7 +195,9 @@ class Updater {
   }
   cancel() { if (this.abort) this.abort.abort(); }
 
-  // Re-check the file on disk, then run the installer silently and quit; it reopens SlopAMP.
+  // Re-check the file on disk, then quit normally. The installer is started only at the very end of
+  // quitting (startInstaller, from main's will-quit), so it never has to close a running SlopAMP; it
+  // installs silently and reopens SlopAMP.
   async install() {
     const r = this.release, f = this.downloaded;
     if (!this.canInstall || this.status.status !== 'ready' || !r || !f) return false;
@@ -204,6 +206,18 @@ class Updater {
     if (got !== r.sha256) { this.log('installer changed on disk; refusing to run it'); this.set({ status: 'error', error: 'badhash' }); return false; }
     this.patch({ pending: { version: r.version, notes: r.notes, date: r.date } });
     this.set({ status: 'installing' });
+    this.installOnQuit = f;
+    this.log(`update ${r.version} verified; quitting to install it into ${this.installDir || '(folder from the registry)'}`);
+    this.quit();
+    return true;
+  }
+
+  // Called once SlopAMP has quit cleanly (windows closed, state saved). Resolves false if the installer
+  // couldn't be started; main then reopens SlopAMP instead of leaving the user with nothing.
+  async startInstaller() {
+    const f = this.installOnQuit;
+    this.installOnQuit = null;
+    if (!f) return false;
     try {
       await new Promise((ok, bad) => {
         // Test-mode variables are left out, so the reopened SlopAMP is a normal run.
@@ -216,11 +230,9 @@ class Updater {
     } catch (e) {
       this.log('could not start the installer', e);
       this.patch({ pending: undefined });
-      this.set({ status: 'error', error: 'download' });
       return false;
     }
-    this.log(`installing update ${r.version} into ${this.installDir || '(folder from the registry)'}`);
-    setTimeout(() => this.quit(), 300);
+    this.log('installer started; exiting');
     return true;
   }
 

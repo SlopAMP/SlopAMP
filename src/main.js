@@ -727,7 +727,14 @@ function registerMediaKeys() {
     } catch (e) { log('media key register failed', acc, e); }
   }
 }
-app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (_) {} });
+app.on('will-quit', (e) => {
+  try { globalShortcut.unregisterAll(); } catch (_) {}
+  // "Restart now": SlopAMP has now quit cleanly; start the installer last, then exit.
+  if (updater && updater.installOnQuit) {
+    e.preventDefault();
+    updater.startInstaller().then((ok) => { if (!ok) app.relaunch(); app.exit(0); });
+  }
+});
 
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
