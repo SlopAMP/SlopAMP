@@ -1,7 +1,7 @@
 {
   "name": "slopamp",
   "productName": "SlopAMP",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "SlopAMP - a free retro-styled media player for Windows: local files, YouTube links, downloads, EQ and a MilkDrop-style visualizer.",
   "main": "src/main.js",
   "author": "SlopAMP (@HeyoPatriot)",

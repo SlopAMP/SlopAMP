@@ -7,6 +7,8 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { Readable } = require('stream');
+const { pathToFileURL, fileURLToPath } = require('url');
 
 const REPO = 'SlopAMP/SlopAMP';
 const API_LATEST = `https://api.github.com/repos/${REPO}/releases/latest`;
@@ -37,7 +39,8 @@ function cleanNotes(body) {
     .replace(/\n{3,}/g, '\n\n').trim().slice(0, 20000);
 }
 // GitHub release JSON -> what SlopAMP needs, or { error } when the release can't be used.
-function parseRelease(rel, currentVersion) {
+// testDir: test mode only; the installer must then be a plain file name inside that folder.
+function parseRelease(rel, currentVersion, testDir) {
   if (!rel || rel.draft || rel.prerelease) return { error: 'norelease' };
   const version = String(rel.tag_name || '').replace(/^v/, '');
   if (!parseVersion(version)) return { error: 'norelease' };
@@ -45,10 +48,11 @@ function parseRelease(rel, currentVersion) {
   const file = `SlopAMP-Setup-${version}.exe`;
   const asset = (rel.assets || []).find(a => a && a.name === file);
   const url = asset && String(asset.browser_download_url || '');
-  if (!asset || !url.startsWith(`${DOWNLOAD_PREFIX}v${version}/`)) return { ...info, error: 'noasset' };
+  const ok = asset && (testDir ? /^[\w.-]+$/.test(url) : url.startsWith(`${DOWNLOAD_PREFIX}v${version}/`));
+  if (!ok) return { ...info, error: 'noasset' };
   const sha256 = findHash(rel.body, file);
   if (!sha256) return { ...info, error: 'nohash' };
-  return { ...info, file, url, size: asset.size || 0, sha256 };
+  return { ...info, file, url: testDir ? pathToFileURL(path.join(testDir, url)).href : url, size: asset.size || 0, sha256 };
 }
 function sha256File(file) {
   return new Promise((res, rej) => {
@@ -57,11 +61,23 @@ function sha256File(file) {
   });
 }
 
+// Test mode only: file:// URLs read from disk, shaped like a fetch Response.
+function readLocal(url) {
+  let p, st;
+  try { p = fileURLToPath(url); st = fs.statSync(p); } catch (_) { return { ok: false, status: 404 }; }
+  return { ok: true, status: 200, headers: { get: (h) => (/content-length/i.test(h) ? String(st.size) : null) },
+    json: async () => JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '')), body: Readable.toWeb(fs.createReadStream(p)) };
+}
+
 class Updater {
   // fetch: Electron's net.fetch. getState/setState: the 'update' object in slopamp-state.json.
   // emit(state): pushes the current status to the window. canInstall: false for the portable exe / dev runs.
-  constructor({ fetch, version, tempDir, canInstall, getState, setState, emit, quit, openExternal, log }) {
-    Object.assign(this, { fetch, version, tempDir, canInstall, getState, setState, emitFn: emit, quit, openExternal, log });
+  // testFeed: path of a local release.json (SLOPAMP_UPDATE_TEST) used instead of GitHub, for trying updates
+  // without publishing; its installer must sit next to it. Checks then run at every launch.
+  constructor({ fetch, version, tempDir, canInstall, getState, setState, emit, quit, openExternal, log, testFeed }) {
+    Object.assign(this, { version, tempDir, canInstall, getState, setState, emitFn: emit, quit, openExternal, log, testFeed });
+    this.fetch = testFeed ? (url, opts) => (url.startsWith('file:') ? readLocal(url) : fetch(url, opts)) : fetch;
+    this.feed = testFeed ? pathToFileURL(testFeed).href : API_LATEST;
     this.dir = path.join(tempDir, 'SlopAMP-update');
     this.status = { status: 'idle' };
     this.release = null;
@@ -73,7 +89,7 @@ class Updater {
   emit() { this.emitFn(this.snapshot()); }
   snapshot() {
     const c = this.cfg(), r = this.release;
-    return { ...this.status, mode: c.mode, lastCheck: c.lastCheck, canInstall: this.canInstall, current: this.version,
+    return { ...this.status, mode: c.mode, lastCheck: c.lastCheck, canInstall: this.canInstall, current: this.version, test: !!this.testFeed,
       release: r && { version: r.version, notes: r.notes, date: r.date, size: r.size || 0, page: r.page } };
   }
 
@@ -86,7 +102,8 @@ class Updater {
       this.set({ status: 'updated' });
     } else if (c.pending) this.patch({ pending: undefined });   // the install didn't happen
     try { fs.rmSync(this.dir, { recursive: true, force: true }); } catch (_) {}
-    if (c.mode === 'off' || Date.now() - c.lastCheck < DAY) return;
+    if (this.testFeed) { this.log(`update TEST MODE: feed ${this.testFeed}, pretending to be ${this.version}`); delayMs = Math.min(delayMs, 3000); }
+    else if (c.mode === 'off' || Date.now() - c.lastCheck < DAY) return;
     this.timer = setTimeout(() => this.check(false).catch(e => this.log('update check failed', e)), delayMs);
   }
 
@@ -97,7 +114,7 @@ class Updater {
     if (manual) this.set({ status: 'checking', manual });
     let rel;
     try {
-      const r = await this.fetch(API_LATEST, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': `SlopAMP/${this.version}` } });
+      const r = await this.fetch(this.feed, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': `SlopAMP/${this.version}` } });
       if (r.status === 404) rel = null;   // no releases yet
       else if (!r.ok) throw new Error(`GitHub answered ${r.status}`);
       else rel = await r.json();
@@ -107,7 +124,7 @@ class Updater {
       return this.snapshot();
     }
     this.patch({ lastCheck: Date.now() });
-    const info = rel ? parseRelease(rel, this.version) : { error: 'norelease' };
+    const info = rel ? parseRelease(rel, this.version, this.testFeed && path.dirname(this.testFeed)) : { error: 'norelease' };
     if (!info.newer) { this.release = null; this.set(manual ? { status: 'uptodate', manual } : { status: 'idle' }); return this.snapshot(); }
     this.release = info;
     this.log(`update ${info.version} found${info.error ? ` (unusable: ${info.error})` : ''}`);
@@ -181,7 +198,9 @@ class Updater {
     this.set({ status: 'installing' });
     try {
       await new Promise((ok, bad) => {
-        const child = spawn(f, ['/S', '/UPDATE', `/PID=${process.pid}`], { detached: true, stdio: 'ignore' });
+        // Test-mode variables are left out, so the reopened SlopAMP is a normal run.
+        const env = { ...process.env }; delete env.SLOPAMP_UPDATE_TEST; delete env.SLOPAMP_TEST_VERSION;
+        const child = spawn(f, ['/S', '/UPDATE', `/PID=${process.pid}`], { detached: true, stdio: 'ignore', env });
         child.once('spawn', ok); child.once('error', bad);
         child.unref();
       });

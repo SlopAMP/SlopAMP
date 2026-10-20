@@ -676,9 +676,11 @@ app.whenReady().then(async () => {
   });
   // Only the installed Windows build updates itself; the portable exe and dev runs just open the download page.
   const portable = !!(PORTABLE_DIR || process.env.SLOPAMP_PORTABLE) || /-portable$/i.test(path.basename(path.dirname(process.execPath)));
+  const testFeed = process.env.SLOPAMP_UPDATE_TEST ? path.resolve(process.env.SLOPAMP_UPDATE_TEST) : null;
   updater = new Updater({
     fetch: (url, opts) => net.fetch(url, opts),
-    version: app.getVersion(),
+    version: (testFeed && process.env.SLOPAMP_TEST_VERSION) || app.getVersion(),
+    testFeed,
     tempDir: app.getPath('temp'),
     canInstall: app.isPackaged && process.platform === 'win32' && !portable,
     getState: () => (currentState || loadState()).update,

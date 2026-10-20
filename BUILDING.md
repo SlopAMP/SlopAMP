@@ -53,6 +53,15 @@ Outputs go to `dist/`: the app folder, `SlopAMP-Setup-<version>.exe`, `SlopAMP-P
 
 `src/renderer/vendor/butterchurn.min.js` and `src/renderer/vendor/butterchurn-presets.js` are committed, so a fresh clone runs without extra steps. To regenerate them from the upstream Butterchurn sources, run `bash build/butterchurn/build.sh`. You need git, python3 and npx. The script pins the exact upstream commits.
 
+## Testing the updater
+
+`bash build/make-update-test.sh` (after `build-win.sh`) makes `dist/update-test/`: three local release files (good, wrong SHA256, no SHA256 line) and a `.bat` for each, plus one for the portable exe. Each `.bat` starts SlopAMP with two environment variables:
+
+- `SLOPAMP_UPDATE_TEST=<path to a release.json>`: read that file (same format as GitHub's release JSON) instead of GitHub, and check at every launch. The installer must be a plain file name next to it.
+- `SLOPAMP_TEST_VERSION=1.1.9`: the version SlopAMP pretends to be, so the release counts as newer. Ignored without `SLOPAMP_UPDATE_TEST`.
+
+The About box shows TEST FEED while these are set. They are not passed on to the installer, so the reopened SlopAMP is a normal run and shows "Updated to X".
+
 ## Releasing
 
 1. Bump `version` in `package.json` and add a section to `CHANGELOG.md`.

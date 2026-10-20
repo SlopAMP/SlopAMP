@@ -1504,7 +1504,7 @@ function renderUpdAbout() {
   else if (r && ['available', 'downloading', 'verifying', 'ready', 'error'].includes(st.status) && r.version !== st.current) html = `<span class="new">${updEsc(r.version)} available</span>${checked}`;
   else if (st.status === 'error' && st.error === 'offline') html = `Couldn’t reach GitHub${checked}`;
   else html = st.lastCheck ? `<span class="ok">Up to date</span>${checked}` : 'Not checked yet';
-  $('#updStatus').innerHTML = html;
+  $('#updStatus').innerHTML = st.test ? `<span class="new">TEST FEED</span> · ${html}` : html;
   $('#updCheck').disabled = st.status === 'checking';
   const sel = $('#updModeSel');
   sel.querySelector('option[value="auto"]').hidden = !st.canInstall;
