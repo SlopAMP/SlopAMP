@@ -703,6 +703,7 @@ app.whenReady().then(async () => {
     testFeed,
     tempDir: app.getPath('temp'),
     canInstall: app.isPackaged && process.platform === 'win32' && !portable,
+    installDir: path.dirname(process.execPath),
     getState: () => (currentState || loadState()).update,
     setState: (v) => setMainState({ update: v }),
     emit: (st) => { if (win && !win.isDestroyed()) win.webContents.send('upd:event', st); },

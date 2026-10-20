@@ -33,23 +33,46 @@ SHA256 (SlopAMP-Portable-$VER.exe): $PHASH"
 release release-badhash.json "SHA256 (SlopAMP-Setup-$VER.exe): $(printf '0%.0s' {1..64})"
 release release-nohash.json "(no checksum line in this one)"
 
-bat() {   # $1 = .bat name, $2 = release json, $3 = exe to start
-  cat > "$OUT/$1" <<EOF
+# .bat pieces. @JSON@ = release file, @VER@ = version.
+read -r -d '' HEAD <<'BAT' || true
 @echo off
-rem SlopAMP updater test: pretends to be 1.1.9 and reads $2 instead of GitHub.
-tasklist /FI "IMAGENAME eq SlopAMP.exe" | find /I "SlopAMP.exe" >nul && (echo Close SlopAMP first, then run this again. & pause & exit /b 1)
-if not exist "%~dp0SlopAMP-Setup-$VER.exe" copy /Y "%~dp0..\\SlopAMP-Setup-$VER.exe" "%~dp0" >nul
-if not exist "%~dp0SlopAMP-Setup-$VER.exe" (echo Put SlopAMP-Setup-$VER.exe in the folder above this one. & pause & exit /b 1)
-set "SLOPAMP_UPDATE_TEST=%~dp0$2"
+rem SlopAMP updater test: pretends to be 1.1.9 and reads @JSON@ instead of GitHub.
+tasklist /FI "IMAGENAME eq SlopAMP.exe" | find "SlopAMP.exe" >nul && (echo Close SlopAMP first, then run this again. & pause & exit /b 1)
+if not exist "%~dp0SlopAMP-Setup-@VER@.exe" copy /Y "%~dp0..\SlopAMP-Setup-@VER@.exe" "%~dp0" >nul
+if not exist "%~dp0SlopAMP-Setup-@VER@.exe" (echo Put SlopAMP-Setup-@VER@.exe in the folder above this one. & pause & exit /b 1)
+BAT
+# The installed SlopAMP is wherever Setup put it: the uninstall entry's InstallLocation,
+# then SlopAMP's own InstallDir key, then the default folder.
+read -r -d '' FIND_INSTALLED <<'BAT' || true
+set "SLOPAMP_EXE="
+for /f "tokens=1,2,*" %%A in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\SlopAMP" /v InstallLocation 2^>nul') do if /I "%%A"=="InstallLocation" set "SLOPAMP_EXE=%%C\SlopAMP.exe"
+if not defined SLOPAMP_EXE for /f "tokens=1,2,*" %%A in ('reg query "HKCU\Software\SlopAMP" /v InstallDir 2^>nul') do if /I "%%A"=="InstallDir" set "SLOPAMP_EXE=%%C\SlopAMP.exe"
+if not defined SLOPAMP_EXE set "SLOPAMP_EXE=%LOCALAPPDATA%\Programs\SlopAMP\SlopAMP.exe"
+if not exist "%SLOPAMP_EXE%" goto notinstalled
+BAT
+read -r -d '' FIND_PORTABLE <<'BAT' || true
+set "SLOPAMP_EXE=%~dp0..\SlopAMP-Portable-@VER@.exe"
+if not exist "%SLOPAMP_EXE%" (echo Put SlopAMP-Portable-@VER@.exe in the folder above this one. & pause & exit /b 1)
+BAT
+read -r -d '' TAIL <<'BAT' || true
+echo Starting %SLOPAMP_EXE%
+set "SLOPAMP_UPDATE_TEST=%~dp0@JSON@"
 set "SLOPAMP_TEST_VERSION=1.1.9"
-start "" $3
-EOF
-  sed -i 's/$/\r/' "$OUT/$1"
+start "" "%SLOPAMP_EXE%"
+exit /b 0
+:notinstalled
+echo SlopAMP is not installed: there is no "%SLOPAMP_EXE%". Install it with Setup first.
+pause
+exit /b 1
+BAT
+
+bat() {   # $1 = .bat name, $2 = release json, $3 = installed | portable
+  local find="$FIND_INSTALLED"; [ "$3" = portable ] && find="$FIND_PORTABLE"
+  printf '%s\n%s\n%s\n' "$HEAD" "$find" "$TAIL" | sed -e "s/@JSON@/$2/g" -e "s/@VER@/$VER/g" -e 's/$/\r/' > "$OUT/$1"
 }
-INSTALLED='"%LOCALAPPDATA%\Programs\SlopAMP\SlopAMP.exe"'
-bat "1 Test update.bat" release.json "$INSTALLED"
-bat "2 Test bad checksum.bat" release-badhash.json "$INSTALLED"
-bat "3 Test missing checksum.bat" release-nohash.json "$INSTALLED"
-bat "4 Test portable.bat" release.json "\"%~dp0..\\SlopAMP-Portable-$VER.exe\""
+bat "1 Test update.bat" release.json installed
+bat "2 Test bad checksum.bat" release-badhash.json installed
+bat "3 Test missing checksum.bat" release-nohash.json installed
+bat "4 Test portable.bat" release.json portable
 echo "made $OUT (Setup sha256 $HASH)"
 ls -la "$OUT"

@@ -54,6 +54,13 @@ function parseRelease(rel, currentVersion, testDir) {
   if (!sha256) return { ...info, error: 'nohash' };
   return { ...info, file, url: testDir ? pathToFileURL(path.join(testDir, url)).href : url, size: asset.size || 0, sha256 };
 }
+// Command line for the silent update. /D= (NSIS: must come last, unquoted, spaces allowed) keeps a custom
+// install folder such as C:\SlopAMP; without it the installer falls back to the folder in the registry.
+function installerArgs(pid, installDir) {
+  const a = ['/S', '/UPDATE', `/PID=${pid}`];
+  if (installDir && !/["\r\n]/.test(installDir)) a.push(`/D=${installDir.replace(/[\\/]+$/, '')}`);
+  return a;
+}
 function sha256File(file) {
   return new Promise((res, rej) => {
     const h = crypto.createHash('sha256');
@@ -74,8 +81,9 @@ class Updater {
   // emit(state): pushes the current status to the window. canInstall: false for the portable exe / dev runs.
   // testFeed: path of a local release.json (SLOPAMP_UPDATE_TEST) used instead of GitHub, for trying updates
   // without publishing; its installer must sit next to it. Checks then run at every launch.
-  constructor({ fetch, version, tempDir, canInstall, getState, setState, emit, quit, openExternal, log, testFeed }) {
-    Object.assign(this, { version, tempDir, canInstall, getState, setState, emitFn: emit, quit, openExternal, log, testFeed });
+  // installDir: the folder SlopAMP runs from, reinstalled in place.
+  constructor({ fetch, version, tempDir, canInstall, installDir, getState, setState, emit, quit, openExternal, log, testFeed }) {
+    Object.assign(this, { version, tempDir, canInstall, installDir, getState, setState, emitFn: emit, quit, openExternal, log, testFeed });
     this.fetch = testFeed ? (url, opts) => (url.startsWith('file:') ? readLocal(url) : fetch(url, opts)) : fetch;
     this.feed = testFeed ? pathToFileURL(testFeed).href : API_LATEST;
     this.dir = path.join(tempDir, 'SlopAMP-update');
@@ -200,7 +208,8 @@ class Updater {
       await new Promise((ok, bad) => {
         // Test-mode variables are left out, so the reopened SlopAMP is a normal run.
         const env = { ...process.env }; delete env.SLOPAMP_UPDATE_TEST; delete env.SLOPAMP_TEST_VERSION;
-        const child = spawn(f, ['/S', '/UPDATE', `/PID=${process.pid}`], { detached: true, stdio: 'ignore', env });
+        // Verbatim arguments: Node would put quotes around a /D= path with spaces, and NSIS wouldn't recognise it.
+        const child = spawn(f, installerArgs(process.pid, this.installDir), { detached: true, stdio: 'ignore', env, windowsVerbatimArguments: true, argv0: `"${f}"` });
         child.once('spawn', ok); child.once('error', bad);
         child.unref();
       });
@@ -210,7 +219,7 @@ class Updater {
       this.set({ status: 'error', error: 'download' });
       return false;
     }
-    this.log(`installing update ${r.version}`);
+    this.log(`installing update ${r.version} into ${this.installDir || '(folder from the registry)'}`);
     setTimeout(() => this.quit(), 300);
     return true;
   }
@@ -230,4 +239,4 @@ class Updater {
   openPage() { this.openExternal((this.release && this.release.page) || RELEASES_PAGE); }
 }
 
-module.exports = { Updater, parseRelease, isNewer, findHash, cleanNotes, RELEASES_PAGE };
+module.exports = { Updater, parseRelease, isNewer, findHash, cleanNotes, installerArgs, RELEASES_PAGE };
