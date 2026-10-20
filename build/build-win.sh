@@ -56,7 +56,9 @@ WINE="$TOOLS/wine-11.2-amd64-wow64/bin/wine"
 # installers
 export NSISDIR="$TOOLS/nsis"
 MAKENSIS="$TOOLS/nsis/linux/makensis"
-COMMON=(-V2 "-DVERSION=$VER" "-DSTAGE=$STAGE" "-DOUTDIR=$OUT" "-DBUILDDIR=$BUILD" "-DBUILDID=$BUILDID")
+# The uninstaller removes exactly these files (never the whole folder: it may hold other things).
+python3 "$BUILD/make_uninstall_list.py" "$STAGE" "$OUT/uninstall-files.nsh"
+COMMON=(-V2 "-DVERSION=$VER" "-DSTAGE=$STAGE" "-DOUTDIR=$OUT" "-DBUILDDIR=$BUILD" "-DBUILDID=$BUILDID" "-DUNINSTALL_LIST=$OUT/uninstall-files.nsh")
 "$MAKENSIS" "${COMMON[@]}" "$BUILD/installer.nsi"
 "$MAKENSIS" "${COMMON[@]}" "$BUILD/portable.nsi"
 

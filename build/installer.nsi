@@ -9,6 +9,9 @@ SetCompressorDictSize 64
 ${StrStr}
 ${UnStrStr}
 
+!ifndef UNINSTALL_LIST
+  !error "Pass -DUNINSTALL_LIST=<file> (build-win.sh makes it with make_uninstall_list.py)"
+!endif
 !ifndef VERSION
   !define VERSION "1.1.1"
 !endif
@@ -114,7 +117,9 @@ FunctionEnd
 Section "SlopAMP (required)" SecMain
   SectionIn RO
   SetOutPath "$INSTDIR"
-  RMDir /r "$INSTDIR\resources\app"
+  ; Clear the old app code on upgrade, but only in a folder that already holds SlopAMP.
+  IfFileExists "$INSTDIR\${EXE}" 0 +2
+    RMDir /r "$INSTDIR\resources\app"
   File /r "${STAGE}\*.*"
   WriteUninstaller "$INSTDIR\Uninstall SlopAMP.exe"
   WriteRegStr HKCU "Software\SlopAMP" "InstallDir" "$INSTDIR"
@@ -205,7 +210,14 @@ Section "Uninstall"
   DeleteRegKey HKCU "${UNINSTKEY}"
   DeleteRegKey HKCU "${APPKEY}"
   DeleteRegKey HKCU "Software\SlopAMP"
-  RMDir /r "$INSTDIR"
+  ; Only SlopAMP's own files (listed at build time from the staged app), then each folder only if it's
+  ; now empty. Never RMDir /r: the install folder may be shared with other files (e.g. D:\Apps).
+  !include "${UNINSTALL_LIST}"
+  Delete "$INSTDIR\Uninstall SlopAMP.exe"
+  Delete "$INSTDIR\debug.log"
+  RMDir "$INSTDIR"
+  IfFileExists "$INSTDIR\*.*" 0 +2
+    DetailPrint "Kept $INSTDIR because it contains other files."
   MessageBox MB_YESNO|MB_ICONQUESTION "Also delete your SlopAMP playlist and settings?" /SD IDNO IDNO +2
     RMDir /r "$APPDATA\SlopAMP"
 SectionEnd

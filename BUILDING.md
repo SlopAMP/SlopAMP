@@ -47,6 +47,8 @@ TOOLS=/path/to/tools bash build/build-win.sh
 - `nsis/`: electron-builder-binaries `nsis-3.0.4.1`
 - `rcedit-x64.exe`, plus a Wine install
 
+`build-win.sh` also writes `dist/uninstall-files.nsh` with `build/make_uninstall_list.py`: one `Delete` per installed file and an `RMDir` (empty folders only) per folder. The uninstaller uses only that list and never deletes the install folder recursively, because it may be shared. `installer.nsi` refuses to compile without it.
+
 Outputs go to `dist/`: the app folder, `SlopAMP-Setup-<version>.exe`, `SlopAMP-Portable-<version>.exe` and a zip.
 
 ## Visualizer files
