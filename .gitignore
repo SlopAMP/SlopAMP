@@ -1,6 +1,6 @@
-# build output and local tools
-dist/
-vendor/
+# build output and local tools (root-level only: src/renderer/vendor/ IS part of the app)
+/dist/
+/vendor/
 node_modules/
 build/butterchurn/.work/
 build/butterchurn/butterchurn-src/
