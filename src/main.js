@@ -731,6 +731,7 @@ app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (_) {}
 
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
+  log('quitting');
   // Quitting must end every SlopAMP process, even if something below hangs.
   setTimeout(() => { log('quit took over 8 s; exiting'); app.exit(0); }, 8000);
   for (const step of [() => updater && updater.cancel(), () => downloader && downloader.stopAll(true), flushState, () => server && server.stop()]) {
