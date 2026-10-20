@@ -22,6 +22,10 @@ _None open._ (Report: what you clicked, what happened, what you expected — a s
 | 5 | **Share playlist** — export a playlist plus its local music files as one .zip so a friend gets everything | YouTube-link playlists already share fine as plain .m3u8 | — |
 | 6 | **"Open with SlopAMP" for playlist files** (.m3u8 / .m3u) | Right now Windows opens them in VLC | — |
 
+## In progress for 1.2
+
+- **Auto-updates** — built (installer: check, What's new, verify SHA256, silent install, relaunch; portable: notify + download page). Works from 1.2 onward; install 1.2 itself the usual way.
+
 ## Release / distribution to-dos (not app features)
 
 - Public GitHub page for SlopAMP (source + downloads + bug reports).

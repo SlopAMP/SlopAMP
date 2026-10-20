@@ -43,6 +43,16 @@ contextBridge.exposeInMainWorld('phosphor', {
   restoreSize: () => ipcRenderer.invoke('win:restore-default'),
   setMini: (on, h) => ipcRenderer.invoke('win:mini', on, h),
   info: () => ipcRenderer.invoke('app:info'),
+  updGet: () => ipcRenderer.invoke('upd:get'),
+  updCheck: () => ipcRenderer.invoke('upd:check'),
+  updMode: (mode) => ipcRenderer.invoke('upd:mode', mode),
+  updDownload: (installAfter) => ipcRenderer.send('upd:download', installAfter),
+  updCancel: () => ipcRenderer.send('upd:cancel'),
+  updInstall: () => ipcRenderer.send('upd:install'),
+  updSkip: () => ipcRenderer.send('upd:skip'),
+  updDismiss: () => ipcRenderer.send('upd:dismiss'),
+  updPage: () => ipcRenderer.send('upd:page'),
+  onUpd: (cb) => ipcRenderer.on('upd:event', (_e, st) => cb(st)),
   onFullscreen: (cb) => ipcRenderer.on('fullscreen', (_e, v) => cb(v)),
   onOpenFiles: (cb) => ipcRenderer.on('open-files', (_e, v) => cb(v))
 });

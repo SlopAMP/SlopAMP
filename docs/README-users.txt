@@ -116,6 +116,17 @@ DOWNLOADING YOUTUBE VIDEOS
     playlists all live in one place (Downloads\SlopAMP).
   * SlopAMP keeps its downloader (yt-dlp) up to date automatically.
 
+UPDATES
+  * SlopAMP checks GitHub once a day for a new version (open "?" to change
+    this or to check right away). Choose "Notify me" (the default),
+    "Install automatically" or "Off".
+  * A bar under the top deck says when a new version is out. "What's new"
+    shows the release notes first. The update is downloaded from SlopAMP's
+    official GitHub release, its checksum is verified, and SlopAMP restarts
+    with your playlists and settings kept. It never installs until you click.
+  * The portable exe can't update itself: it tells you and opens the
+    download page.
+
 GOOD TO KNOW
   * Playlist tags: YT = YouTube, YTM = YouTube Music, YT LIVE = a stream
     that's live right now (download it after it ends), SAVED / MP3 = plays

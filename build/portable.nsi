@@ -39,6 +39,8 @@ Section
   IfFileExists "$EXEDIR\SlopAMP Data\*.*" 0 nodata
     System::Call 'Kernel32::SetEnvironmentVariable(t "SLOPAMP_DATA_DIR", t "$EXEDIR\SlopAMP Data")i'
   nodata:
+  ; Tells SlopAMP it is the portable copy (it then never tries to install updates).
+  System::Call 'Kernel32::SetEnvironmentVariable(t "SLOPAMP_PORTABLE", t "1")i'
   ${GetParameters} $1
   SetOutPath "$INSTDIR"
   Exec '"$INSTDIR\SlopAMP.exe" $1'

@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { MediaServer, isMediaFile } = require('./media');
 const { Downloader } = require('./downloader');
+const { Updater } = require('./updater');
 
 const APP_NAME = 'SlopAMP';
 app.setName(APP_NAME);
@@ -34,8 +35,9 @@ function log(...a) {
 let win = null;
 let server = null;
 let downloader = null;
+let updater = null;
 // Keys owned by the main process; the renderer's state saves must not wipe them.
-const MAIN_KEYS = ['window', 'playlistDir', 'dlVideoDir', 'dlAudioDir', 'ytdlpUpdatedAt', 'downloads'];
+const MAIN_KEYS = ['window', 'playlistDir', 'dlVideoDir', 'dlAudioDir', 'ytdlpUpdatedAt', 'downloads', 'update'];
 const ytdlpDir = [path.join(process.resourcesPath || '', 'ytdlp'), path.join(__dirname, '..', 'vendor', 'ytdlp', process.platform)]
   .find(d => fs.existsSync(path.join(d, process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'))) || path.join(process.resourcesPath || '', 'ytdlp');
 let normalBounds = null;
@@ -611,6 +613,16 @@ function registerIpc() {
     }
     return isMini;
   });
+  // ---- auto-updates (see updater.js)
+  ipcMain.handle('upd:get', () => updater.snapshot());
+  ipcMain.handle('upd:check', () => updater.check(true));
+  ipcMain.handle('upd:mode', (_e, mode) => updater.setMode(String(mode)));
+  ipcMain.on('upd:download', (_e, installAfter) => updater.download(!!installAfter));
+  ipcMain.on('upd:cancel', () => updater.cancel());
+  ipcMain.on('upd:install', () => updater.install());
+  ipcMain.on('upd:skip', () => updater.skip());
+  ipcMain.on('upd:dismiss', () => updater.dismiss());
+  ipcMain.on('upd:page', () => updater.openPage());
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
     encoder: server.encoder,
@@ -662,8 +674,23 @@ app.whenReady().then(async () => {
     getState: () => currentState || loadState(),
     setState: setMainState
   });
+  // Only the installed Windows build updates itself; the portable exe and dev runs just open the download page.
+  const portable = !!(PORTABLE_DIR || process.env.SLOPAMP_PORTABLE) || /-portable$/i.test(path.basename(path.dirname(process.execPath)));
+  updater = new Updater({
+    fetch: (url, opts) => net.fetch(url, opts),
+    version: app.getVersion(),
+    tempDir: app.getPath('temp'),
+    canInstall: app.isPackaged && process.platform === 'win32' && !portable,
+    getState: () => (currentState || loadState()).update,
+    setState: (v) => setMainState({ update: v }),
+    emit: (st) => { if (win && !win.isDestroyed()) win.webContents.send('upd:event', st); },
+    quit: () => { if (win && !win.isDestroyed()) win.close(); else app.quit(); },
+    openExternal: (url) => shell.openExternal(url),
+    log
+  });
   registerIpc();
   createWindow();
+  updater.start();
   registerMediaKeys();
 });
 

@@ -4,6 +4,7 @@ SetCompressor /SOLID lzma
 SetCompressorDictSize 64
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
+!include "Sections.nsh"
 
 !ifndef VERSION
   !define VERSION "1.1.1"
@@ -46,17 +47,11 @@ VIAddVersionKey "CompanyName" "SlopAMP"
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
+Var UpdateMode
+
 !macro RegType EXT
   WriteRegStr HKCU "${APPKEY}\SupportedTypes" ".${EXT}" ""
 !macroend
-
-Function .onInit
-  ; Refuse to overwrite files while SlopAMP is running.
-  FindWindow $0 "Chrome_WidgetWin_1" "SlopAMP"
-  StrCmp $0 0 +3
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Please close SlopAMP before installing."
-    Abort
-FunctionEnd
 
 Section "SlopAMP (required)" SecMain
   SectionIn RO
@@ -114,6 +109,50 @@ SectionEnd
 Section "Desktop shortcut" SecDesktop
   CreateShortcut "$DESKTOP\SlopAMP.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\${EXE}" 0
 SectionEnd
+
+; Update mode (SlopAMP's updater runs "Setup.exe /S /UPDATE /PID=<pid>"): reopen SlopAMP when done.
+Section "-Relaunch"
+  StrCmp $UpdateMode 1 0 +3
+    SetOutPath "$INSTDIR"
+    Exec '"$INSTDIR\${EXE}"'
+SectionEnd
+
+Function .onInit
+  StrCpy $UpdateMode 0
+  ${GetParameters} $R0
+  ClearErrors
+  ${GetOptions} $R0 "/UPDATE" $R1
+  IfErrors normal
+  StrCpy $UpdateMode 1
+  ; Wait (up to 30 s) for the SlopAMP process that started us to exit, so its files can be replaced.
+  ClearErrors
+  ${GetOptions} $R0 "/PID=" $R2
+  IfErrors waitwin
+  System::Call 'kernel32::OpenProcess(i 0x00100000, i 0, i R2) p.R3'
+  StrCmp $R3 0 waitwin
+  System::Call 'kernel32::WaitForSingleObject(p R3, i 30000) i'
+  System::Call 'kernel32::CloseHandle(p R3)'
+  waitwin:
+  StrCpy $R4 0
+  waitloop:
+    FindWindow $0 "Chrome_WidgetWin_1" "SlopAMP"
+    StrCmp $0 0 waited
+    IntOp $R4 $R4 + 1
+    IntCmp $R4 60 waited
+    Sleep 500
+    Goto waitloop
+  waited:
+  Sleep 1500
+  ; Keep the user's choice: no desktop shortcut on update unless there was one.
+  IfFileExists "$DESKTOP\SlopAMP.lnk" normal
+    !insertmacro UnselectSection ${SecDesktop}
+  normal:
+  ; Refuse to overwrite files while SlopAMP is running.
+  FindWindow $0 "Chrome_WidgetWin_1" "SlopAMP"
+  StrCmp $0 0 +3
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Please close SlopAMP before installing." /SD IDOK
+    Abort
+FunctionEnd
 
 Section "Uninstall"
   FindWindow $0 "Chrome_WidgetWin_1" "SlopAMP"

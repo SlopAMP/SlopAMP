@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0 — unreleased
+
+- **Auto-updates**: SlopAMP checks GitHub once a day for a new version. Pick **Notify me** (default), **Install automatically** or **Off** in the About box (?), which also has **Check for updates**. A bar under the deck shows what's going on, and **What's new** shows the release notes before anything is installed. The installer comes from the official GitHub release, its SHA256 is checked against the release notes, and it installs silently, keeps your playlists and settings, and reopens SlopAMP. Automatic mode downloads in the background and then waits for you to click **Restart now**. The portable exe tells you about new versions and opens the download page.
+
 ## 1.1.1 — 2026-10-20
 
 - **SAVE ALL** button (Ctrl+Alt+S): quick-saves every playlist tab to `Downloads\SlopAMP\Playlists` in one click.

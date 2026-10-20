@@ -77,6 +77,8 @@
 
   <!-- ============ 2. VIDEO PANE ============ -->
   <!-- ============ EQUALIZER (between deck and video) ============ -->
+  <div id="updBar" class="hidden" role="status"></div>
+
   <section id="eqPanel" class="hidden">
     <div class="eq-title" id="eqTitle">
       <span class="rule"></span><span class="eq-name">EQUALIZER</span><span class="eq-sum" id="eqSum"></span><span class="rule"></span>
@@ -266,7 +268,24 @@
         <p>SlopAMP is free software (MIT). It bundles Electron/Chromium and FFmpeg (LGPL v3). It includes the Butterchurn visualizer (MIT) and its preset collection. Not affiliated with or endorsed by Winamp, VideoLAN, or YouTube/Google.</p>
         <iframe id="licFrame" title="Licenses" class="hidden"></iframe>
       </div>
+      <div class="upd">
+        <div class="upd-head"><span class="upd-lbl">Updates</span><span class="upd-status" id="updStatus"></span><button type="button" id="updCheck">Check for updates</button></div>
+        <label class="upd-mode" for="updModeSel">When a new version is out
+          <select id="updModeSel"><option value="auto">Install automatically</option><option value="notify">Notify me</option><option value="off">Off</option></select>
+        </label>
+        <div class="upd-hint" id="updHint"></div>
+      </div>
       <div class="dlg-btns"><button type="button" id="aboutLic">View licenses</button><button value="close">Close</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="updDlg">
+    <form method="dialog">
+      <div class="dlg-title" id="updTitle"></div>
+      <div class="upd-sub" id="updSub"></div>
+      <div class="upd-notes" id="updNotes"></div>
+      <div class="upd-meta" id="updMeta"></div>
+      <div class="dlg-btns"><button type="button" class="dim" id="updSkip">Skip this version</button><span class="spacer"></span><button value="later" id="updLater">Later</button><button type="button" class="go" id="updGo"></button></div>
     </form>
   </dialog>
 </div>

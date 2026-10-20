@@ -1409,6 +1409,156 @@ $('#aboutLic').onclick = () => {
 };
 for (const a of document.querySelectorAll('.about-links a')) a.onclick = (e) => { e.preventDefault(); P.openExternal(a.dataset.url); };
 
+// ------------------------------------------------------------------ auto-updates (main process: updater.js)
+let UPD = { status: 'idle' };
+const updLocal = { notNow: false, hideUpdated: false, countdown: 0, timer: null, updatedTimer: null };
+const UPD_ICON = {
+  bolt: '<svg class="ico" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>',
+  down: '<svg class="ico" viewBox="0 0 16 16"><path d="M7 1h2v7l2.5-2.5 1.4 1.4L8 11.8 3.1 6.9l1.4-1.4L7 8zM2 13h12v2H2z"/></svg>',
+  shield: '<svg class="ico" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5zm-1.2 14.2-4-4 1.4-1.4 2.6 2.6 5-5 1.4 1.4z"/></svg>',
+  warn: '<svg class="ico" viewBox="0 0 24 24"><path d="M12 2 1 21h22zm-1 7h2v6h-2zm0 8h2v2h-2z"/></svg>'
+};
+const updEsc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const updMB = (n) => `${Math.round((n || 0) / 1048576)} MB`;
+const UPD_ERROR_TIPS = {
+  badhash: 'The downloaded installer didn’t match the SHA256 in the release notes, so it was deleted and nothing was installed.',
+  nohash: 'The release notes have no SHA256 line for the installer, so SlopAMP won’t install it.',
+  noasset: 'The release has no SlopAMP-Setup installer.'
+};
+const UPD_ERRORS = {
+  badhash: 'Update stopped: checksum didn’t match',
+  nohash: 'Update stopped: no checksum in the release',
+  noasset: 'Update stopped: no installer in the release',
+  download: 'Update download failed',
+  offline: 'Couldn’t reach GitHub to check for updates'
+};
+// Release notes (GitHub Markdown) -> safe HTML: headings, bullets, paragraphs, **bold**, `code`, [links](https://...).
+function updNotesHtml(md) {
+  const inline = (t) => updEsc(t)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g, (_m, txt, url) => `<a href="#" data-url="${url}">${txt}</a>`);
+  let html = '', list = false;
+  for (const raw of String(md || '').split('\n')) {
+    const line = raw.trim();
+    const li = /^[-*+]\s+(.*)$/.exec(line);
+    if (list && !li) { html += '</ul>'; list = false; }
+    if (!line) continue;
+    const h = /^#{1,6}\s+(.*)$/.exec(line);
+    if (h) html += `<h4>${inline(h[1])}</h4>`;
+    else if (li) { if (!list) { html += '<ul>'; list = true; } html += `<li>${inline(li[1])}</li>`; }
+    else html += `<p>${inline(line)}</p>`;
+  }
+  if (list) html += '</ul>';
+  return html || '<p>No release notes.</p>';
+}
+function updBarHtml(st) {
+  const r = st.release || {}, v = `<b>${updEsc(r.version || '')}</b>`;
+  const x = '<button class="x" data-a="dismiss" title="Hide">&#x2715;</button>';
+  switch (st.status) {
+    case 'available': return st.canInstall
+      ? `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is out</span><button class="link" data-a="notes">What’s new</button><button data-a="notes">Update</button>${x}`
+      : `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is out (portable)</span><button class="link" data-a="notes">What’s new</button><button data-a="page">Download page</button>${x}`;
+    case 'downloading': {
+      const p = st.total ? Math.min(100, Math.floor(st.received / st.total * 100)) : 0;
+      return `${UPD_ICON.down}<span class="msg">Downloading ${v} · ${Math.round((st.received || 0) / 1048576)} of ${updMB(st.total)}</span><span class="prog"><i style="width:${p}%"></i></span><span class="pct">${p}%</span><button data-a="cancel">Cancel</button>`;
+    }
+    case 'verifying': return `${UPD_ICON.shield}<span class="msg">Checking the download against the release’s SHA256…</span>`;
+    case 'ready': return st.installAfter && !updLocal.notNow
+      ? `${UPD_ICON.shield}<span class="msg" title="SlopAMP will close, install the update and reopen"><b>Verified.</b> Restarting to update in ${updLocal.countdown} s</span><button data-a="install">Restart now</button><button class="link" data-a="notnow">Not now</button>`
+      : `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is ready to install</span><button class="link" data-a="notes">What’s new</button><button data-a="install">Restart now</button>${x}`;
+    case 'installing': return `${UPD_ICON.shield}<span class="msg">Installing ${v}… SlopAMP will reopen by itself</span>`;
+    case 'updated': return updLocal.hideUpdated ? '' : `${UPD_ICON.bolt}<span class="msg">Updated to ${v}</span><button class="link" data-a="notes">What’s new</button>${x}`;
+    case 'error':
+      if (st.error === 'offline') return st.manual ? `${UPD_ICON.warn}<span class="msg">${UPD_ERRORS.offline}</span><button data-a="check">Try again</button>${x}` : '';
+      if (st.error === 'download') return `${UPD_ICON.warn}<span class="msg">${UPD_ERRORS.download}</span><button data-a="retry">Try again</button><button data-a="page">Download page</button>${x}`;
+      return `${UPD_ICON.warn}<span class="msg" title="${UPD_ERROR_TIPS[st.error] || ''}">${UPD_ERRORS[st.error] || UPD_ERRORS.download}</span><button data-a="page">Download page</button>${x}`;
+    default: return '';
+  }
+}
+function renderUpd() {
+  const st = UPD, bar = $('#updBar');
+  // 5-second countdown after "Update and restart", so a song isn't cut off by surprise.
+  const counting = st.status === 'ready' && st.installAfter && !updLocal.notNow;
+  if (counting && !updLocal.timer) {
+    updLocal.countdown = 5;
+    updLocal.timer = setInterval(() => {
+      if (--updLocal.countdown <= 0) { clearInterval(updLocal.timer); updLocal.timer = null; P.updInstall(); } else renderUpd();
+    }, 1000);
+  } else if (!counting && updLocal.timer) { clearInterval(updLocal.timer); updLocal.timer = null; }
+  if (st.status === 'updated' && !updLocal.updatedTimer) updLocal.updatedTimer = setTimeout(() => { updLocal.hideUpdated = true; renderUpd(); }, 15000);
+  const html = st.hidden ? '' : updBarHtml(st);
+  bar.innerHTML = html;
+  bar.className = html ? (st.status === 'error' ? (st.error === 'offline' ? 'warn' : 'err') : '') : 'hidden';
+  const waiting = ['available', 'downloading', 'verifying', 'ready'].includes(st.status) || (st.status === 'error' && st.error !== 'offline' && !!st.release);
+  $('.logo-dot').classList.toggle('has-upd', waiting);
+  $('.logo-dot').title = waiting ? `SlopAMP ${st.release.version} is available` : 'SlopAMP';
+  renderUpdAbout();
+}
+function renderUpdAbout() {
+  const st = UPD, r = st.release;
+  const when = (t) => { const d = new Date(t); return d.toDateString() === new Date().toDateString() ? `today ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : d.toLocaleDateString([], { day: 'numeric', month: 'short' }); };
+  const checked = st.lastCheck ? ` · checked ${when(st.lastCheck)}` : '';
+  let html;
+  if (st.status === 'checking') html = 'Checking…';
+  else if (r && ['available', 'downloading', 'verifying', 'ready', 'error'].includes(st.status) && r.version !== st.current) html = `<span class="new">${updEsc(r.version)} available</span>${checked}`;
+  else if (st.status === 'error' && st.error === 'offline') html = `Couldn’t reach GitHub${checked}`;
+  else html = st.lastCheck ? `<span class="ok">Up to date</span>${checked}` : 'Not checked yet';
+  $('#updStatus').innerHTML = html;
+  $('#updCheck').disabled = st.status === 'checking';
+  const sel = $('#updModeSel');
+  sel.querySelector('option[value="auto"]').hidden = !st.canInstall;
+  sel.value = !st.canInstall && st.mode === 'auto' ? 'notify' : (st.mode || 'notify');
+  $('#updHint').textContent = !st.canInstall
+    ? (sel.value === 'off' ? 'Never checks by itself. Use “Check for updates” here.' : 'This copy can’t update itself. SlopAMP tells you about new versions and opens the download page.')
+    : ({ auto: 'Downloads and verifies in the background, then waits for you to click Restart now.', notify: 'Shows a bar when a new version is out. You decide when to update.', off: 'Never checks by itself. Use “Check for updates” here.' })[sel.value];
+}
+function openUpdNotes() {
+  const st = UPD, r = st.release; if (!r) return;
+  const after = st.status === 'updated';
+  $('#updTitle').textContent = after ? `What’s new in SlopAMP ${r.version}` : `SlopAMP ${r.version} is available`;
+  const date = r.date ? new Date(r.date).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  $('#updSub').textContent = after ? (date ? `Released ${date}` : '') : `You have ${st.current}${date ? ` · released ${date}` : ''}`;
+  $('#updNotes').innerHTML = updNotesHtml(r.notes);
+  $('#updMeta').innerHTML = after ? '' : st.canInstall
+    ? `<span>SlopAMP-Setup-${updEsc(r.version)}.exe${r.size ? ` · ${updMB(r.size)}` : ''}</span><span class="ok">&#x2713; SHA256 checked before installing</span><span>Your playlists and settings are kept.</span>`
+    : '<span>This copy can’t update itself. Download the new version from GitHub.</span>';
+  $('#updSkip').classList.toggle('hidden', after);
+  $('#updLater').textContent = after ? 'Close' : 'Later';
+  $('#updGo').classList.toggle('hidden', after);
+  $('#updGo').textContent = !st.canInstall ? 'Open download page' : st.status === 'ready' ? 'Restart and install' : 'Update and restart';
+  if (!$('#updDlg').open) $('#updDlg').showModal();
+}
+function updAction(a) {
+  if (a === 'notes') openUpdNotes();
+  else if (a === 'page') P.updPage();
+  else if (a === 'cancel') P.updCancel();
+  else if (a === 'install') { updLocal.notNow = false; P.updInstall(); }
+  else if (a === 'notnow') { updLocal.notNow = true; renderUpd(); }
+  else if (a === 'retry') P.updDownload(false);
+  else if (a === 'check') updCheckNow();
+  else if (a === 'dismiss') { if (UPD.status === 'updated') { updLocal.hideUpdated = true; renderUpd(); } else P.updDismiss(); }
+}
+async function updCheckNow() {
+  const st = await P.updCheck();
+  if (st.status === 'uptodate') toast(`SlopAMP ${st.current} is the latest version.`);
+  else if (st.release && ['available', 'ready'].includes(st.status)) openUpdNotes();
+}
+$('#updBar').addEventListener('click', (e) => { const b = e.target.closest('button[data-a]'); if (b) updAction(b.dataset.a); });
+$('#updNotes').addEventListener('click', (e) => { const a = e.target.closest('a[data-url]'); if (a) { e.preventDefault(); P.openExternal(a.dataset.url); } });
+$('#updGo').onclick = () => {
+  $('#updDlg').close();
+  if (!UPD.canInstall) P.updPage();
+  else if (UPD.status === 'ready') { updLocal.notNow = false; P.updInstall(); }
+  else { updLocal.notNow = false; P.updDownload(true); }
+};
+$('#updSkip').onclick = () => { $('#updDlg').close(); P.updSkip(); };
+$('#updCheck').onclick = updCheckNow;
+$('.logo-dot').addEventListener('click', () => { if ($('.logo-dot').classList.contains('has-upd')) { if (UPD.status === 'error') updAction('page'); else openUpdNotes(); } });
+$('#updModeSel').onchange = (e) => P.updMode(e.target.value);
+P.onUpd((st) => { UPD = st; renderUpd(); });
+P.updGet().then((st) => { UPD = st; renderUpd(); });
+
 // ------------------------------------------------------------------ fullscreen & mini
 async function toggleFullscreen(force) {
   if (document.body.classList.contains('mini') && force !== false) await toggleMini();
