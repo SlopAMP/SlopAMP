@@ -46,12 +46,16 @@ const DEFAULT_W = 420, DEFAULT_H = 900;
 let isMini = false;
 const pendingOpen = [];
 
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
+// Another SlopAMP is already running: the lock request has handed it our files (second-instance).
+// Leave at once. app.quit() here used to let this copy start a server and a hidden window anyway.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.exit(0);
 } else {
   app.on('second-instance', (_e, argv) => {
     const files = argvFiles(argv);
     if (win) {
+      if (!win.isVisible()) win.show();
       if (win.isMinimized()) win.restore();
       win.focus();
       if (files.length) win.webContents.send('open-files', files);
@@ -135,8 +139,23 @@ function createWindow() {
   });
   win.on('enter-full-screen', () => win.webContents.send('fullscreen', true));
   win.on('leave-full-screen', () => win.webContents.send('fullscreen', false));
-  win.once('ready-to-show', () => win.show());
+  // Show the window when it's ready, or after 5 s at the latest: a window that never appears can't be closed,
+  // and its invisible SlopAMP would keep running (and block the installer).
+  const w = win;
+  const reveal = () => { if (!w.isDestroyed() && !w.isVisible()) w.show(); };
+  w.once('ready-to-show', reveal);
+  w.webContents.once('did-finish-load', () => setTimeout(reveal, 500));
+  setTimeout(reveal, 5000);
+  let reloaded = false;
+  w.webContents.on('render-process-gone', (_e, d) => {
+    log('renderer gone:', d.reason, d.exitCode);
+    if (closing || w.isDestroyed() || d.reason === 'clean-exit') return;
+    // Reload once (deferred: reloading inside this event crashes Electron); crashed twice: close instead of leaving a dead window.
+    setTimeout(() => { if (w.isDestroyed()) return; if (!reloaded) { reloaded = true; w.reload(); } else w.destroy(); }, 200);
+  });
   win.on('close', () => {
+    // If the page hangs while closing, close the window anyway.
+    setTimeout(() => { if (!w.isDestroyed()) { log('window did not close in 5 s; forcing it'); w.destroy(); } }, 5000);
     closing = true;
     const s = currentState || loadState();
     s.window = isMini && normalBounds ? normalBounds : win.getNormalBounds();
@@ -646,6 +665,7 @@ async function fetchMeta(url) {
 
 // ---------- lifecycle ----------
 app.whenReady().then(async () => {
+  if (!gotLock) return;
   migrateOldState();
   server = new MediaServer({ uiDir: path.join(__dirname, 'renderer'), ffmpegDir, log });
   await server.start();
@@ -709,4 +729,10 @@ function registerMediaKeys() {
 app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (_) {} });
 
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => { if (downloader) downloader.stopAll(); flushState(); if (server) server.stop(); });
+app.on('before-quit', () => {
+  // Quitting must end every SlopAMP process, even if something below hangs.
+  setTimeout(() => { log('quit took over 8 s; exiting'); app.exit(0); }, 8000);
+  for (const step of [() => updater && updater.cancel(), () => downloader && downloader.stopAll(true), flushState, () => server && server.stop()]) {
+    try { step(); } catch (e) { log('quit step failed', e); }
+  }
+});

@@ -5,11 +5,11 @@ Mockups get made as ideas come up; the build happens when we decide to do 1.2.
 
 ## Bugs
 
-_None open._ (Report: what you clicked, what happened, what you expected — a screenshot helps.)
+(Report: what you clicked, what happened, what you expected — a screenshot helps.)
 
 | # | Found | Bug | Status |
 |---|---|---|---|
-| | | | |
+| 1 | Oct 20, 2026 (1.1.1 Portable, while testing 1.2.0) | **SlopAMP kept running hidden after closing it.** 4 SlopAMP.exe processes from `%TEMP%\SlopAMP-1.1.1-portable\` stayed alive with no window, so SlopAMP-Setup-1.2.0.exe kept saying "Close SlopAMP" until they were ended by hand. Would also block the auto-updater. | **Fixed for 1.2.0** (test build 2). Likely cause: an invisible SlopAMP window: a second copy that started anyway after losing the single-instance check, or a window that never got shown. No visible window means nothing to close, so the app never quit. Fixes: a second copy now exits immediately; the window always appears (5 s fallback); launching SlopAMP again shows a hidden window; closing forces the window shut after 5 s and the app exits within 8 s; yt-dlp/FFmpeg helpers are ended on quit; the installer/uninstaller now asks SlopAMP to quit and ends it after 10 s instead of looping on "Close SlopAMP". Not yet confirmed on Windows. |
 
 ## Ideas
 

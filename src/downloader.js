@@ -5,7 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawn, execFile } = require('child_process');
+const { spawn, spawnSync, execFile } = require('child_process');
 
 const EXE = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
 const UPDATE_EVERY_MS = 24 * 3600 * 1000;
@@ -36,7 +36,8 @@ class Downloader {
     const st = this.getState();
     if (!force && st.ytdlpUpdatedAt && Date.now() - st.ytdlpUpdatedAt < UPDATE_EVERY_MS) return;
     await new Promise((resolve) => {
-      execFile(this.exe, ['-U', '--update-to', 'stable'], { windowsHide: true, timeout: 90000 }, (err, stdout, stderr) => {
+      this.updating = execFile(this.exe, ['-U', '--update-to', 'stable'], { windowsHide: true, timeout: 90000 }, (err, stdout, stderr) => {
+        this.updating = null;
         this.log('yt-dlp update:', (stdout || '').trim().split('\n').pop(), err ? `(${(stderr || err.message).trim().split('\n').pop()})` : '');
         resolve();
       });
@@ -64,9 +65,11 @@ class Downloader {
     }
   }
 
-  stopAll() {
+  // quitting: wait for the kill to finish, so no yt-dlp (or its JavaScript runtime, which is SlopAMP.exe) outlives the app.
+  stopAll(quitting) {
     this.queue = [];
-    if (this.active) { this.active.canceled = true; killTree(this.active.proc); }
+    if (this.active) { this.active.canceled = true; killTree(this.active.proc, quitting); }
+    if (this.updating) killTree(this.updating, quitting);
   }
 
   async pump() {
@@ -193,9 +196,11 @@ class Downloader {
   }
 }
 
-function killTree(proc) {
+function killTree(proc, sync) {
   if (!proc || proc.exitCode !== null) return;
-  if (process.platform === 'win32') spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true });
+  const args = ['/pid', String(proc.pid), '/T', '/F'];
+  if (process.platform === 'win32' && sync) spawnSync('taskkill', args, { windowsHide: true, timeout: 5000 });
+  else if (process.platform === 'win32') spawn('taskkill', args, { windowsHide: true });
   else { try { proc.kill('SIGKILL'); } catch (_) {} }
 }
 

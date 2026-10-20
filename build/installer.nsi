@@ -5,6 +5,9 @@ SetCompressorDictSize 64
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 !include "Sections.nsh"
+!include "StrFunc.nsh"
+${StrStr}
+${UnStrStr}
 
 !ifndef VERSION
   !define VERSION "1.1.1"
@@ -48,6 +51,61 @@ VIAddVersionKey "CompanyName" "SlopAMP"
 !insertmacro MUI_LANGUAGE "English"
 
 Var UpdateMode
+
+; Close a running SlopAMP before replacing or removing its files. Also finds copies with no visible window
+; (a hidden or stuck SlopAMP, or one running from the portable exe's temp folder): first it asks them to
+; quit, and if they're still there after 10 s it ends them. Interactive installs ask the user first.
+!macro SLOPAMP_CLOSE_FUNCTIONS PFX
+Function ${PFX}IsSlopAMPRunning   ; sets $R9 to 1 if a SlopAMP window or SlopAMP.exe process exists
+  StrCpy $R9 0
+  FindWindow $R8 "Chrome_WidgetWin_1" "SlopAMP"
+  StrCmp $R8 0 +3
+    StrCpy $R9 1
+    Return
+  nsExec::ExecToStack '"$SYSDIR\tasklist.exe" /NH /FI "IMAGENAME eq SlopAMP.exe"'
+  Pop $R8
+  Pop $R7
+  !if "${PFX}" == "un."
+    ${UnStrStr} $R7 $R7 "SlopAMP.exe"
+  !else
+    ${StrStr} $R7 $R7 "SlopAMP.exe"
+  !endif
+  StrCmp $R7 "" +2
+    StrCpy $R9 1
+FunctionEnd
+
+Function ${PFX}CloseSlopAMP
+  Call ${PFX}IsSlopAMPRunning
+  StrCmp $R9 0 closed
+  IfSilent asked
+    MessageBox MB_OKCANCEL|MB_ICONINFORMATION "SlopAMP is running (maybe hidden in the background).$\r$\n$\r$\nClick OK to close it. Your playlists and settings are kept." IDOK asked
+    Abort
+  asked:
+  StrCpy $R6 0
+  askloop:
+    FindWindow $R8 "Chrome_WidgetWin_1" "SlopAMP"
+    StrCmp $R8 0 +2
+      SendMessage $R8 0x0010 0 0 /TIMEOUT=1000   ; WM_CLOSE: quit normally (saves playlists)
+    Call ${PFX}IsSlopAMPRunning
+    StrCmp $R9 0 closed
+    IntOp $R6 $R6 + 1
+    IntCmp $R6 20 force
+    Sleep 500
+    Goto askloop
+  force:
+    DetailPrint "SlopAMP didn't quit; ending its processes."
+    nsExec::Exec '"$SYSDIR\taskkill.exe" /F /T /IM SlopAMP.exe'
+    Pop $R8
+    Sleep 1500
+    Call ${PFX}IsSlopAMPRunning
+    StrCmp $R9 0 closed
+    MessageBox MB_OK|MB_ICONEXCLAMATION "SlopAMP is still running and couldn't be closed. Restart Windows, then try again." /SD IDOK
+    Abort
+  closed:
+FunctionEnd
+!macroend
+!insertmacro SLOPAMP_CLOSE_FUNCTIONS ""
+!insertmacro SLOPAMP_CLOSE_FUNCTIONS "un."
 
 !macro RegType EXT
   WriteRegStr HKCU "${APPKEY}\SupportedTypes" ".${EXT}" ""
@@ -133,32 +191,15 @@ Function .onInit
   System::Call 'kernel32::WaitForSingleObject(p R3, i 30000) i'
   System::Call 'kernel32::CloseHandle(p R3)'
   waitwin:
-  StrCpy $R4 0
-  waitloop:
-    FindWindow $0 "Chrome_WidgetWin_1" "SlopAMP"
-    StrCmp $0 0 waited
-    IntOp $R4 $R4 + 1
-    IntCmp $R4 60 waited
-    Sleep 500
-    Goto waitloop
-  waited:
-  Sleep 1500
   ; Keep the user's choice: no desktop shortcut on update unless there was one.
   IfFileExists "$DESKTOP\SlopAMP.lnk" normal
     !insertmacro UnselectSection ${SecDesktop}
   normal:
-  ; Refuse to overwrite files while SlopAMP is running.
-  FindWindow $0 "Chrome_WidgetWin_1" "SlopAMP"
-  StrCmp $0 0 +3
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Please close SlopAMP before installing." /SD IDOK
-    Abort
+  Call CloseSlopAMP
 FunctionEnd
 
 Section "Uninstall"
-  FindWindow $0 "Chrome_WidgetWin_1" "SlopAMP"
-  StrCmp $0 0 +3
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Please close SlopAMP first."
-    Abort
+  Call un.CloseSlopAMP
   Delete "$SMPROGRAMS\SlopAMP.lnk"
   Delete "$DESKTOP\SlopAMP.lnk"
   DeleteRegKey HKCU "${UNINSTKEY}"

@@ -52,6 +52,13 @@ class MediaServer {
 
   get base() { return `http://127.0.0.1:${this.port}`; }
 
+  // Keep a helper process in this.procs until it exits, so stop() can end it.
+  track(proc) {
+    this.procs.add(proc);
+    proc.on('close', () => this.procs.delete(proc));
+    return proc;
+  }
+
   stop() {
     for (const p of this.procs) { try { p.kill('SIGKILL'); } catch (_) {} }
     this.procs.clear();
@@ -74,13 +81,13 @@ class MediaServer {
   probe(file) {
     if (this.probes.has(file)) return Promise.resolve(this.probes.get(file));
     return new Promise((resolve) => {
-      execFile(this.ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file],
+      this.track(execFile(this.ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file],
         { maxBuffer: 16 * 1024 * 1024, windowsHide: true, timeout: 20000 }, (err, stdout) => {
           let info = null;
           if (!err) { try { info = summarize(JSON.parse(stdout)); } catch (_) {} }
           if (info) this.probes.set(file, info);
           resolve(info);
-        });
+        }));
     });
   }
 
@@ -113,7 +120,7 @@ class MediaServer {
       // eslint-disable-next-line no-await-in-loop
       const ok = await new Promise((resolve) => {
         const args = ['-hide_banner', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x240:d=0.3', ...encoderArgs(enc), '-f', 'null', '-'];
-        execFile(this.ffmpeg, args, { windowsHide: true, timeout: 15000 }, (err) => resolve(!err));
+        this.track(execFile(this.ffmpeg, args, { windowsHide: true, timeout: 15000 }, (err) => resolve(!err)));
       });
       if (ok) { this.encoder = enc; this.log('video encoder:', enc); return enc; }
     }
@@ -264,8 +271,8 @@ class MediaServer {
   async serveCover(res, file) {
     const info = await this.probe(file);
     if (!info || !info.hasCover) { res.writeHead(404); return res.end(); }
-    const proc = spawn(this.ffmpeg, ['-hide_banner', '-v', 'error', '-i', file, '-map', `0:${info.coverIndex}`, '-frames:v', '1', '-f', 'image2pipe', '-c:v', 'png', 'pipe:1'],
-      { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    const proc = this.track(spawn(this.ffmpeg, ['-hide_banner', '-v', 'error', '-i', file, '-map', `0:${info.coverIndex}`, '-frames:v', '1', '-f', 'image2pipe', '-c:v', 'png', 'pipe:1'],
+      { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }));
     res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=3600' });
     proc.stdout.pipe(res);
     proc.on('error', () => res.end());
