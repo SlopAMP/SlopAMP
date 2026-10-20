@@ -1,0 +1,14 @@
+# build output and local tools
+dist/
+vendor/
+node_modules/
+build/butterchurn/.work/
+build/butterchurn/butterchurn-src/
+
+# generated at build time
+src/renderer/licenses.html
+
+# local-only helpers and data
+Run SlopAMP.bat
+*.part0*
+SlopAMP Data/

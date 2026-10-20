@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' data: blob: https:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; font-src 'self' data:">
+<title>SlopAMP</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ 1. RETRO DECK ============ -->
+  <section id="deck">
+    <div class="titlebar" id="titlebar">
+      <span class="logo-dot" title="SlopAMP"></span>
+      <span class="rule"></span>
+      <span class="brand">SLOPAMP</span>
+      <span class="rule"></span>
+      <div class="wbtns">
+        <button id="btnAbout" title="About / licenses">?</button>
+        <button id="btnMin" title="Minimize">&#x2013;</button>
+        <button id="btnMini" title="Mini player (M)">&#x25AD;</button>
+        <button id="btnClose" title="Close">&#x2715;</button>
+      </div>
+    </div>
+
+    <div class="deck-body">
+      <div class="lcd" id="lcd">
+        <div class="lcd-top">
+          <canvas id="stateIcon" width="16" height="18"></canvas>
+          <canvas id="clock" width="132" height="40" title="Click: elapsed / remaining"></canvas>
+        </div>
+        <canvas id="vis" width="152" height="34" title="Spectrum"></canvas>
+      </div>
+
+      <div class="deck-right">
+        <div class="marquee lcd-inset" id="marquee"><div class="marquee-inner" id="marqueeText">SLOPAMP &#183; DROP FILES OR PASTE A LINK</div></div>
+        <div class="inforow">
+          <span class="lcd-inset num" id="kbps">---</span><span class="unit">kbps</span>
+          <span class="lcd-inset num" id="khz">--</span><span class="unit">kHz</span>
+          <span class="ind" id="indSrc">FILE</span>
+          <span class="spacer"></span>
+          <span class="ind" id="indMono">mono</span>
+          <span class="ind" id="indStereo">stereo</span>
+        </div>
+        <div class="sliderrow">
+          <input type="range" id="vol" class="vol" min="0" max="100" value="80" title="Volume">
+          <span class="spacer"></span>
+          <button class="tog" id="togEq" title="Show/hide equalizer (E)">EQ</button>
+          <button class="tog" id="togVis" title="Show/hide the music visualizer">VIS</button>
+          <button class="tog" id="togVid" title="Show/hide video pane">VID</button>
+          <button class="tog" id="togPl" title="Show/hide playlist">PL</button>
+        </div>
+        <div class="actrow">
+          <button class="tog wide" id="bDl" title="Download the YouTube video you're watching (or the selected one)" disabled><svg viewBox="0 0 16 16" class="tog-ico"><path d="M7 1h2v7l2.5-2.5 1.4 1.4L8 11.8 3.1 6.9l1.4-1.4L7 8zM2 13h12v2H2z"/></svg>DOWNLOAD</button>
+          <button class="tog wide" id="bFull" title="Fullscreen (F)"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M1 1h5v2H3v3H1zM10 1h5v5h-2V3h-3zM1 10h2v3h3v2H1zM13 10h2v5h-5v-2h3z"/></svg>FULLSCREEN</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="posrow"><input type="range" id="pos" class="pos" min="0" max="1000" value="0" title="Seek"></div>
+
+    <div class="transport">
+      <div class="tgroup">
+        <button class="tb" id="bPrev" title="Previous (Z)"><svg viewBox="0 0 16 16"><path d="M3 3h2v10H3zM13 3v10L6 8z"/></svg></button>
+        <button class="tb" id="bPlay" title="Play (X)"><svg viewBox="0 0 16 16"><path d="M4 2.5v11L13 8z"/></svg></button>
+        <button class="tb" id="bPause" title="Pause (C)"><svg viewBox="0 0 16 16"><path d="M4 3h3v10H4zM9 3h3v10H9z"/></svg></button>
+        <button class="tb" id="bStop" title="Stop (V)"><svg viewBox="0 0 16 16"><path d="M3.5 3.5h9v9h-9z"/></svg></button>
+        <button class="tb" id="bNext" title="Next (B)"><svg viewBox="0 0 16 16"><path d="M11 3h2v10h-2zM3 3v10l7-5z"/></svg></button>
+      </div>
+      <button class="tb eject" id="bEject" title="Open files (L)"><svg viewBox="0 0 16 16"><path d="M8 3l6 6H2zM2 11h12v2H2z"/></svg></button>
+      <button class="tog wide" id="bShuffle" title="Shuffle (S)"><i class="led"></i>SHUFFLE</button>
+      <button class="tog wide" id="bRepeat" title="Repeat: off / all / one (R)"><i class="led"></i><span id="repLabel">REPEAT</span></button>
+      <span class="badge" id="bRestore" role="button" title="Restore normal size"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M13 3 6 13h5l-1 8 8-11h-5z" fill="currentColor"/></svg></span>
+    </div>
+  </section>
+
+  <!-- ============ 2. VIDEO PANE ============ -->
+  <!-- ============ EQUALIZER (between deck and video) ============ -->
+  <section id="eqPanel" class="hidden">
+    <div class="eq-title" id="eqTitle">
+      <span class="rule"></span><span class="eq-name">EQUALIZER</span><span class="eq-sum" id="eqSum"></span><span class="rule"></span>
+      <div class="wbtns"><button id="eqMinBtn" title="Minimize equalizer">&#x2013;</button><button id="eqCloseBtn" title="Close equalizer">&#x2715;</button></div>
+    </div>
+    <div class="eq-body" id="eqBody">
+      <div class="eq-top">
+        <button class="eqbtn" id="eqOn" title="Turn the equalizer on/off"><i class="led"></i>ON</button>
+        <button class="eqbtn" id="eqPresetsBtn" title="Presets">PRESETS &#9662;</button>
+        <canvas class="eq-curve" id="eqCurve" width="300" height="22"></canvas>
+        <button class="eqbtn" id="eqReset" title="Reset all sliders to 0 dB">RESET</button>
+      </div>
+      <div class="eq-bands" id="eqBands"></div>
+      <div class="eq-note" id="eqNote">EQ works on local files and downloaded copies &#8212; YouTube streams play through YouTube&#8217;s own player.</div>
+    </div>
+  </section>
+
+  <section id="screen">
+    <div id="visTitle" class="eq-title">
+      <span class="rule"></span><span class="eq-name">VISUALIZER</span><span class="eq-sum" id="visSum"></span><span class="rule"></span>
+      <div class="wbtns"><button id="visMinBtn" title="Minimize visualizer">&#x2013;</button><button id="visCloseBtn" title="Close visualizer">&#x2715;</button></div>
+    </div>
+    <div id="stage">
+      <video id="video" preload="auto"></video>
+      <div id="ytWrap" class="layer"><div id="ytHost"></div></div>
+      <div id="artWrap" class="layer">
+        <canvas id="bigVis"></canvas>
+        <img id="cover" alt="">
+        <canvas id="mdCanvas"></canvas>
+        <div id="coverCard"><img id="ccArt" alt=""><span id="ccTitle"></span></div>
+        <div id="mdName"></div>
+        <div id="visBar">
+          <button type="button" class="vis-b" id="mdFav" title="Add to favorites (H)">&#9734;</button>
+          <button type="button" class="vis-b" id="mdPrev" title="Previous preset">&#9664;</button>
+          <button type="button" class="vis-b" id="mdNext" title="Next preset">&#9654;</button>
+          <button type="button" class="vis-b" id="mdPresets" title="Choose a preset"><span class="vb-lbl">PRESETS </span>&#9662;</button>
+          <button type="button" class="vis-b" id="mdFs" title="Fullscreen (F)">&#10530;</button>
+          <div class="vis-seg" id="visSeg"><button type="button" data-m="milkdrop">BUTTERCHURN</button><button type="button" data-m="bars">BARS</button></div>
+        </div>
+      </div>
+      <div id="empty" class="layer">
+        <div class="empty-inner">
+          <svg viewBox="0 0 24 24" class="empty-logo"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M13 3 6 13h5l-1 8 8-11h-5z" fill="currentColor"/></svg>
+          <div class="empty-title">SLOPAMP</div>
+          <div>Drop video or music files here,<br>or paste a YouTube link (Ctrl+V)</div>
+          <div class="empty-btns"><button id="eAdd">Add files&#8230;</button><button id="eFolder">Add folder&#8230;</button><button id="eUrl">Add link&#8230;</button></div>
+        </div>
+      </div>
+      <div id="overlay" class="layer hidden">
+        <div class="ov-box">
+          <div class="ov-title" id="ovTitle"></div>
+          <div class="ov-text" id="ovText"></div>
+          <div class="ov-btns" id="ovBtns"></div>
+        </div>
+      </div>
+      <div id="subs" class="hidden"></div>
+      <div id="resumeBar" class="hidden"><span id="resumeText"></span><button id="resumeOver">Start over</button><button id="resumeX" title="Close">&#x2715;</button></div>
+      <div id="busy" class="hidden"><span></span><span></span><span></span></div>
+    </div>
+
+    <div id="vctl">
+      <div class="seekrow">
+        <span id="vTime" class="vtime">00:00</span>
+        <input type="range" id="seek" class="seek" min="0" max="1000" value="0" title="Seek">
+        <span id="vDur" class="vtime">00:00</span>
+      </div>
+      <div class="btnrow">
+        <button class="vb big" id="vPlay" title="Play / Pause (Space)"><svg viewBox="0 0 16 16" id="vPlayIcon"><path d="M4 2.5v11L13 8z"/></svg></button>
+        <span class="vsep"></span>
+        <button class="vb" id="vPrev" title="Previous"><svg viewBox="0 0 16 16"><path d="M2 3h2v10H2zM9 3v10L4 8zM15 3v10l-5-5z"/></svg></button>
+        <button class="vb" id="vStop" title="Stop"><svg viewBox="0 0 16 16"><path d="M3.5 3.5h9v9h-9z"/></svg></button>
+        <button class="vb" id="vNext" title="Next"><svg viewBox="0 0 16 16"><path d="M12 3h2v10h-2zM1 3v10l5-5zM7 3v10l5-5z"/></svg></button>
+        <span class="vsep"></span>
+        <button class="vb" id="vFs" title="Fullscreen (F / double-click video)"><svg viewBox="0 0 16 16"><path d="M2 2h5v2H4v3H2zM9 2h5v5h-2V4H9zM2 9h2v3h3v2H2zM12 9h2v5H9v-2h3z"/></svg></button>
+        <button class="vb txt" id="vCc" title="Subtitles">CC</button>
+        <button class="vb txt" id="vSpeed" title="Playback speed ( [ and ] )">1&#215;</button>
+        <button class="vb" id="vPl" title="Show/hide playlist"><svg viewBox="0 0 16 16"><path d="M2 3h12v2H2zM2 7h12v2H2zM2 11h8v2H2z"/></svg></button>
+        <button class="vb" id="vRep" title="Repeat"><svg viewBox="0 0 16 16"><path d="M3 6a3 3 0 0 1 3-3h6V1l3 3-3 3V5H6a1 1 0 0 0-1 1v1H3zM13 10a3 3 0 0 1-3 3H4v2l-3-3 3-3v2h6a1 1 0 0 0 1-1V9h2z"/></svg></button>
+        <button class="vb" id="vShuf" title="Shuffle"><svg viewBox="0 0 16 16"><path d="M1 4h3l6 8h2v-2l3 3-3 3v-2H9L3 6H1zM1 12h2l2-2.7 1.2 1.6L4 14H1zM9 4h3V2l3 3-3 3V6h-2L8.8 7.6 7.6 6z"/></svg></button>
+        <span class="spacer"></span>
+        <span class="vmute" id="vMute" title="Mute"><svg viewBox="0 0 16 16"><path d="M2 6h3l4-3v10l-4-3H2z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5" fill="none" stroke="currentColor" stroke-width="1.4" id="vMuteWave"/></svg></span>
+        <div class="wedge" id="wedge" title="Volume"><div class="wedge-fill" id="wedgeFill"></div></div>
+        <span class="vpct" id="vPct">80%</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. PLAYLIST ============ -->
+  <section id="plist">
+    <div id="plResize" title="Drag to resize"></div>
+    <div id="tabs"><div id="tabStrip"></div><button id="tabAdd" title="New playlist tab (Ctrl+T)">+</button></div>
+    <ol id="list" tabindex="0"></ol>
+    <div id="plbar">
+      <button class="pb" id="pAdd" title="Add files">+FILE</button>
+      <button class="pb" id="pFolder" title="Add folder">+DIR</button>
+      <button class="pb" id="pUrl" title="Add YouTube link">+URL</button>
+      <button class="pb" id="pRem" title="Remove selected (Del)">REM</button>
+      <button class="pb" id="pClr" title="Clear playlist">CLR</button>
+      <span class="pbsep"></span>
+      <button class="pb" id="pSave" title="Save playlist (Ctrl+S)">SAVE</button>
+      <button class="pb" id="pLoad" title="Load playlist (Ctrl+L)">LOAD</button>
+      <button class="pb" id="pUp" title="Move up (Alt+Up)">&#x25B2;</button>
+      <button class="pb" id="pDown" title="Move down (Alt+Down)">&#x25BC;</button>
+      <span class="spacer"></span>
+      <span class="pltime lcd-inset" id="plTime">0 items</span>
+    </div>
+    <div id="plbar2">
+      <button class="pb wide" id="pDlAll" title="Download every YouTube item in the playlist"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M7 1h2v7l2.5-2.5 1.4 1.4L8 11.8 3.1 6.9l1.4-1.4L7 8zM2 13h12v2H2z"/></svg>DOWNLOAD ALL</button>
+      <button class="pb wide" id="pDlm" title="Your downloads and saved playlists: see, search, open and delete"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M1 3h5l2 2h7v9H1z"/></svg>MANAGE LIBRARY</button>
+      <button class="pb wide" id="pQuick" title="Quick save this tab to Downloads\SlopAMP\Playlists, replacing the old copy (Ctrl+Shift+S)"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M2 1h10l3 3v11H1V1zm2 1v4h7V2zm1 8v4h6v-4z"/></svg>QUICK SAVE</button>
+      <button class="pb wide" id="pQuickAll" title="Quick save every tab to Downloads\SlopAMP\Playlists, replacing the old copies (Ctrl+Alt+S)"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M2 1h10l3 3v11H1V1zm2 1v4h7V2zm1 8v4h6v-4z"/></svg>SAVE ALL</button>
+      <span class="spacer"></span>
+      <span class="pl2-info" id="dlInfo"></span>
+    </div>
+  </section>
+
+  <div id="dropHint" class="hidden"><div>Drop to add to playlist</div></div>
+  <div id="toast" class="hidden"></div>
+  <div id="ctx" class="hidden"></div>
+  <div id="dlMenu" class="hidden"></div>
+  <div id="eqPresets" class="hidden"></div>
+  <div id="popMenu" class="hidden"></div>
+  <div id="dlBar" class="hidden">
+    <div class="dlb-row"><span class="dlb-text" id="dlbText"></span><button class="dlb-x" id="dlbClose" title="Cancel / close">&#x2715;</button></div>
+    <div class="dlb-prog" id="dlbProg"><div class="dlb-fill" id="dlbFill"></div></div>
+    <div class="dlb-btns" id="dlbBtns"></div>
+  </div>
+
+  <dialog id="urlDlg">
+    <form method="dialog">
+      <div class="dlg-title">Add YouTube links</div>
+      <textarea id="urlText" rows="4" placeholder="https://www.youtube.com/watch?v=...&#10;https://youtu.be/..."></textarea>
+      <div class="dlg-note">One link per line. Videos stream through the official embedded players &#8212; nothing is downloaded.</div>
+      <div class="dlg-btns"><button value="cancel">Cancel</button><button value="ok" id="urlOk">Add</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="loadDlg">
+    <form method="dialog">
+      <div class="dlg-title">Load playlist</div>
+      <div class="dlg-note" id="loadDlgText"></div>
+      <div class="dlg-btns"><button value="cancel">Cancel</button><button value="newtab">Open in new tab</button><button value="append">Add to end</button><button value="replace" id="loadReplace">Replace current list</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dlDirDlg">
+    <form method="dialog">
+      <div class="dlg-title">Download folders</div>
+      <div class="dir-row"><span class="dir-label">Videos</span><span class="dir-path" id="dirVideo"></span><button type="button" id="dirVideoBtn">Change&#8230;</button></div>
+      <div class="dir-row"><span class="dir-label">Audio</span><span class="dir-path" id="dirAudio"></span><button type="button" id="dirAudioBtn">Change&#8230;</button></div>
+      <div class="dlg-btns"><button type="button" id="dirReset">Reset to default</button><button value="close">Done</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dlmDlg">
+    <div class="dlm-title"><span>LIBRARY</span><button type="button" id="dlmX" title="Close (Esc)">&#x2715;</button></div>
+    <div class="dlm-sum"><span class="dlm-lcd" id="dlmCount">0 FILES</span><span class="dlm-miss" id="dlmMiss"></span>
+      <div class="dlm-seg" id="dlmSeg"><button type="button" data-f="all" class="on">ALL</button><button type="button" data-f="video">VIDEO</button><button type="button" data-f="audio">MP3</button><button type="button" data-f="playlist">PLAYLISTS</button></div></div>
+    <div class="dlm-searchrow"><input type="text" id="dlmSearch" placeholder="Search your library&#8230;" spellcheck="false"><button type="button" id="dlmSearchX" class="hidden" title="Clear search">&#x2715;</button></div>
+    <div class="dlm-scroll"><table class="dlm-table">
+      <thead><tr><th class="c"><span class="dlm-cb" id="dlmAll" title="Select all"></span></th><th data-sort="title">Title</th><th data-sort="kind">Type</th><th data-sort="size" class="r">Size</th><th data-sort="mtime" class="r">Date</th><th></th></tr></thead>
+      <tbody id="dlmBody"></tbody>
+    </table><div class="dlm-empty hidden" id="dlmEmpty"></div></div>
+    <div class="dlm-bar"><button type="button" id="dlmOpenTab" class="hidden">&#9654; Open in new tab</button><button type="button" class="red" id="dlmDel" disabled>&#x1F5D1; Delete selected</button><button type="button" class="red" id="dlmDelAll">Delete all&#8230;</button><span class="spacer"></span><button type="button" class="dim" id="dlmClean">Clean up missing</button><button type="button" class="dim" id="dlmOpen">&#x1F4C1; Open folder</button></div>
+    <div class="dlm-note">Deleted files go to the Recycle Bin. Playlist items stay and stream from YouTube again. Deleting a saved playlist file doesn&#8217;t close any tab.</div>
+  </dialog>
+
+  <dialog id="confirmDlg">
+    <form method="dialog">
+      <div class="dlg-title" id="confirmTitle"></div>
+      <div class="dlg-note" id="confirmText"></div>
+      <div class="dlg-btns"><button value="cancel">Cancel</button><button value="ok" id="confirmOk">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="aboutDlg">
+    <form method="dialog">
+      <div class="about-hero">
+        <svg viewBox="0 0 24 24" class="about-logo"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M13 3 6 13h5l-1 8 8-11h-5z" fill="currentColor"/></svg>
+        <div class="about-name">SLOPAMP</div>
+        <div class="about-ver" id="aboutVer"></div>
+        <div class="about-links"><a href="#" data-url="https://slopamp.com">slopamp.com</a><span>&#183;</span><a href="#" data-url="https://github.com/SlopAMP/SlopAMP">GitHub</a></div>
+      </div>
+      <div class="about-body">
+        <p>A retro-styled player for your own media files plus YouTube videos through YouTube’s official embedded player. The DOWNLOAD button saves a copy with yt-dlp — only download videos you have the right to save.</p>
+        <p id="aboutEnc"></p>
+        <p>SlopAMP is free software (MIT). It bundles Electron/Chromium and FFmpeg (LGPL v3). It includes the Butterchurn visualizer (MIT) and its preset collection. Not affiliated with or endorsed by Winamp, VideoLAN, or YouTube/Google.</p>
+        <iframe id="licFrame" title="Licenses" class="hidden"></iframe>
+      </div>
+      <div class="dlg-btns"><button type="button" id="aboutLic">View licenses</button><button value="close">Close</button></div>
+    </form>
+  </dialog>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
