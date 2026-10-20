@@ -48,19 +48,20 @@ More on [slopamp.com](https://slopamp.com).
 
 ## Install
 
-1. Download **SlopAMP-Setup-1.1.0.exe** from [Releases](https://github.com/SlopAMP/SlopAMP/releases/latest).
+1. Download **SlopAMP-Setup-1.1.1.exe** (or **SlopAMP-Portable-1.1.1.exe**, no install needed) from [Releases](https://github.com/SlopAMP/SlopAMP/releases/latest).
 2. Run it.
 
 > **Heads up:** SlopAMP isn't code-signed yet, so Windows may show "Windows protected your PC" (SmartScreen). Click **More info**, then **Run anyway**.
 
-**SHA256 (1.1.0 installer):**
-`891347f6626c5ef7018da428700eb23760aa67f4e3429c9f331a8ea6e7bee17e`
+**SHA256 (1.1.1):**
+- `SlopAMP-Setup-1.1.1.exe`: `b32acd74ab5fb2fc7b9561eb2891aba7bd3b99bd2a9c889757c2f8b7f816eb76`
+- `SlopAMP-Portable-1.1.1.exe`: `f188e4c4cbaa8ada9f8504a51676e639d88b07007efc224b9aa176d13a8407ad`
 
 ## FAQ
 
 - **Is it free?** Yes.
 - **Mac / Linux?** Windows only for now.
-- **Portable version?** Coming. No install needed when it lands.
+- **Portable version?** Yes. Grab **SlopAMP-Portable-1.1.1.exe** from [Releases](https://github.com/SlopAMP/SlopAMP/releases/latest). No install needed.
 
 ## Coming in 1.2 (ideas, not promises)
 
