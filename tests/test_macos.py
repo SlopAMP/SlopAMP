@@ -48,11 +48,13 @@ class MacTests(unittest.TestCase):
         error.exception.close()
 
     def test_state_preserves_backend_fields(self):
-        self.backend.remember('abcdefghijk', 'audio', '/tmp/music.mp3', 'Music')
+        file = self.root / 'music.mp3'
+        file.write_bytes(b'media')
+        self.backend.remember('abcdefghijk', 'audio', str(file), 'Music')
         self.backend.save(dict(tabs=[], volume=42))
         reloaded = Backend(self.server, self.root / 'state', self.root / 'downloads')
         self.assertEqual(reloaded.state['volume'], 42)
-        self.assertEqual(reloaded.state['downloads']['abcdefghijk']['audio'], '/tmp/music.mp3')
+        self.assertEqual(reloaded.state['downloads']['abcdefghijk']['audio'], str(file))
         self.backend.state_file.write_text('{broken')
         with self.assertRaises(RuntimeError): Backend(self.server, self.root / 'state')
         self.assertEqual(self.backend.state_file.read_text(), '{broken')
@@ -83,7 +85,10 @@ class MacTests(unittest.TestCase):
         rows = self.backend.downloads()
         self.assertEqual(rows[0]['vid'], 'abcdefghijk')
         self.assertFalse(rows[0]['missing'])
-        self.backend.remember('01234567890', 'video', str(self.root / 'missing.mp4'))
+        missing = self.root / 'missing.mp4'
+        missing.write_bytes(b'media')
+        self.backend.remember('01234567890', 'video', str(missing))
+        missing.unlink()
         self.assertTrue(next(r for r in self.backend.downloads() if r['vid'] == '01234567890')['missing'])
 
 

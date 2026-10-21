@@ -1,9 +1,13 @@
 """py2app build definition; invoked through bin/build_macos.py."""
+import json
+from pathlib import Path
 from setuptools import setup
+
+version = json.loads((Path(__file__).resolve().parents[1] / 'package.json').read_text())['version']
 
 setup(
     name='SlopAMP',
-    version='1.2.0',
+    version=version,
     app=['macos/run.py'],
     options={'py2app': {
         'dist_dir': 'dist/macos',
@@ -14,8 +18,8 @@ setup(
             'CFBundleName': 'SlopAMP',
             'CFBundleDisplayName': 'SlopAMP',
             'CFBundleIdentifier': 'com.slopamp.macos',
-            'CFBundleShortVersionString': '1.2.0',
-            'LSMinimumSystemVersion': '12.0',
+            'CFBundleVersion': version,
+            'CFBundleShortVersionString': version,
             'NSHighResolutionCapable': True,
             'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True},
             'CFBundleDocumentTypes': [{'CFBundleTypeName': 'Media and playlists', 'CFBundleTypeRole': 'Viewer', 'LSHandlerRank': 'Alternate', 'CFBundleTypeExtensions': ['mp3', 'flac', 'wav', 'm4a', 'mp4', 'mkv', 'mov', 'm3u', 'm3u8', 'pls']}],

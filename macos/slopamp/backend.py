@@ -2,12 +2,15 @@
 import json
 import os
 import re
+import tempfile
 import threading
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 from .media import MEDIA, VIDEO
 
 DIRECTORY_KEYS = {'audio': 'dlAudioDir', 'video': 'dlVideoDir', 'playlists': 'dlPlaylistsDir'}
+PLAYLIST_EXTENSIONS = {'.m3u', '.m3u8', '.pls'}
+RENDERER_STATE_KEYS = frozenset('version tabs tab playTab items current vis volume muted shuffle repeat showVideo showPlaylist remaining plHeight visMode eq resume subsOn'.split())
 
 
 def directory_key(kind):
@@ -19,12 +22,17 @@ def directory_key(kind):
 def atomic_write(path, text):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + '.tmp')
-    with temporary.open('w', encoding='utf-8') as stream:
-        stream.write(text)
-        stream.flush()
-        os.fsync(stream.fileno())
-    temporary.replace(path)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent, prefix=path.name + '.', suffix='.tmp', delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def safe_name(name):
@@ -42,6 +50,41 @@ def playlist_text(items):
     return '\n'.join(lines) + '\n'
 
 
+def playlist_rows(path):
+    """Read playlist references without probing or authorizing their targets."""
+    path = Path(path)
+    text = path.read_text(encoding='utf-8-sig')
+    rows = []
+    if path.suffix.lower() == '.pls':
+        entries = {}
+        for line in text.splitlines():
+            match = re.match(r'(File|Title|Length)(\d+)=(.*)', line, re.I)
+            if match:
+                entries.setdefault(int(match[2]), {})[match[1].lower()] = match[3]
+        rows = [(entry.get('file', ''), entry.get('title', ''), entry.get('length', '0')) for _, entry in sorted(entries.items())]
+    else:
+        title, duration = '', '0'
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith('#EXTINF:'):
+                title = line.partition(',')[2]
+                duration = line.partition(':')[2].partition(',')[0]
+            elif line and not line.startswith('#'):
+                rows.append((line, title, duration))
+                title, duration = '', '0'
+    for location, title, duration in rows:
+        if not location:
+            continue
+        parsed = urlsplit(location)
+        if parsed.scheme == 'file':
+            location = unquote(parsed.path)
+        elif parsed.scheme and parsed.scheme not in {'http', 'https'}:
+            continue
+        if not location.startswith(('http://', 'https://')):
+            location = str(path.parent / location)
+        yield location, title, duration
+
+
 class Backend:
     def __init__(self, media, data_dir=None, download_dir=None):
         self.media = media
@@ -57,11 +100,88 @@ class Backend:
                     raise ValueError('State must be an object')
             except (ValueError, OSError) as exc:
                 raise RuntimeError(f'Cannot read {self.state_file}; it has been preserved: {exc}') from exc
+        # Migrate existing libraries once. Later renderer saves must never be
+        # able to turn a forged playlist entry into native file ownership.
+        migrate = 'nativeOwnedMedia' not in self.state
+        paths = self.state.get('nativeOwnedMedia', [])
+        if migrate:
+            tabs = self.state.get('tabs', [])
+            items = self.state.get('items', []) + [item for tab in tabs if isinstance(tab, dict) for item in tab.get('items', [])]
+            paths = [item.get(key) for item in items if isinstance(item, dict) for key in ('path', 'localAudio', 'localVideo')]
+        if migrate:
+            self.owned_media = {str(path) for value in paths if (path := self.media_path(value)) is not None}
+        else:
+            # External drives can be absent at launch. Keep native provenance;
+            # destructive operations still require an existing regular file.
+            self.owned_media = {value for value in paths if isinstance(value, str) and Path(value).is_absolute() and Path(value).suffix.lower().lstrip('.') in MEDIA}
+        if migrate and self.state_file.exists():
+            self.save({})
 
     def save(self, patch):
         with self.lock:
             self.state.update({k: v for k, v in patch.items() if k != 'flush'})
+            self.state['nativeOwnedMedia'] = sorted(self.owned_media)
             atomic_write(self.state_file, json.dumps(self.state, ensure_ascii=False))
+
+    def save_renderer(self, patch):
+        if not isinstance(patch, dict):
+            raise ValueError('State must be an object')
+        self.save({key: value for key, value in patch.items() if key in RENDERER_STATE_KEYS})
+
+    @staticmethod
+    def media_path(value):
+        if not isinstance(value, (str, Path)) or not value:
+            return None
+        path = Path(value)
+        if path.suffix.lower().lstrip('.') not in MEDIA or path.is_symlink() or not path.is_file():
+            return None
+        return path.resolve()
+
+    def authorize_paths(self, paths):
+        """Snapshot native inputs now; mutable playlists never retain authority."""
+        pending, seen, imported = list(paths), set(), set()
+        while pending:
+            value = pending.pop()
+            if str(value).startswith(('https://', 'http://')):
+                continue
+            path = Path(value).expanduser()
+            if path.is_symlink() or not path.exists():
+                continue
+            path = path.resolve()
+            if path in seen:
+                continue
+            seen.add(path)
+            if (media := self.media_path(path)) is not None:
+                imported.add(str(media))
+            elif path.is_dir():
+                try:
+                    pending.extend(p for p in path.iterdir() if not p.name.startswith('.'))
+                except OSError:
+                    continue
+            elif path.suffix.lower() in PLAYLIST_EXTENSIONS:
+                try:
+                    pending.extend(location for location, _, _ in playlist_rows(path))
+                except (OSError, UnicodeError):
+                    # The normal asynchronous import reports unreadable files.
+                    continue
+        with self.lock:
+            if imported - self.owned_media:
+                self.owned_media.update(imported)
+                self.save({})
+
+    def is_known_media(self, path):
+        target = self.media_path(path)
+        if target is None:
+            return False
+        with self.lock:
+            return str(target) in self.owned_media or any(
+                isinstance(entry, dict) and any(self.media_path(entry.get(kind)) == target for kind in ('audio', 'video'))
+                for entry in self.state.get('downloads', {}).values()
+            )
+
+    def is_playlist_file(self, value):
+        path = Path(value)
+        return path.suffix.lower() in PLAYLIST_EXTENSIONS and not path.is_symlink() and path.is_file() and path.resolve().parent == self.playlists_dir().resolve()
 
     def dirs(self):
         return {kind: str(Path(self.state.get(key) or self.download_dir / kind.title())) for kind, key in DIRECTORY_KEYS.items()}
@@ -74,10 +194,9 @@ class Backend:
     def can_trash(self, value):
         if not isinstance(value, str) or not value:
             return False
-        path = Path(value)
-        if path.is_symlink() or path.is_dir():
+        target = self.media_path(value)
+        if target is None or not self.is_known_media(value):
             return False
-        target = path.resolve()
         with self.lock:
             tabs = self.state.get('tabs', [])
             tab = self.state.get('tab', 0)
@@ -87,7 +206,7 @@ class Backend:
                 items = self.state.get('items', [])
             owned = [item.get(key) for item in items if isinstance(item, dict) for key in ('path', 'localAudio', 'localVideo')]
             owned.extend(row['path'] for row in self.downloads())
-            return any(isinstance(p, str) and p and not Path(p).is_symlink() and Path(p).resolve() == target for p in owned)
+            return any(self.media_path(p) == target for p in owned)
 
     def describe(self, paths, seen=None):
         seen = seen if seen is not None else set()
@@ -103,7 +222,7 @@ class Backend:
                 seen.add(path)
                 result += self.describe([str(p) for p in sorted(path.iterdir()) if not p.name.startswith('.')], seen)
                 seen.remove(path)
-            elif path.suffix.lower() in {'.m3u', '.m3u8', '.pls'} and path.exists():
+            elif path.suffix.lower() in PLAYLIST_EXTENSIONS and path.exists():
                 seen.add(path)
                 result += self.read_playlist(path, seen)['entries']
                 seen.remove(path)
@@ -114,36 +233,8 @@ class Backend:
 
     def read_playlist(self, path, seen=None):
         path = Path(path)
-        text = path.read_text(encoding='utf-8-sig')
-        rows = []
-        if path.suffix.lower() == '.pls':
-            entries = {}
-            for line in text.splitlines():
-                match = re.match(r'(File|Title|Length)(\d+)=(.*)', line, re.I)
-                if match:
-                    entries.setdefault(int(match[2]), {})[match[1].lower()] = match[3]
-            rows = [(e.get('file', ''), e.get('title', ''), e.get('length', '0')) for _, e in sorted(entries.items())]
-        else:
-            title, duration = '', '0'
-            for line in text.splitlines():
-                line = line.strip()
-                if line.startswith('#EXTINF:'):
-                    title = line.partition(',')[2]
-                    duration = line.partition(':')[2].partition(',')[0]
-                elif line and not line.startswith('#'):
-                    rows.append((line, title, duration))
-                    title, duration = '', '0'
         result = []
-        for location, title, duration in rows:
-            if not location:
-                continue
-            parsed = urlsplit(location)
-            if parsed.scheme == 'file':
-                location = unquote(parsed.path)
-            elif parsed.scheme and parsed.scheme not in {'http', 'https'}:
-                continue
-            if not location.startswith(('http://', 'https://')):
-                location = str((path.parent / location).resolve())
+        for location, title, duration in playlist_rows(path):
             entries = self.describe([location], seen)
             if title and len(entries) == 1:
                 entries[0]['title'] = title
@@ -180,12 +271,19 @@ class Backend:
         return [dict(kind='playlist', path=str(p), title=p.stem, ext=p.suffix[1:].upper(), count=len(self.read_playlist(p)['entries']), size=p.stat().st_size, mtime=p.stat().st_mtime * 1000) for p in sorted(self.playlists_dir().iterdir()) if p.suffix.lower() in {'.m3u', '.m3u8', '.pls'} and p.is_file()]
 
     def remember(self, vid, kind, file, title=''):
-        if not re.fullmatch(r'[\w-]{11}', vid or '') or kind not in {'audio', 'video'}:
-            return
+        if not re.fullmatch(r'[\w-]{11}', vid or '') or kind not in {'audio', 'video'} or self.media_path(file) is None:
+            raise ValueError('Expected an existing media download')
         with self.lock:
             index = self.state.setdefault('downloads', {})
             index.setdefault(vid, {}).update({kind: file, 'title': title})
             self.save(dict(downloads=index))
+
+    def remember_existing(self, vid, kind, file, title=''):
+        path = self.media_path(file)
+        roots = [Path(directory).resolve() for key, directory in self.dirs().items() if key in {'audio', 'video'}]
+        if path is None or not (self.is_known_media(file) or any(path.is_relative_to(root) for root in roots)):
+            raise ValueError('Not an imported media file or SlopAMP download')
+        self.remember(vid, kind, file, title)
 
     def forget(self, vid, kind=None):
         with self.lock:

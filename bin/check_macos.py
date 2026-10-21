@@ -1,6 +1,9 @@
 """Launch the real Cocoa/WebKit host and verify decoded playback and seeking."""
+import argparse
 import json
 import math
+import os
+import signal
 import struct
 import subprocess
 import sys
@@ -32,19 +35,20 @@ class Smoke:
         self.delegate.configure(ROOT, [], root / 'state', root / 'downloads')
         self.app = AppKit.NSApplication.sharedApplication()
         self.app.setDelegate_(self.delegate)
-        self.started = time.monotonic()
         self.phase = 0
         self.error = None
         self.last_report = 0
+        self.finished = False
 
     def check(self):
-        if time.monotonic() - self.started > 60:
-            self.finish('Timed out waiting for real WebKit playback')
+        if self.finished:
             return
         script = "JSON.stringify({boot:!!window.__phosphor, time:window.__phosphor?.currentTime(), mediaTime:document.querySelector('video')?.currentTime, paused:document.querySelector('video')?.paused, ready:document.querySelector('video')?.readyState, status:window.__phosphor?.status, error:document.querySelector('video')?.error?.message, audio:window.__phosphor?.__audio()?.actx?.state, visualizer:!!window.__phosphor?.__md(), converted:window.__phosphor?.L?.prep?.converted, width:document.querySelector('video')?.videoWidth, cues:window.__phosphor?.subsState()?.cues?.length})"
         self.delegate.web.evaluateJavaScript_completionHandler_(script, self.result)
 
     def result(self, value, error):
+        if self.finished:
+            return
         if error:
             self.finish(str(error)); return
         status = json.loads(value)
@@ -83,6 +87,8 @@ class Smoke:
         AppHelper.callLater(0.5, self.check)
 
     def verify_state(self):
+        if self.finished:
+            return
         try:
             state = json.loads(self.delegate.backend.state_file.read_text())
             assert len(state['tabs'][0]['items']) == 2, 'Playlist state did not persist'
@@ -93,6 +99,8 @@ class Smoke:
         self.delegate.web.takeSnapshotWithConfiguration_completionHandler_(None, self.snapshot)
 
     def snapshot(self, image, error):
+        if self.finished:
+            return
         if error:
             self.finish(str(error)); return
         bitmap = AppKit.NSBitmapImageRep.imageRepWithData_(image.TIFFRepresentation())
@@ -104,19 +112,74 @@ class Smoke:
         self.finish(None)
 
     def finish(self, error):
+        if self.finished:
+            return
+        self.finished = True
         self.error = error
         if error: print('FAIL:', error, file=sys.stderr, flush=True)
-        self.delegate.downloader.stop()
-        self.delegate.worker.shutdown(wait=False, cancel_futures=True)
-        self.delegate.media.stop()
-        self.app.stop_(None)
+        try:
+            self.delegate.downloader.stop()
+            self.delegate.worker.shutdown(wait=False, cancel_futures=True)
+            self.delegate.media.stop()
+        except Exception as exc:
+            self.error = self.error or str(exc)
+            print('FAIL: Smoke cleanup:', exc, file=sys.stderr, flush=True)
+        finally:
+            self.app.stop_(None)
+            # A timer/JavaScript callback is not an NSEvent. Wake run() so it sees stop().
+            event = AppKit.NSEvent.otherEventWithType_location_modifierFlags_timestamp_windowNumber_context_subtype_data1_data2_(
+                AppKit.NSEventTypeApplicationDefined, (0, 0), 0, 0, 0, None, 0, 0, 0
+            )
+            self.app.postEvent_atStart_(event, True)
 
-    def run(self):
+    def run(self, timeout=60):
+        # This deadline still fires if a WebKit completion handler never arrives.
+        AppHelper.callLater(timeout, self.finish, 'Timed out waiting for real WebKit playback')
         AppHelper.callLater(2, self.check)
-        self.app.run()
-        self.temp.cleanup()
+        try:
+            self.app.run()
+        finally:
+            self.temp.cleanup()
         return 1 if self.error else 0
 
 
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--timeout', type=float, default=60, help='Playback deadline in seconds (default: 60)')
+    parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    if not math.isfinite(args.timeout) or args.timeout <= 0:
+        parser.error('--timeout must be a positive finite number')
+    if args.worker:
+        return Smoke().run(args.timeout)
+    # Bound startup, a wedged Cocoa run loop, and cleanup as well as WebKit callbacks.
+    process = subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve()), '--worker', '--timeout', str(args.timeout)],
+        start_new_session=True,
+    )
+    try:
+        return process.wait(timeout=args.timeout + 30)
+    except (subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
+        interrupted = isinstance(exc, KeyboardInterrupt)
+        message = 'Smoke check interrupted' if interrupted else 'Smoke process exceeded its shutdown deadline'
+        print('FAIL:', message, file=sys.stderr, flush=True)
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        finally:
+            # Reap descendants even if the worker exited before its children.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+        return 130 if interrupted else 1
+
+
 if __name__ == '__main__':
-    sys.exit(Smoke().run())
+    sys.exit(main())

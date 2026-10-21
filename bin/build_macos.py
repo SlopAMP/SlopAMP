@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from macos_bundle import finalize_bundle, project_version
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'macos'))
@@ -16,4 +17,6 @@ with log.open('w') as output:
 if result.returncode:
     print('\n'.join(log.read_text().splitlines()[-30:]), file=sys.stderr)
     raise SystemExit(result.returncode)
-print(f'Built {root / "dist/macos/SlopAMP.app"}\nBuild log: {log}')
+app = root / 'dist/macos/SlopAMP.app'
+info = finalize_bundle(app, project_version(root))
+print(f'Built {app} (macOS {info["LSMinimumSystemVersion"]} or later)\nBuild log: {log}')

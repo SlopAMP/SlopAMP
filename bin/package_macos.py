@@ -3,29 +3,22 @@ import hashlib
 import json
 import os
 import platform
-import plistlib
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from macos_bundle import finalize_bundle, load_commands, project_version, run
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'macos'))
 from slopamp.media import tool
-
-
-def run(*args, **kwargs):
-    return subprocess.run([str(a) for a in args], check=True, capture_output=True, **kwargs).stdout
+from slopamp.bundle_check import validate_report
 
 
 def system_library(name):
     return name.startswith(('/usr/lib/', '/System/Library/'))
-
-
-def load_commands(path):
-    return run('otool', '-l', path).decode()
 
 
 def dependencies(path):
@@ -51,12 +44,6 @@ def resolve_dependency(name, source, commands):
         if path.is_file():
             return path.resolve()
     raise RuntimeError(f'Cannot resolve {name} in {source}')
-
-
-def minimum_os(commands):
-    versions = re.findall(r'\bminos ([\d.]+)', commands)
-    versions += re.findall(r'cmd LC_VERSION_MIN_MACOSX\s+cmdsize \d+\s+version ([\d.]+)', commands)
-    return max((tuple(map(int, value.split('.'))) for value in versions), default=(12, 0))
 
 
 def collect_notices(source, destination, collected):
@@ -85,10 +72,8 @@ def bundle_tools(app):
     libraries.mkdir()
     notices = resources / 'tool-notices'
     mapped, names, collected, records = {}, {}, set(), []
-    minimum = (12, 0)
 
     def copy(source, target):
-        nonlocal minimum
         source = source.resolve()
         if source in mapped:
             return mapped[source]
@@ -98,7 +83,6 @@ def bundle_tools(app):
         shutil.copy2(source, target)
         target.chmod(target.stat().st_mode | 0o200)
         commands = load_commands(source)
-        minimum = max(minimum, minimum_os(commands))
         collect_notices(source, notices, collected)
         changes = []
         for dependency in dependencies(source):
@@ -125,7 +109,6 @@ def bundle_tools(app):
         copy(Path(source), binaries / name)
     (tools / 'manifest.json').write_text(json.dumps(records, indent=2) + '\n')
     (notices / 'README.txt').write_text('Bundled native tools and libraries\n\nThis directory preserves Homebrew license texts, package receipts, formulae and available SBOMs. tools/manifest.json records original and relocated binary hashes. This development image is not a source distribution: before publishing binaries, prepare the corresponding sources/build materials required by the bundled components, including GPL FFmpeg/x264/x265.\n')
-    return minimum
 
 
 def make_icon(app, work):
@@ -156,9 +139,10 @@ def verify_image(image, work):
         clean_home = work / 'clean-home'
         clean_home.mkdir()
         environment = {'PATH': '/usr/bin:/bin', 'HOME': str(clean_home), 'LANG': 'en_US.UTF-8'}
-        report = run(installed / 'Contents/MacOS/SlopAMP', '--check-bundle', env=environment, timeout=90).decode()
-        print(report.strip(), flush=True)
-        return json.loads(report)
+        output = run(installed / 'Contents/MacOS/SlopAMP', '--check-bundle', env=environment, timeout=90).decode()
+        report = validate_report(json.loads(output))
+        print(json.dumps(report), flush=True)
+        return report
     finally:
         if attached:
             run('hdiutil', 'detach', mount)
@@ -167,25 +151,15 @@ def verify_image(image, work):
 def main():
     subprocess.run([sys.executable, str(ROOT / 'bin/build_macos.py')], check=True)
     app = ROOT / 'dist/macos/SlopAMP.app'
-    version = json.loads((ROOT / 'package.json').read_text())['version']
+    version = project_version(ROOT)
     image = ROOT / f'dist/macos/SlopAMP-{version}-macOS-{platform.machine()}-dev.dmg'
     with tempfile.TemporaryDirectory(prefix='slopamp-package-') as temporary:
         work = Path(temporary)
-        minimum = bundle_tools(app)
-        # Include Python's own deployment target when setting Finder's compatibility gate.
-        minimum = max(minimum, minimum_os(load_commands(app / 'Contents/MacOS/SlopAMP')))
-        for binary in (app / 'Contents/Frameworks').rglob('Python'):
-            if binary.is_file():
-                minimum = max(minimum, minimum_os(load_commands(binary)))
+        bundle_tools(app)
         make_icon(app, work)
-        info_path = app / 'Contents/Info.plist'
-        info = plistlib.loads(info_path.read_bytes())
-        info.update(CFBundleIconFile='SlopAMP.icns', LSMinimumSystemVersion='.'.join(map(str, minimum)))
-        info_path.write_bytes(plistlib.dumps(info))
         licenses = app / 'Contents/Resources/src/renderer/licenses.html'
         licenses.write_text(licenses.read_text().replace('FFmpeg and JavaScript runtimes are external installations, not bundled with this build.', 'This DMG bundles FFmpeg, ffprobe and Node. Their licenses and Homebrew provenance are included in Contents/Resources/tool-notices; binary hashes are in tools/manifest.json.'))
-        run('codesign', '--force', '--deep', '--sign', '-', app)
-        run('codesign', '--verify', '--deep', '--strict', app)
+        info = finalize_bundle(app, version, icon='SlopAMP.icns')
         stage = work / 'image'
         stage.mkdir()
         run('ditto', app, stage / 'SlopAMP.app')

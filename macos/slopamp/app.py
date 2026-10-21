@@ -26,7 +26,9 @@ class PlayerView(W.WKWebView):
     def performDragOperation_(self, sender):
         urls = sender.draggingPasteboard().readObjectsForClasses_options_([F.NSURL], {A.NSPasteboardURLReadingFileURLsOnlyKey: True})
         if urls:
-            self.owner.emit('open-files', [str(url.path()) for url in urls])
+            paths = [str(url.path()) for url in urls]
+            self.owner.backend.authorize_paths(paths)
+            self.owner.emit('open-files', paths)
             return True
         return objc.super(PlayerView, self).performDragOperation_(sender)
 
@@ -40,6 +42,8 @@ class AppDelegate(F.NSObject):
         self.worker = ThreadPoolExecutor(max_workers=4)
         self.downloader = Downloads(self.backend, lambda value: AppHelper.callAfter(self.emit, 'dl', value))
         self.pending = list(files or [])
+        if self.pending:
+            self.backend.authorize_paths(self.pending)
         self.ready = False
         self.closing = False
         self.version = json.loads((self.root / 'package.json').read_text())['version'] + '-mac'
@@ -103,6 +107,7 @@ class AppDelegate(F.NSObject):
         self.emit('open-files', self.choose_files(folder=True))
 
     def application_openFiles_(self, app, files):
+        self.backend.authorize_paths(files)
         if self.ready:
             self.emit('open-files', list(files))
         else:
@@ -186,14 +191,17 @@ class AppDelegate(F.NSObject):
         self.web.evaluateJavaScript_completionHandler_(f'window.__nativeEvent({json.dumps(event)}, {json.dumps(value)})', None)
 
     @objc.python_method
-    def choose_files(self, folder=False, extensions=None, multiple=True):
+    def choose_files(self, folder=False, extensions=None, multiple=True, authorize=True):
         panel = A.NSOpenPanel.openPanel()
         panel.setCanChooseDirectories_(folder)
         panel.setCanChooseFiles_(not folder)
         panel.setAllowsMultipleSelection_(multiple)
         if extensions:
             panel.setAllowedFileTypes_(extensions)
-        return [str(url.path()) for url in panel.URLs()] if panel.runModal() == A.NSModalResponseOK else []
+        paths = [str(url.path()) for url in panel.URLs()] if panel.runModal() == A.NSModalResponseOK else []
+        if paths and authorize:
+            self.backend.authorize_paths(paths)
+        return paths
 
     @objc.python_method
     def trash(self, path):
@@ -214,14 +222,14 @@ class AppDelegate(F.NSObject):
             with b.lock:
                 return json.loads(json.dumps(b.state))
         if method == 'saveState':
-            b.save(args[0]); return None
+            b.save_renderer(args[0]); return None
         if method == 'describeFiles': return b.describe(args[0])
         if method == 'filesExist': return [Path(p).is_file() for p in args[0]]
         if method == 'prepare': return self.media.prepare(*args)
         if method == 'listSubs': return self.media.subtitles(args[0])
         if method == 'openDialog': return b.describe(self.choose_files(folder=args[0] == 'folder'))
         if method == 'openSubDialog':
-            paths = self.choose_files(extensions=['srt', 'vtt', 'ass', 'ssa'], multiple=False)
+            paths = self.choose_files(extensions=['srt', 'vtt', 'ass', 'ssa'], multiple=False, authorize=False)
             return self.media.sub_file(paths[0]) if paths else None
         if method == 'quickSave': return b.quick_save(args[0], args[1])
         if method == 'quickSaveAll': return b.quick_save_all(args[0])
@@ -240,8 +248,7 @@ class AppDelegate(F.NSObject):
         if method == 'plDelete':
             result = []
             for p in args[0]:
-                path = Path(p).resolve()
-                if path.parent != b.playlists_dir().resolve():
+                if not b.is_playlist_file(p):
                     result.append(dict(path=p, ok=False, error='Not a SlopAMP playlist')); continue
                 try:
                     self.trash(p)
@@ -261,7 +268,7 @@ class AppDelegate(F.NSObject):
         if method == 'dlInfo': return dict(available=bool(self.media.ffmpeg), dirs=b.dirs())
         if method == 'dlStart': return self.downloader.start(args[0])
         if method == 'dlCancel': self.downloader.cancel(args[0]); return None
-        if method == 'dlRemember': b.remember(*args); return None
+        if method == 'dlRemember': b.remember_existing(*args); return None
         if method == 'dlForget': b.forget(*args); return None
         if method == 'dlmList': return b.downloads()
         if method == 'dlLookup':
@@ -281,7 +288,10 @@ class AppDelegate(F.NSObject):
                 try:
                     if (row['vid'], row['kind'], row['path']) not in known:
                         raise ValueError('Not a SlopAMP download')
-                    if Path(row['path']).exists(): self.trash(row['path'])
+                    if Path(row['path']).exists():
+                        if b.media_path(row['path']) is None:
+                            raise ValueError('Not a regular media download')
+                        self.trash(row['path'])
                     b.forget(row['vid'], row['kind'])
                     result.append(dict(path=row['path'], ok=True))
                 except Exception as exc:
@@ -289,7 +299,7 @@ class AppDelegate(F.NSObject):
             return result
         if method == 'dlChooseDir':
             key = directory_key(args[0])
-            paths = self.choose_files(folder=True, multiple=False)
+            paths = self.choose_files(folder=True, multiple=False, authorize=False)
             if paths: b.save({key: paths[0]})
             return b.dirs()
         if method == 'dlResetDirs':

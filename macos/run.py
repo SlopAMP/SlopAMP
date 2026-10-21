@@ -1,9 +1,12 @@
 """Source and bundled app entry point."""
 import sys
 from pathlib import Path
-from slopamp.app import run
 
 if __name__ == '__main__':
+    if '--download-worker' in sys.argv:
+        from slopamp.download_worker import main
+        raise SystemExit(main())
+    from slopamp.app import run
     resources = Path(__file__).resolve().parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parents[1]
     if '--check-bundle' in sys.argv:
         from slopamp.bundle_check import check

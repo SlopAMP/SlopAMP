@@ -33,6 +33,7 @@ class MediaServer:
         self.processes = set()
         self.lock = threading.RLock()
         self.conversion_lock = threading.Lock()
+        self.stopped = threading.Event()
         self.cache = tempfile.TemporaryDirectory(prefix='slopamp-media-')
         self.converted = {}
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
@@ -41,13 +42,17 @@ class MediaServer:
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
 
     def stop(self):
-        self.server.shutdown()
-        self.server.server_close()
         with self.lock:
+            if self.stopped.is_set():
+                return
+            self.stopped.set()
             for proc in list(self.processes):
                 proc.kill()
                 proc.wait()
-        self.cache.cleanup()
+        self.server.shutdown()
+        self.server.server_close()
+        with self.conversion_lock:
+            self.cache.cleanup()
 
     def key(self, file):
         file = Path(file).resolve()
@@ -86,6 +91,8 @@ class MediaServer:
         return info
 
     def prepare(self, file, opts=None):
+        if self.stopped.is_set():
+            raise RuntimeError('Media server is stopped.')
         if not Path(file).is_file():
             return dict(ok=False, error='missing')
         opts = opts or {}
@@ -110,6 +117,8 @@ class MediaServer:
         stat = path.stat()
         fingerprint = (str(path), stat.st_size, stat.st_mtime_ns)
         with self.conversion_lock:
+            if self.stopped.is_set():
+                raise RuntimeError('Media server is stopped.')
             if fingerprint in self.converted:
                 return self.converted[fingerprint]
             target = Path(self.cache.name) / (secrets.token_hex(16) + '.mp4')
@@ -119,8 +128,10 @@ class MediaServer:
             else:
                 args += ['-map', '0:a:0', '-vn']
             args += ['-c:a', 'aac', '-b:a', '192k', '-ac', '2', '-sn', '-movflags', '+faststart', str(target)]
-            proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             with self.lock:
+                if self.stopped.is_set():
+                    raise RuntimeError('Media server is stopped.')
+                proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                 self.processes.add(proc)
             try:
                 _, error = proc.communicate()
@@ -250,8 +261,10 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         if self.command == 'HEAD':
             return
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         with media.lock:
+            if media.stopped.is_set():
+                return
+            proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             media.processes.add(proc)
         try:
             while data := proc.stdout.read(65536):

@@ -53,11 +53,15 @@ video in a temporary directory. It checks playback, seeking, Web Audio,
 Butterchurn, FFmpeg conversion, subtitles, state persistence and playlist saving.
 It writes a screenshot to `dist/macos-smoke.png`. It requires a logged-in graphical
 session and FFmpeg. The filesystem tests run without opening a window.
+Playback has a 60-second deadline, with a separate process watchdog for startup
+and shutdown. A failure exits with a nonzero status even if WebKit stops replying.
 
 The bundle is `dist/macos/SlopAMP.app`. It contains Python and the Python packages,
 but currently uses an external FFmpeg installation. It is a development bundle,
 not Developer ID signed or notarized, and targets the architecture of the Python
-used to build it. Build output is recorded in `build/macos/build.log`.
+used to build it. Its version comes from `package.json`; its minimum macOS version
+is derived from the native binaries in the bundle. Build output is recorded in
+`build/macos/build.log`.
 
 `make mac-dmg` builds the app, bundles the build Mac's Homebrew FFmpeg/ffprobe and
 Node plus their non-system libraries, adds a Finder icon, and creates
@@ -70,9 +74,12 @@ The packaging command verifies the image checksum, mounts it read-only, copies
 the app into a temporary Applications directory with spaces in its path, verifies
 its signature, and runs its bundled interpreter with a clean HOME and system-only
 PATH. Checks exercise bundled tool discovery, FFmpeg conversion/probing, HTTP
-byte ranges and saved state. This is not a Gatekeeper/notarization test or a full
-GUI playback test on another Mac. The minimum macOS version is derived from the
-bundled native tools and Python; it can vary with the build Mac's dependencies.
+byte ranges, saved state, required renderer resources and download-worker startup.
+Missing resources or unsuccessful checks fail packaging. This is not a
+Gatekeeper/notarization test or a full GUI playback test on another Mac.
+The minimum macOS version is derived from the
+tools, Python, libraries and extensions in the bundle; it can vary with the build
+Mac's dependencies.
 
 Native library paths are relocated inside the bundle. The packager fails on
 unresolved dependencies or filename collisions, preserves Homebrew license texts,
@@ -99,10 +106,14 @@ workflow: [Packaging Mac software for distribution](https://developer.apple.com/
   Corrupt state is preserved and reported instead of silently overwritten.
 - Downloads and saved playlists default to `~/Downloads/SlopAMP/`.
 - Deletion in Manage Library uses the macOS Trash.
-- The generic Trash operation only accepts paths referenced by the active
-  playlist (including local downloaded copies) or the download index. Directories
-  and symlinks are rejected. Quick Save ignores page-supplied destinations; only
-  the native Save dialog can select a different output path.
+- The generic Trash operation accepts native-imported media referenced by the
+  active playlist (including local downloaded copies), or indexed media downloads.
+  Directories and symlinks are rejected. Playlist deletion requires a regular
+  M3U/M3U8/PLS file inside the selected playlist directory.
+- Renderer state cannot change native directory settings, the download index,
+  or file ownership. Native imports persist separately; existing libraries migrate
+  once. Quick Save ignores page-supplied destinations; only the native Save dialog
+  can select a different output path. Concurrent saves use separate temporary files.
 - Directory operations accept only `audio`, `video` or `playlists`. Reset accepts
   one of those kinds or no arguments to reset all three to their defaults.
 - Media keys use WebKit's Media Session support; hardware-key behavior has not
@@ -110,7 +121,10 @@ workflow: [Packaging Mac software for distribution](https://developer.apple.com/
 
 YouTube playback uses the existing official iframe player. Downloads use yt-dlp
 and its EJS package, with bundled Node in the DMG or a locally installed Deno/Node
-runtime in source builds.
+runtime in source builds. Each download runs in an isolated process group, so
+Cancel and Quit stop its FFmpeg and JavaScript children. Canceled downloads clean
+up their private working directory without removing previous successful copies.
+Live streams and upcoming premieres are rejected by the download backend.
 See the [yt-dlp EJS documentation](https://github.com/yt-dlp/yt-dlp/wiki/EJS) for
 runtime requirements. Network playback and downloads remain subject to YouTube's
 availability and restrictions and are not part of the offline smoke test.
