@@ -68,7 +68,7 @@ used to build it. Build output is recorded in `build/macos/build.log`.
 `make mac-dmg` builds the app, bundles the build Mac's Homebrew FFmpeg/ffprobe and
 Node plus their non-system libraries, adds a Finder icon, and creates
 `dist/macos/SlopAMP-<version>-macOS-<architecture>-dev.dmg`. The image contains the
-app, an Applications shortcut and installation instructions. It also writes a
+app and an Applications shortcut, with no extra text file. It also writes a
 SHA256 checksum and a verification report next to the DMG. This command upgrades
 the app in `dist/macos/SlopAMP.app` to the self-contained version.
 

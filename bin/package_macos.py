@@ -190,7 +190,6 @@ def main():
         stage.mkdir()
         run('ditto', app, stage / 'SlopAMP.app')
         (stage / 'Applications').symlink_to('/Applications')
-        (stage / 'Install SlopAMP.txt').write_text('Install SlopAMP\n\n1. Drag SlopAMP.app onto Applications.\n2. Eject this disk image.\n3. Open SlopAMP from Applications.\n\nPython, FFmpeg and Node are included. No Terminal commands or Homebrew installation are needed.\n\nThis is an unsigned development build, not a notarized public release. macOS may block opening a downloaded copy. A Developer ID signed and notarized release is needed for the normal first-launch experience.\n')
         run('hdiutil', 'create', '-volname', 'SlopAMP', '-srcfolder', stage, '-fs', 'HFS+', '-format', 'UDZO', '-ov', image)
         report = verify_image(image, work)
         image.with_suffix('.verification.json').write_text(json.dumps(dict(minimum_macos=info['LSMinimumSystemVersion'], architecture=platform.machine(), checks=report), indent=2) + '\n')
