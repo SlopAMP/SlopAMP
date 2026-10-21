@@ -12,7 +12,7 @@ import Foundation as F
 import WebKit as W
 from PyObjCTools import AppHelper
 
-from .backend import Backend, safe_name
+from .backend import Backend, safe_name, directory_key, DIRECTORY_KEYS
 from .downloads import Downloads
 from .media import MediaServer, MEDIA
 
@@ -205,6 +205,11 @@ class AppDelegate(F.NSObject):
     @objc.python_method
     def dispatch(self, method, args):
         b = self.backend
+        if method in {'dlChooseDir', 'dlOpenDir', 'dlResetDirs'}:
+            if len(args) != 1 and not (method == 'dlResetDirs' and not args):
+                raise ValueError('Expected one directory kind')
+            if args:
+                directory_key(args[0])
         if method == 'loadState':
             with b.lock:
                 return json.loads(json.dumps(b.state))
@@ -218,14 +223,14 @@ class AppDelegate(F.NSObject):
         if method == 'openSubDialog':
             paths = self.choose_files(extensions=['srt', 'vtt', 'ass', 'ssa'], multiple=False)
             return self.media.sub_file(paths[0]) if paths else None
-        if method == 'quickSave': return b.quick_save(*args)
+        if method == 'quickSave': return b.quick_save(args[0], args[1])
         if method == 'quickSaveAll': return b.quick_save_all(args[0])
         if method == 'savePlaylist':
             panel = A.NSSavePanel.savePanel()
             panel.setNameFieldStringValue_(safe_name(args[1]) + '.m3u8')
             panel.setAllowedFileTypes_(['m3u8', 'm3u'])
             if panel.runModal() == A.NSModalResponseOK:
-                return b.quick_save(*args, destination=str(panel.URL().path()))
+                return b.quick_save(args[0], args[1], destination=str(panel.URL().path()))
             return dict(saved=False)
         if method == 'loadPlaylist':
             paths = self.choose_files(extensions=['m3u8', 'm3u', 'pls'], multiple=False)
@@ -244,7 +249,15 @@ class AppDelegate(F.NSObject):
                 except Exception as exc:
                     result.append(dict(path=p, ok=False, error=str(exc)))
             return result
-        if method == 'trashFile': return self.trash(args[0])
+        if method == 'trashFile':
+            if not b.can_trash(args[0]):
+                return dict(ok=False, error='Not a current playlist file or SlopAMP download.')
+            if not Path(args[0]).is_file():
+                return dict(ok=False, error='File not found.')
+            try:
+                return dict(ok=bool(self.trash(args[0])))
+            except Exception as exc:
+                return dict(ok=False, error=str(exc))
         if method == 'dlInfo': return dict(available=bool(self.media.ffmpeg), dirs=b.dirs())
         if method == 'dlStart': return self.downloader.start(args[0])
         if method == 'dlCancel': self.downloader.cancel(args[0]); return None
@@ -275,11 +288,16 @@ class AppDelegate(F.NSObject):
                     result.append(dict(path=row['path'], ok=False, error=str(exc)))
             return result
         if method == 'dlChooseDir':
+            key = directory_key(args[0])
             paths = self.choose_files(folder=True, multiple=False)
-            if paths: b.save({'dl' + args[0].title() + 'Dir': paths[0]})
+            if paths: b.save({key: paths[0]})
             return b.dirs()
-        if method == 'dlResetDirs': b.save(dict(dlAudioDir=None, dlVideoDir=None)); return b.dirs()
+        if method == 'dlResetDirs':
+            keys = [directory_key(args[0])] if args else DIRECTORY_KEYS.values()
+            b.save({key: None for key in keys})
+            return b.dirs()
         if method == 'dlOpenDir':
+            directory_key(args[0])
             path = b.playlists_dir() if args[0] == 'playlists' else Path(b.dirs()[args[0]])
             path.mkdir(parents=True, exist_ok=True)
             A.NSWorkspace.sharedWorkspace().openURL_(F.NSURL.fileURLWithPath_(str(path))); return None

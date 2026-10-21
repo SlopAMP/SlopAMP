@@ -7,6 +7,14 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 from .media import MEDIA, VIDEO
 
+DIRECTORY_KEYS = {'audio': 'dlAudioDir', 'video': 'dlVideoDir', 'playlists': 'dlPlaylistsDir'}
+
+
+def directory_key(kind):
+    if not isinstance(kind, str) or kind not in DIRECTORY_KEYS:
+        raise ValueError('Directory kind must be audio, video or playlists')
+    return DIRECTORY_KEYS[kind]
+
 
 def atomic_write(path, text):
     path = Path(path)
@@ -56,12 +64,30 @@ class Backend:
             atomic_write(self.state_file, json.dumps(self.state, ensure_ascii=False))
 
     def dirs(self):
-        return {kind: str(Path(self.state.get('dl' + kind.title() + 'Dir') or self.download_dir / kind.title())) for kind in ('audio', 'video')}
+        return {kind: str(Path(self.state.get(key) or self.download_dir / kind.title())) for kind, key in DIRECTORY_KEYS.items()}
 
     def playlists_dir(self):
-        path = self.download_dir / 'Playlists'
+        path = Path(self.dirs()['playlists'])
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def can_trash(self, value):
+        if not isinstance(value, str) or not value:
+            return False
+        path = Path(value)
+        if path.is_symlink() or path.is_dir():
+            return False
+        target = path.resolve()
+        with self.lock:
+            tabs = self.state.get('tabs', [])
+            tab = self.state.get('tab', 0)
+            if tabs:
+                items = tabs[tab].get('items', []) if type(tab) is int and 0 <= tab < len(tabs) else []
+            else:
+                items = self.state.get('items', [])
+            owned = [item.get(key) for item in items if isinstance(item, dict) for key in ('path', 'localAudio', 'localVideo')]
+            owned.extend(row['path'] for row in self.downloads())
+            return any(isinstance(p, str) and p and not Path(p).is_symlink() and Path(p).resolve() == target for p in owned)
 
     def describe(self, paths, seen=None):
         seen = seen if seen is not None else set()
@@ -174,6 +200,8 @@ class Backend:
         with self.lock:
             index = self.state.setdefault('downloads', {})
             for kind, directory in self.dirs().items():
+                if kind == 'playlists':
+                    continue
                 path = Path(directory)
                 if not path.is_dir():
                     continue

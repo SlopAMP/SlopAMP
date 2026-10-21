@@ -2,7 +2,7 @@
 
 mac-setup:
 	python3 -m venv .venv
-	.venv/bin/pip install -r macos/requirements.txt
+	.venv/bin/pip install --require-hashes --only-binary=:all: -r macos/requirements.lock
 
 mac-run:
 	.venv/bin/python macos/run.py

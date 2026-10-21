@@ -16,6 +16,19 @@ make mac-setup
 make mac-run
 ```
 
+Setup installs `macos/requirements.lock` with hash verification and wheels only.
+The lock includes transitive dependencies and was resolved on Python 3.14/macOS;
+other Python versions must have compatible wheels for every pinned package.
+`requirements.txt` remains the list of direct dependencies. To refresh the lock,
+use a separate tooling environment with `pip-tools==7.6.2` and run:
+
+```sh
+pip-compile --allow-unsafe --generate-hashes --no-emit-index-url --no-emit-trusted-host --output-file=macos/requirements.lock macos/requirements.txt
+```
+
+Review the generated versions/hashes and validate a clean installation before
+committing an updated lock.
+
 Open files with Command+O, the native File menu, the player buttons, or a Finder
 drop. Command shortcuts work alongside the original Control shortcuts. Pass
 media paths to `.venv/bin/python macos/run.py` to open them at startup.
@@ -52,6 +65,12 @@ used to build it. Build output is recorded in `build/macos/build.log`.
   Corrupt state is preserved and reported instead of silently overwritten.
 - Downloads and saved playlists default to `~/Downloads/SlopAMP/`.
 - Deletion in Manage Library uses the macOS Trash.
+- The generic Trash operation only accepts paths referenced by the active
+  playlist (including local downloaded copies) or the download index. Directories
+  and symlinks are rejected. Quick Save ignores page-supplied destinations; only
+  the native Save dialog can select a different output path.
+- Directory operations accept only `audio`, `video` or `playlists`. Reset accepts
+  one of those kinds or no arguments to reset all three to their defaults.
 - Media keys use WebKit's Media Session support; hardware-key behavior has not
   been manually validated on all keyboards.
 
