@@ -12,3 +12,6 @@ src/renderer/licenses.html
 Run SlopAMP.bat
 *.part0*
 SlopAMP Data/
+/.venv/
+__pycache__/
+/build/macos/

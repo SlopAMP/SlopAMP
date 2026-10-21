@@ -2,6 +2,7 @@
 'use strict';
 const P = window.phosphor;
 const $ = (s) => document.querySelector(s);
+const commandKey = (e) => e.ctrlKey || (P.platform === 'darwin' && e.metaKey);
 
 // ------------------------------------------------------------------ state
 const S = {
@@ -844,7 +845,7 @@ function updateSelection() {
 list.addEventListener('mousedown', (e) => {
   const i = rowIndex(e); if (i < 0) { if (e.button === 0) { S.sel.clear(); updateSelection(); } return; }
   const id = S.items[i].id;
-  if (e.button === 0 && e.detail === 2 && !e.shiftKey && !e.ctrlKey) {
+  if (e.button === 0 && e.detail === 2 && !e.shiftKey && !commandKey(e)) {
     // second press of a double-click: play this row
     S.sel = new Set([id]); S.anchor = i; updateSelection();
     playIndex(i);
@@ -853,14 +854,14 @@ list.addEventListener('mousedown', (e) => {
   if (e.button === 2 && S.sel.has(id)) return;
   if (e.shiftKey && S.anchor >= 0) {
     const [a, b] = [Math.min(S.anchor, i), Math.max(S.anchor, i)];
-    if (!e.ctrlKey) S.sel.clear();
+    if (!commandKey(e)) S.sel.clear();
     for (let k = a; k <= b; k++) S.sel.add(S.items[k].id);
-  } else if (e.ctrlKey) { if (S.sel.has(id)) S.sel.delete(id); else S.sel.add(id); S.anchor = i; }
+  } else if (commandKey(e)) { if (S.sel.has(id)) S.sel.delete(id); else S.sel.add(id); S.anchor = i; }
   else { if (!S.sel.has(id) || e.button === 2) { S.sel = new Set([id]); } S.anchor = i; }
   updateSelection();
 });
 list.addEventListener('click', (e) => {
-  const i = rowIndex(e); if (i < 0 || e.shiftKey || e.ctrlKey || e.detail > 1) return;
+  const i = rowIndex(e); if (i < 0 || e.shiftKey || commandKey(e) || e.detail > 1) return;
   S.sel = new Set([S.items[i].id]); S.anchor = i; updateSelection();
 });
 
@@ -1325,7 +1326,7 @@ function moveTab(i, d) {
 $('#tabStrip').addEventListener('dragover', (e) => {
   const el = e.target.closest('.ptab'); if (!el || !draggingInternal) return;
   e.preventDefault(); e.stopPropagation();
-  e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move';
+  e.dataTransfer.dropEffect = commandKey(e) ? 'copy' : 'move';
   for (const x of $('#tabStrip').children) x.classList.toggle('drop', x === el && +el.dataset.t !== S.tab);
 });
 $('#tabStrip').addEventListener('dragleave', (e) => { const el = e.target.closest('.ptab'); if (el) el.classList.remove('drop'); });
@@ -1334,7 +1335,7 @@ $('#tabStrip').addEventListener('drop', (e) => {
   e.preventDefault(); e.stopPropagation();
   draggingInternal = false; clearDropMarks();
   for (const x of $('#tabStrip').children) x.classList.remove('drop');
-  sendSelectedToTab(+el.dataset.t, e.ctrlKey);
+  sendSelectedToTab(+el.dataset.t, commandKey(e));
 });
 
 // ------------------------------------------------------------------ dialogs
@@ -1512,6 +1513,12 @@ function renderUpdAbout() {
   $('#updHint').textContent = !st.canInstall
     ? (sel.value === 'off' ? 'Never checks by itself. Use “Check for updates” here.' : 'This copy can’t update itself. SlopAMP tells you about new versions and opens the download page.')
     : ({ auto: 'Downloads and verifies in the background, then waits for you to click Restart now.', notify: 'Shows a bar when a new version is out. You decide when to update.', off: 'Never checks by itself. Use “Check for updates” here.' })[sel.value];
+  if (st.supported === false) {
+    $('#updStatus').textContent = 'macOS development build';
+    $('#updHint').textContent = 'Automatic updates are not available for this build.';
+    $('#updCheck').disabled = true;
+    sel.disabled = true;
+  }
 }
 function openUpdNotes() {
   const st = UPD, r = st.release; if (!r) return;
@@ -1636,30 +1643,31 @@ document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' && e.target.type === 'text') return;
   if (document.querySelector('dialog[open]')) return;
   const k = e.key;
+  const modifier = commandKey(e);
   if (k === ' ' ) { e.preventDefault(); togglePlay(); }
   else if (k === 'ArrowRight' && !e.altKey) { e.preventDefault(); seekBy(e.shiftKey ? 30 : 5); }
   else if (k === 'ArrowLeft' && !e.altKey) { e.preventDefault(); seekBy(e.shiftKey ? -30 : -5); }
   else if (k === 'ArrowUp' && e.altKey) { e.preventDefault(); moveSelected(-1); }
   else if (k === 'ArrowDown' && e.altKey) { e.preventDefault(); moveSelected(1); }
-  else if (k === 'ArrowUp') { e.preventDefault(); if (e.ctrlKey || e.target !== list) setVolume(S.volume + 5); else selectRel(-1); }
-  else if (k === 'ArrowDown') { e.preventDefault(); if (e.ctrlKey || e.target !== list) setVolume(S.volume - 5); else selectRel(1); }
+  else if (k === 'ArrowUp') { e.preventDefault(); if (modifier || e.target !== list) setVolume(S.volume + 5); else selectRel(-1); }
+  else if (k === 'ArrowDown') { e.preventDefault(); if (modifier || e.target !== list) setVolume(S.volume - 5); else selectRel(1); }
   else if (k === 'Delete') removeSelected();
   else if (k === 'Enter') { const i = S.items.findIndex(it => S.sel.has(it.id)); if (i >= 0) playIndex(i); }
   else if (k === 'Escape') { const popOpen = !$('#popMenu').classList.contains('hidden'); hidePop(); hideCtx(); if (!popOpen && document.body.classList.contains('fs')) toggleFullscreen(false); }
-  else if (k === 'F11' || (k.toLowerCase() === 'f' && !e.ctrlKey)) { e.preventDefault(); toggleFullscreen(); }
-  else if (e.ctrlKey && k === 'Tab') { e.preventDefault(); switchTab((S.tab + (e.shiftKey ? S.tabs.length - 1 : 1)) % S.tabs.length); }
-  else if (e.ctrlKey && k.toLowerCase() === 't') { e.preventDefault(); renameTab(newTab()); }
-  else if (e.ctrlKey && k.toLowerCase() === 'w') { e.preventDefault(); closeTab(S.tab); }
-  else if (e.ctrlKey && k.toLowerCase() === 'a') { e.preventDefault(); S.sel = new Set(S.items.map(i => i.id)); renderList(); }
-  else if (e.ctrlKey && k.toLowerCase() === 'o') { e.preventDefault(); openFiles(); }
-  else if (e.ctrlKey && k.toLowerCase() === 'u') { e.preventDefault(); openUrlDialog(); }
-  else if (e.ctrlKey && e.altKey && k.toLowerCase() === 's') { e.preventDefault(); quickSaveAll(); }
-  else if (e.ctrlKey && e.shiftKey && k.toLowerCase() === 's') { e.preventDefault(); quickSavePlaylist(); }
-  else if (e.ctrlKey && k.toLowerCase() === 's') { e.preventDefault(); savePlaylistFile(); }
-  else if (e.ctrlKey && k.toLowerCase() === 'l') { e.preventDefault(); loadPlaylistFile(); }
-  else if (e.ctrlKey) return;
+  else if (k === 'F11' || (k.toLowerCase() === 'f' && !modifier)) { e.preventDefault(); toggleFullscreen(); }
+  else if (modifier && k === 'Tab') { e.preventDefault(); switchTab((S.tab + (e.shiftKey ? S.tabs.length - 1 : 1)) % S.tabs.length); }
+  else if (modifier && k.toLowerCase() === 't') { e.preventDefault(); renameTab(newTab()); }
+  else if (modifier && k.toLowerCase() === 'w') { e.preventDefault(); closeTab(S.tab); }
+  else if (modifier && k.toLowerCase() === 'a') { e.preventDefault(); S.sel = new Set(S.items.map(i => i.id)); renderList(); }
+  else if (modifier && k.toLowerCase() === 'o') { e.preventDefault(); openFiles(); }
+  else if (modifier && k.toLowerCase() === 'u') { e.preventDefault(); openUrlDialog(); }
+  else if (modifier && e.altKey && k.toLowerCase() === 's') { e.preventDefault(); quickSaveAll(); }
+  else if (modifier && e.shiftKey && k.toLowerCase() === 's') { e.preventDefault(); quickSavePlaylist(); }
+  else if (modifier && k.toLowerCase() === 's') { e.preventDefault(); savePlaylistFile(); }
+  else if (modifier && k.toLowerCase() === 'l') { e.preventDefault(); loadPlaylistFile(); }
+  else if (modifier) return;
   else if (k === 'z') prev(); else if (k === 'x') play(); else if (k === 'c') pause(); else if (k === 'v') stop(); else if (k === 'b') next(false);
-  else if (['n', 'p', 'k', 'h'].includes(k.toLowerCase()) && !e.ctrlKey && !e.altKey && mdKey(k.toLowerCase())) { e.preventDefault(); }
+  else if (['n', 'p', 'k', 'h'].includes(k.toLowerCase()) && !modifier && !e.altKey && mdKey(k.toLowerCase())) { e.preventDefault(); }
   else if (k === ']') stepRate(1); else if (k === '[') stepRate(-1);
   else if (k === 'e') setEqPanel(S.eq.panel === 'hidden' ? 'open' : 'hidden');
   else if (k === 'm') toggleMini(); else if (k === 's') toggleShuffle(); else if (k === 'r') cycleRepeat(); else if (k === 'l') openFiles();
@@ -2327,9 +2335,9 @@ $('#dlmBody').addEventListener('click', (e) => {
   const k = dlmKey(r);
   if (e.shiftKey && DLM.anchor >= 0) {
     const [a, b] = [Math.min(DLM.anchor, i), Math.max(DLM.anchor, i)];
-    if (!e.ctrlKey) DLM.sel.clear();
+    if (!commandKey(e)) DLM.sel.clear();
     for (let j = a; j <= b; j++) DLM.sel.add(dlmKey(vis[j]));
-  } else if (e.ctrlKey || e.target.closest('.dlm-cb')) {
+  } else if (commandKey(e) || e.target.closest('.dlm-cb')) {
     if (DLM.sel.has(k)) DLM.sel.delete(k); else DLM.sel.add(k);
     DLM.anchor = i;
   } else {
@@ -2342,7 +2350,7 @@ $('#dlmBody').addEventListener('click', (e) => {
 // Double-click a row: open a playlist / show a file. Rows are rebuilt on each click, so the browser's
 // own dblclick event gets lost; the second press of a double-click is caught here instead.
 $('#dlmBody').addEventListener('mousedown', (e) => {
-  if (e.button !== 0 || e.detail !== 2 || e.shiftKey || e.ctrlKey || e.target.closest('.dlm-show')) return;
+  if (e.button !== 0 || e.detail !== 2 || e.shiftKey || commandKey(e) || e.target.closest('.dlm-show')) return;
   const tr = e.target.closest('tr'); if (!tr) return;
   const r = dlmVisible()[+tr.dataset.i]; if (!r || r.missing) return;
   e.preventDefault();

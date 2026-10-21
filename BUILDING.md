@@ -2,6 +2,10 @@
 
 Developer notes. The user-facing introduction is in [README.md](README.md).
 
+For the Python/PyObjC macOS host, see [macos/README.md](macos/README.md).
+Use `make mac-setup`, `make mac-run`, `make mac-test`, `make mac-smoke`, and
+`make mac-build` from the repository root.
+
 ## How it works
 
 ```

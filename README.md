@@ -60,7 +60,7 @@ More on [slopamp.com](https://slopamp.com).
 ## FAQ
 
 - **Is it free?** Yes.
-- **Mac / Linux?** Windows only for now.
+- **Mac / Linux?** A Python/PyObjC macOS development build is available in this repository; see [macOS setup and build instructions](macos/README.md). Linux is not supported yet.
 - **Portable version?** Yes. Grab **SlopAMP-Portable-1.1.1.exe** from [Releases](https://github.com/SlopAMP/SlopAMP/releases/latest). No install needed.
 
 ## Coming in 1.2 (ideas, not promises)
