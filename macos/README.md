@@ -4,12 +4,6 @@ The macOS host uses Python, PyObjC, Cocoa and WKWebView. It reuses the existing
 SlopAMP interface and Butterchurn presets; Electron is not part of the Mac runtime.
 The Windows entry point and build remain available.
 
-## Install from a DMG
-
-1. Open the SlopAMP `.dmg` for your Mac's architecture.
-2. Drag **SlopAMP.app** onto **Applications** in the disk image.
-3. Eject the disk image and open **SlopAMP** from Applications.
-
 The DMG includes Python, FFmpeg, ffprobe, Node and their required libraries.
 End users do not need Python, Homebrew or Terminal commands. Current images are
 development builds with ad-hoc signatures, not Developer ID signed or notarized;
