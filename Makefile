@@ -1,4 +1,4 @@
-.PHONY: mac-setup mac-run mac-test mac-build mac-smoke
+.PHONY: mac-setup mac-run mac-test mac-build mac-smoke mac-dmg
 
 mac-setup:
 	python3 -m venv .venv
@@ -15,3 +15,6 @@ mac-smoke:
 
 mac-build:
 	.venv/bin/python bin/build_macos.py
+
+mac-dmg:
+	.venv/bin/python bin/package_macos.py

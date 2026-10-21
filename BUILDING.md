@@ -4,7 +4,8 @@ Developer notes. The user-facing introduction is in [README.md](README.md).
 
 For the Python/PyObjC macOS host, see [macos/README.md](macos/README.md).
 Use `make mac-setup`, `make mac-run`, `make mac-test`, `make mac-smoke`, and
-`make mac-build` from the repository root.
+`make mac-build` from the repository root. `make mac-dmg` builds and verifies a
+self-contained drag-to-Applications development disk image with bundled tools.
 
 ## How it works
 

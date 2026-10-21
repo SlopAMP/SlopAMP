@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import threading
 import tempfile
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -17,6 +18,10 @@ SUBS = {'.srt', '.vtt', '.ass', '.ssa'}
 
 
 def tool(name):
+    if getattr(sys, 'frozen', False):
+        bundled = Path(sys.executable).resolve().parent.parent / 'Resources/tools/bin' / name
+        if bundled.is_file():
+            return str(bundled)
     return shutil.which(name) or next((str(p) for p in [Path('/opt/homebrew/bin') / name, Path('/usr/local/bin') / name] if p.is_file()), None)
 
 

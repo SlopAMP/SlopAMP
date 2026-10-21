@@ -4,6 +4,18 @@ The macOS host uses Python, PyObjC, Cocoa and WKWebView. It reuses the existing
 SlopAMP interface and Butterchurn presets; Electron is not part of the Mac runtime.
 The Windows entry point and build remain available.
 
+## Install from a DMG
+
+1. Open the SlopAMP `.dmg` for your Mac's architecture.
+2. Drag **SlopAMP.app** onto **Applications** in the disk image.
+3. Eject the disk image and open **SlopAMP** from Applications.
+
+The DMG includes Python, FFmpeg, ffprobe, Node and their required libraries.
+End users do not need Python, Homebrew or Terminal commands. Current images are
+development builds with ad-hoc signatures, not Developer ID signed or notarized;
+macOS may block a downloaded copy. Signing and notarization are still required
+before presenting this as a frictionless public release.
+
 ## Development
 
 Use macOS with Python 3.10 or later. The implementation is tested on Apple Silicon
@@ -39,6 +51,7 @@ media paths to `.venv/bin/python macos/run.py` to open them at startup.
 make mac-test
 make mac-smoke
 make mac-build
+make mac-dmg
 ```
 
 The smoke test launches an actual Cocoa/WebKit window with generated audio and
@@ -51,6 +64,33 @@ The bundle is `dist/macos/SlopAMP.app`. It contains Python and the Python packag
 but currently uses an external FFmpeg installation. It is a development bundle,
 not Developer ID signed or notarized, and targets the architecture of the Python
 used to build it. Build output is recorded in `build/macos/build.log`.
+
+`make mac-dmg` builds the app, bundles the build Mac's Homebrew FFmpeg/ffprobe and
+Node plus their non-system libraries, adds a Finder icon, and creates
+`dist/macos/SlopAMP-<version>-macOS-<architecture>-dev.dmg`. The image contains the
+app, an Applications shortcut and installation instructions. It also writes a
+SHA256 checksum and a verification report next to the DMG. This command upgrades
+the app in `dist/macos/SlopAMP.app` to the self-contained version.
+
+The packaging command verifies the image checksum, mounts it read-only, copies
+the app into a temporary Applications directory with spaces in its path, verifies
+its signature, and runs its bundled interpreter with a clean HOME and system-only
+PATH. Checks exercise bundled tool discovery, FFmpeg conversion/probing, HTTP
+byte ranges and saved state. This is not a Gatekeeper/notarization test or a full
+GUI playback test on another Mac. The minimum macOS version is derived from the
+bundled native tools and Python; it can vary with the build Mac's dependencies.
+
+Native library paths are relocated inside the bundle. The packager fails on
+unresolved dependencies or filename collisions, preserves Homebrew license texts,
+receipts, formulae and available SBOMs under `Contents/Resources/tool-notices`,
+and records source/bundled binary hashes in `tools/manifest.json`. Before publicly
+distributing a DMG, prepare the corresponding source/build materials required by
+its bundled components, including GPL FFmpeg/x264/x265. The development DMG alone
+is not that source distribution. Build on each target architecture; this script
+does not manufacture a universal binary from single-architecture dependencies.
+
+Public releases also need a Developer ID certificate and Apple's notarization
+workflow: [Packaging Mac software for distribution](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution).
 
 ## Playback and storage
 
@@ -75,7 +115,8 @@ used to build it. Build output is recorded in `build/macos/build.log`.
   been manually validated on all keyboards.
 
 YouTube playback uses the existing official iframe player. Downloads use yt-dlp
-and its EJS package, with a locally installed Deno or Node runtime when found.
+and its EJS package, with bundled Node in the DMG or a locally installed Deno/Node
+runtime in source builds.
 See the [yt-dlp EJS documentation](https://github.com/yt-dlp/yt-dlp/wiki/EJS) for
 runtime requirements. Network playback and downloads remain subject to YouTube's
 availability and restrictions and are not part of the offline smoke test.
