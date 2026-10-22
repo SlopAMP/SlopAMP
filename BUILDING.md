@@ -5,9 +5,11 @@ Developer notes. The user-facing introduction is in [README.md](README.md).
 ## How it works
 
 ```
-Electron (Chromium UI)  ── src/renderer/  index.html · style.css · app.js
+Electron (Chromium UI)  ── src/renderer/  index.html · winmgr.js · app.js · panel.html
+                                          theme.css · frame.css · style.css
    │  IPC (preload.js, contextIsolation + sandbox)
-Main process            ── src/main.js     window, state, playlists, downloads index, media keys
+Main process            ── src/main.js     state, playlists, downloads index, media keys
+   ├─ WindowManager     ── src/windows.js  where the windows are: snapping, docking, presets, saved layout
    ├─ Downloader        ── src/downloader.js  yt-dlp queue (one at a time, self-updating copy)
    └─ MediaServer       ── src/media.js    127.0.0.1-only HTTP server:
          /app/*   UI files (an http origin so the YouTube embed gets a valid referrer)
@@ -17,7 +19,24 @@ Main process            ── src/main.js     window, state, playlists, downloa
          /v/KEY   subtitles converted to WebVTT
 ```
 
-- **State** (playlists, tabs, settings, download index) lives in `%APPDATA%\SlopAMP\slopamp-state.json`. The portable exe uses `SlopAMP Data\` next to the exe instead.
+- **Windows** (1.3): the player, equalizer, video/visualizer and playlist are four real windows. `index.html` holds all the content; `winmgr.js` wraps each panel in a window frame, opens the other windows with `window.open('panel.html', id)` and moves their frames into them, then starts `app.js`. Same-origin windows opened this way share the player's renderer process, so `app.js` drives every window directly (one `<video>`, one AudioContext, the YouTube player and Butterchurn all keep working across windows). Rules for code in `app.js`:
+  - find elements with `$` / `$$` (they search every window), not `document.querySelector`;
+  - listen with `WM.onDocs(type, fn)` / `WM.onWins(type, fn)` for document/window events that should work in any window;
+  - `<body>` classes go through `WM.body` so every window gets them;
+  - popup menus open with `WM.popup(el, { doc, x, y, flipY, above })`: they live in a hidden always-on-top `popup` window so they can stick out of small windows. Dialogs (`showModal()`) open in their own `dialog` window the same way;
+  - show/hide/roll up windows with `syncWindows()` (it calls `WM.setPanels`).
+
+  `src/windows.js` (main process) owns the geometry: it moves windows for title-bar drags and the resize grip/edges (it follows `screen.getCursorScreenPoint()` until the mouse is released), snaps edges within 10 px to screen edges and other windows (edge to edge, never overlapping), moves the windows docked to the player along with it, moves windows docked underneath a window that grows, shrinks, appears or disappears, applies the Layout presets and Reset layout, and resets the layout when a window ends up off screen. The layout is saved in the state file under `layout`:
+
+  ```
+  "layout": { "version": 1, "skin": "default", "preset": "classic", "snap": true, "onTop": false,
+              "windows": { "main": {"x":..,"y":..,"w":..,"h":..}, "eq": {...}, "video": {...}, "playlist": {...} },
+              "heights": { "main": 171, ... } }
+  ```
+
+  `skin` is reserved for 1.4 and not used yet. `heights` are the on-screen heights (a rolled-up window is only its title bar). Which windows are open or rolled up is renderer state (`showVideo`, `showPlaylist`, `eq.panel`, `vis.panel`, `plShade`, `vidShade`). On the first 1.3 launch the layout is built from 1.2's `window` and `plHeight` keys.
+- **Theme, frames and skins:** every colour, font and size is a CSS variable in `src/renderer/theme.css`; `style.css` (window contents) and `frame.css` (title bars, borders, resize grips, snap highlights, the popup/dialog windows) only use those variables, and the canvas drawings (clock, spectrum, EQ curve, BARS) read theirs with `WM.token('--name')`. Window frames are built in one place (`FRAMES` / `buildFrame()` in `winmgr.js`), so a skin can restyle every frame without touching the player or playlist code. The only colour outside theme.css is the main process's `backgroundColor`, which shows for a moment before the page paints.
+- **State** (playlists, tabs, settings, download index, window layout) lives in `%APPDATA%\SlopAMP\slopamp-state.json`. The portable exe uses `SlopAMP Data\` next to the exe instead.
 - **Downloads** go to `Downloads\SlopAMP\Video`, `\Audio`, and playlists to `\Playlists`. Every downloaded file is named `Title [VIDEOID].ext`, so SlopAMP can re-find copies from the folders alone.
 - **Updates** (`src/updater.js`): at most once a day (10 s after launch) the main process asks `api.github.com/repos/SlopAMP/SlopAMP/releases/latest` for the newest release. The installed build downloads the `SlopAMP-Setup-X.Y.Z.exe` asset into `%TEMP%\SlopAMP-update`, checks its SHA256 against the `SHA256 (SlopAMP-Setup-X.Y.Z.exe): <hash>` line in the release notes, checks it again just before running it, quits normally (window closed, state saved, "quitting" in the log), and only then, from `will-quit`, runs `SlopAMP-Setup-X.Y.Z.exe /S /UPDATE /PID=<pid> /D=<folder SlopAMP runs from>` (so a custom install folder is kept; `/D=` must stay last and unquoted). In `/UPDATE` mode the installer waits for that process to exit (it writes its steps to `slopamp.log` as `installer: …`), keeps the desktop-shortcut choice, and reopens SlopAMP. Before installing (and uninstalling), the installer looks for any SlopAMP window or SlopAMP.exe process, including hidden ones and the portable exe's copy in `%TEMP%`. It asks them to close (WM_CLOSE), and ends them with `taskkill` if they're still there after 10 s. Interactive runs ask the user first. A release without that line, or without the Setup asset under `https://github.com/SlopAMP/SlopAMP/releases/download/vX.Y.Z/`, is refused. The portable exe (`SLOPAMP_PORTABLE=1`) and dev runs only open the release page. Settings live under `update` in the state file: `mode` (`auto`/`notify`/`off`), `lastCheck`, `skipped`, `dismissed`, and `pending` (the version being installed, so the next launch can show "Updated to X").
 - **Visualizer:** `src/renderer/vendor/` holds the Butterchurn bundle and presets. `build/butterchurn/build.sh` rebuilds them from the upstream sources. Preset equations are precompiled so the app's Content-Security-Policy can forbid `eval`.

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.0 — 2026-10-22
+
+- **Movable windows.** The player, equalizer, video/visualizer and playlist are now four separate windows. Drag any of them by its title bar; they snap to screen edges and to each other (edge to edge, never overlapping), with a green glow on the edges that snap.
+  - Moving the player moves every window snapped to it; pull a window away to use it on its own, for example the visualizer on a second monitor or TV.
+  - Resize the video and the playlist with the grip in their corner (or their right/bottom edge); the player and equalizer can be made wider. Windows docked underneath follow when a window grows, shrinks, rolls up or closes.
+  - Every window has **–** (roll up to the title bar; double-clicking the title bar does the same) and **✕**. The playlist now has its own title bar too. EQ / VIS / VID / PL on the player bring windows back.
+  - **Layout menu** (right-click any title bar, or the new ⧉ button on the player): *Classic (stacked)*, *Playlist beside player*, *Big visualizer*, *Snap to edges & windows*, *Keep windows on top* and **Reset layout** (Ctrl+Alt+R), which brings every window back to the middle of the main screen. SlopAMP also resets the layout by itself if a window ends up off screen, for example after unplugging a monitor.
+  - Window positions and sizes are remembered between launches. The first launch of 1.3 builds the layout from your 1.2 window size and playlist height.
+  - Menus and dialogs (About, Library, download menu, presets…) open in their own small windows, so they're never cut off by a small window.
+  - The visualizer keeps its own controls (presets, favorites, BUTTERCHURN/BARS, fullscreen) when it's on its own, and fullscreen now fills the screen with just the video window.
+- **Ready for skins (coming in 1.4):** every colour, font and size now lives in one theme file (`theme.css`), the window frames are separate from the player and playlist code, and the saved layout has a `skin` setting.
+- The lightning badge now means "back to normal": it leaves fullscreen or the mini player, brings back the video and playlist, and docks the windows under the player.
+- New GitHub community files: Code of Conduct, Contributing guide, Security policy (report vulnerabilities privately through GitHub), and bug report, feature request and pull request templates.
+- The exe's copyright line now reads "SlopAMP (@HeyoPatriot)".
+
 ## 1.2.0 — 2026-10-20
 
 - **Auto-updates**: SlopAMP checks GitHub once a day for a new version. Pick **Notify me** (default), **Install automatically** or **Off** in the About box (?), which also has **Check for updates**. A bar under the deck shows what's going on, and **What's new** shows the release notes before anything is installed. The installer comes from the official GitHub release, its SHA256 is checked against the release notes, and it installs silently, keeps your playlists and settings, and reopens SlopAMP. Automatic mode downloads in the background and then waits for you to click **Restart now**. The portable exe tells you about new versions and opens the download page.

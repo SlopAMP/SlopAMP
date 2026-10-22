@@ -1,0 +1,29 @@
+name: Feature request
+description: An idea to make SlopAMP better.
+title: "[Idea]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: Describe the problem or the situation, not only the solution. For example "I want the visualizer on my TV while the playlist stays on my laptop screen."
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could SlopAMP do it?
+      description: Your idea for how it could work. A sketch or mockup is very welcome for anything you'd see on screen.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you've tried instead?
+      description: Workarounds, or other players that do it well.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you post
+      options:
+        - label: I searched the existing issues and this hasn't been suggested yet.
+          required: true

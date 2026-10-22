@@ -1,6 +1,6 @@
 # build output and local tools (root-level only: src/renderer/vendor/ IS part of the app)
 /dist/
-/vendor/
+/vendor
 node_modules/
 build/butterchurn/.work/
 build/butterchurn/butterchurn-src/
@@ -13,5 +13,13 @@ Run SlopAMP.bat
 *.part0*
 SlopAMP Data/
 
-# private brainstorming (never publish)
+# private brainstorming and notes (never publish)
 docs/IDEAS-AND-BUGS.md
+*IDEAS*.md
+*[Ii]deas*.md
+[Nn][Oo][Tt][Ee][Ss]*.md
+*-notes.md
+*_notes.md
+/notes/
+/ideas/
+docs/private/

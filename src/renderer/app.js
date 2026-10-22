@@ -1,7 +1,10 @@
 /* SlopAMP renderer — playlist, engines (local / YouTube), UI. */
 'use strict';
 const P = window.phosphor;
-const $ = (s) => document.querySelector(s);
+// The player's panels are spread over several windows (winmgr.js): $ / $$ search all of them.
+const $ = WM.$, $$ = WM.$$;
+const VW = () => WM.wins.video || window;          // the video/visualizer window
+const T = (name) => WM.token(name);                // colours from theme.css, for canvas drawing
 
 // ------------------------------------------------------------------ state
 const S = {
@@ -18,7 +21,9 @@ const S = {
   showVideo: true,
   showPlaylist: true,
   remaining: false,
-  plHeight: 230,
+  plHeight: 230,       // (before 1.3: playlist height inside the single window; seeds the first layout)
+  plShade: false,      // playlist window rolled up to its title bar
+  vidShade: false,     // video window rolled up (while a video plays; the visualizer uses vis.panel)
   history: [],
   eq: { on: true, preamp: 0, gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], preset: 'Flat', panel: 'open' },   // panel: hidden | open | min
   resume: {},          // 'f:<path>' | 'y:<videoId>' -> { t: seconds, at: timestamp }
@@ -48,11 +53,11 @@ function fmt(t) {
 function fmtShort(t) { if (!t) return ''; const f = fmt(t); return f.replace(/^0(\d:)/, '$1'); }
 let toastTimer;
 function toast(msg, ms = 2600) {
-  const t = $('#toast'); t.textContent = msg; t.classList.remove('hidden');
+  const t = WM.host($('#toast'), WM.noticeDoc()); t.textContent = msg; t.classList.remove('hidden');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add('hidden'), ms);
 }
-function loadScript(src) {
-  return new Promise((res) => { const s = document.createElement('script'); s.src = src; s.async = true; s.onload = () => res(true); s.onerror = () => { s.remove(); res(false); }; document.head.appendChild(s); });
+function loadScript(src, doc = document) {
+  return new Promise((res) => { const s = doc.createElement('script'); s.src = src; s.async = true; s.onload = () => res(true); s.onerror = () => { s.remove(); res(false); }; doc.head.appendChild(s); });
 }
 
 // ------------------------------------------------------------------ URL parsing
@@ -173,7 +178,8 @@ let yt = null, ytApi = null, ytPendingItem = null, ytDuration = 0;
 function showLayer(name) {
   for (const id of ['ytWrap', 'artWrap', 'empty']) $('#' + id).classList.toggle('show', id === name);
   video.style.visibility = name === 'video' ? 'visible' : 'hidden';
-  document.body.classList.toggle('audvis', name === 'artWrap');
+  WM.body.toggle('audvis', name === 'artWrap');
+  syncWindows();
   if (typeof updateVisLayer === 'function') updateVisLayer();
 }
 function showOverlay(title, text, buttons = []) {
@@ -292,12 +298,14 @@ function fallbackLocal(reason) {
 }
 
 // ---- YouTube (official IFrame Player API)
+// The YouTube player API runs inside the video window (its iframe talks to the window it sits in).
 function ensureYouTubeApi() {
   if (ytApi) return ytApi;
+  const w = VW();
   ytApi = new Promise((resolve) => {
-    window.onYouTubeIframeAPIReady = () => resolve(true);
-    loadScript('https://www.youtube.com/iframe_api').then(ok => { if (!ok) { ytApi = null; resolve(false); } });
-    setTimeout(() => resolve(!!(window.YT && window.YT.Player)), 15000);
+    w.onYouTubeIframeAPIReady = () => resolve(true);
+    loadScript('https://www.youtube.com/iframe_api', w.document).then(ok => { if (!ok) { ytApi = null; resolve(false); } });
+    setTimeout(() => resolve(!!(w.YT && w.YT.Player)), 15000);
   });
   return ytApi;
 }
@@ -307,7 +315,8 @@ async function loadYouTube(item, startAt) {
   showBusy(true);
   const ok = await ensureYouTubeApi();
   if (curItem() !== item) return;
-  if (!ok || !window.YT || !window.YT.Player) {
+  const YTW = VW().YT;
+  if (!ok || !YTW || !YTW.Player) {
     showBusy(false); setStatus('stopped');
     showOverlay('YouTube is unreachable', "Couldn't load YouTube's player. Check your internet connection.", [{ label: 'Retry', action: () => replayCurrent() }, { label: 'Open in browser', action: () => P.openExternal(item.url) }]);
     return;
@@ -316,7 +325,7 @@ async function loadYouTube(item, startAt) {
   const start = Math.floor(startAt || item.start || 0);
   if (!yt) {
     ytPendingItem = item;
-    yt = new window.YT.Player('ytHost', {
+    yt = new YTW.Player($('#ytHost'), {
       width: '100%', height: '100%', videoId: item.vid,
       playerVars: { autoplay: 1, playsinline: 1, rel: 0, fs: 0, iv_load_policy: 3, origin: location.origin, start, enablejsapi: 1, cc_load_policy: S.subsOn ? 1 : 0 },
       events: {
@@ -361,7 +370,7 @@ function onYtError(e) {
   else if (code === 153) { text = 'YouTube rejected the embedded player configuration. Open it in your browser instead.'; }
   const btns = [
     { label: 'Open in browser', action: () => P.openExternal(item.url) },
-    { label: '\u21e9 Download', keepOpen: true, action: (r) => openDlMenu(item, { x: r.left, y: r.bottom + 6 }) },
+    { label: '\u21e9 Download', keepOpen: true, action: (r) => openDlMenu(item, { doc: $('#overlay').ownerDocument, x: r.left, y: r.bottom + 6, flipY: r.top }) },
     { label: 'Skip', action: () => next(true) }
   ];
   showOverlay(title, text, btns);
@@ -506,9 +515,9 @@ function drawClock() {
   const m = Math.min(99, Math.floor(t / 60)), s = t % 60;
   let txt = `${String(m).padStart(2, '0')}${String(s).padStart(2, '0')}`;
   if (status === 'stopped') txt = '0000';
-  const on = '#3dff6e', off = '#0a2412';
+  const on = T('--lcd-on'), off = T('--lcd-off');
   const hide = status === 'paused' && !blink;
-  ctx.shadowColor = 'rgba(61,255,110,.7)'; ctx.shadowBlur = hide ? 0 : 6;
+  ctx.shadowColor = T('--lcd-glow'); ctx.shadowBlur = hide ? 0 : 6;
   drawDigit(ctx, neg ? '-' : ' ', 0, 6, 14, 30, hide ? off : on, off);
   const xs = [20, 46, 80, 106];
   for (let i = 0; i < 4; i++) drawDigit(ctx, txt[i], xs[i], 4, 22, 34, hide ? off : on, off);
@@ -519,7 +528,7 @@ function drawClock() {
 const stateCtx = $('#stateIcon').getContext('2d');
 function drawStateIcon() {
   const c = stateCtx; c.clearRect(0, 0, 16, 18);
-  c.fillStyle = status === 'playing' ? '#3dff6e' : status === 'paused' ? '#e8c24a' : '#c33';
+  c.fillStyle = status === 'playing' ? T('--state-play') : status === 'paused' ? T('--state-pause') : T('--state-stop');
   c.shadowColor = c.fillStyle; c.shadowBlur = 4;
   c.beginPath();
   if (status === 'playing') { c.moveTo(3, 3); c.lineTo(13, 9); c.lineTo(3, 15); c.closePath(); c.fill(); }
@@ -565,9 +574,23 @@ function renderToggles() {
   $('#repLabel').textContent = S.repeat === 'one' ? 'REPEAT 1' : 'REPEAT';
   $('#bRepeat').title = `Repeat: ${S.repeat} (R)`;
   $('#togVid').classList.toggle('on', S.showVideo); $('#togPl').classList.toggle('on', S.showPlaylist); $('#vPl').classList.toggle('on', S.showPlaylist);
-  document.body.classList.toggle('novid', !S.showVideo);
-  document.body.classList.toggle('nopl', !S.showPlaylist);
-  document.documentElement.style.setProperty('--pl-h', `${S.plHeight}px`);
+  syncWindows();
+}
+// Which windows show, and which are rolled up to their title bar (winmgr.js does the rest).
+let fsWanted = false;
+function syncWindows(opts = {}) {
+  const mini = WM.body.contains('mini'), fs = WM.body.contains('fs') || fsWanted;
+  const audvis = WM.body.contains('audvis');
+  const vidShade = !fs && (audvis ? S.vis.panel === 'min' : S.vidShade);
+  WM.setPanels({
+    eq: { visible: !mini && S.eq.panel !== 'hidden', shade: S.eq.panel === 'min' },
+    video: { visible: !mini && (fs || (S.showVideo && !(audvis && S.vis.panel === 'hidden'))), shade: vidShade, title: audvis ? 'VISUALIZER' : 'VIDEO' },
+    playlist: { visible: !mini && S.showPlaylist, shade: S.plShade }
+  }, { reflow: opts.reflow !== false && !mini });
+  const btn = (id, min, what) => { const b = $(id); if (!b) return; b.innerHTML = min ? '&#x25A1;' : '&#x2013;'; b.title = `${min ? 'Expand' : 'Minimize'} ${what}`; };
+  btn('#visMinBtn', vidShade, audvis ? 'visualizer' : 'video');
+  btn('#plMinBtn', S.plShade, 'playlist');
+  $('#visCloseBtn').title = audvis ? 'Close visualizer' : 'Close video';
 }
 function updateControlsEnabled() {
   const canSeek = engine === 'local' || engine === 'youtube';
@@ -607,8 +630,9 @@ function eqSlider(label, get, set, cls) {
   slot.addEventListener('mousedown', (e) => {
     e.preventDefault(); set(toDb(e.clientY));
     const mv = (ev) => set(toDb(ev.clientY));
-    document.addEventListener('mousemove', mv);
-    document.addEventListener('mouseup', () => { document.removeEventListener('mousemove', mv); saveSoon(); }, { once: true });
+    const doc = slot.ownerDocument;
+    doc.addEventListener('mousemove', mv);
+    doc.addEventListener('mouseup', () => { doc.removeEventListener('mousemove', mv); saveSoon(); }, { once: true });
   });
   slot.addEventListener('dblclick', () => { set(0); saveSoon(); });
   slot.addEventListener('wheel', (e) => { e.preventDefault(); set(Math.max(-12, Math.min(12, get() + (e.deltaY < 0 ? 1 : -1)))); saveSoon(); });
@@ -617,7 +641,7 @@ function eqSlider(label, get, set, cls) {
     band.querySelector('.eq-knob').style.top = `calc(${pct}% - 5px)`;
     const f = band.querySelector('.eq-fill');
     f.style.top = `${g >= 0 ? pct : 50}%`; f.style.height = `${Math.abs(g) / 24 * 100}%`;
-    f.style.background = g >= 0 ? 'linear-gradient(#e8c24a, #3dff6e)' : 'linear-gradient(#3dff6e, #1b6e2d)';
+    f.style.background = g >= 0 ? 'var(--eq-fill-up)' : 'var(--eq-fill-down)';
     slot.title = `${label}: ${g > 0 ? '+' : ''}${g} dB (double-click = 0)`;
   };
   return band;
@@ -637,7 +661,6 @@ function setEqPanel(mode) {
 }
 function renderEq() {
   const p = $('#eqPanel');
-  p.classList.toggle('hidden', S.eq.panel === 'hidden');
   p.classList.toggle('min', S.eq.panel === 'min');
   p.classList.toggle('off', !S.eq.on);
   p.classList.toggle('na', engine === 'youtube');
@@ -648,15 +671,16 @@ function renderEq() {
   $('#eqSum').textContent = `· ${S.eq.preset.toUpperCase()} · ${S.eq.on ? 'ON' : 'OFF'}${engine === 'youtube' ? ' · N/A FOR YOUTUBE' : ''}`;
   eqSliders.forEach(sl => sl.update());
   drawEqCurve();
+  syncWindows();
 }
 function drawEqCurve() {
   const c = $('#eqCurve'); if (!c || S.eq.panel !== 'open') return;
   const W = c.clientWidth || 300, H = 22;
   if (c.width !== W) c.width = W;
   const x = c.getContext('2d'); x.clearRect(0, 0, W, H);
-  x.strokeStyle = '#1d3a26'; x.beginPath(); x.moveTo(0, H / 2 + .5); x.lineTo(W, H / 2 + .5); x.stroke();
+  x.strokeStyle = T('--eq-curve-axis'); x.beginPath(); x.moveTo(0, H / 2 + .5); x.lineTo(W, H / 2 + .5); x.stroke();
   const g = S.eq.on ? S.eq.gains : EQ_FREQS.map(() => 0);
-  x.strokeStyle = S.eq.on ? '#3dff6e' : '#2a6e3a'; x.shadowColor = '#3dff6e'; x.shadowBlur = S.eq.on ? 4 : 0; x.lineWidth = 1.5; x.beginPath();
+  x.strokeStyle = S.eq.on ? T('--eq-curve-on') : T('--eq-curve-off'); x.shadowColor = T('--eq-curve-on'); x.shadowBlur = S.eq.on ? 4 : 0; x.lineWidth = 1.5; x.beginPath();
   for (let i = 0; i <= W; i++) {
     const t = i / W * 9, a = Math.floor(t), b = Math.min(9, a + 1), f = t - a;
     const s = f * f * (3 - 2 * f);   // smooth between bands
@@ -681,10 +705,8 @@ function openEqPresets() {
     d.onclick = () => { m.classList.add('hidden'); loadEqPreset(name); };
     m.appendChild(d);
   }
-  const r = $('#eqPresetsBtn').getBoundingClientRect();
-  m.classList.remove('hidden');
-  m.style.left = `${Math.min(r.left, innerWidth - m.offsetWidth - 4)}px`;
-  m.style.top = `${Math.min(r.bottom + 3, innerHeight - m.offsetHeight - 4)}px`;
+  const b = $('#eqPresetsBtn'), r = b.getBoundingClientRect();
+  WM.popup(m, { doc: b.ownerDocument, x: r.left, y: r.bottom + 3, flipY: r.top });
 }
 $('#togEq').onclick = () => setEqPanel(S.eq.panel === 'hidden' ? 'open' : 'hidden');
 $('#eqMinBtn').onclick = () => setEqPanel(S.eq.panel === 'min' ? 'open' : 'min');
@@ -693,8 +715,8 @@ $('#eqTitle').addEventListener('dblclick', (e) => { if (!e.target.closest('butto
 $('#eqOn').onclick = () => { S.eq.on = !S.eq.on; applyEq(); renderEq(); saveSoon(); };
 $('#eqReset').onclick = () => { S.eq.gains = EQ_FREQS.map(() => 0); S.eq.preamp = 0; S.eq.preset = 'Flat'; applyEq(); renderEq(); saveSoon(); };
 $('#eqPresetsBtn').onclick = (e) => { e.stopPropagation(); if ($('#eqPresets').classList.contains('hidden')) openEqPresets(); else $('#eqPresets').classList.add('hidden'); };
-document.addEventListener('mousedown', (e) => { if (!e.target.closest('#eqPresets') && !e.target.closest('#eqPresetsBtn')) $('#eqPresets').classList.add('hidden'); });
-window.addEventListener('resize', () => drawEqCurve());
+WM.onDocs('mousedown', (e) => { if (!e.target.closest('#eqPresets') && !e.target.closest('#eqPresetsBtn')) $('#eqPresets').classList.add('hidden'); });
+WM.onWins('resize', () => drawEqCurve());
 
 // ------------------------------------------------------------------ visualizer
 let actx = null, analyser = null, freq = null;
@@ -743,7 +765,7 @@ function drawVis() {
   c.clearRect(0, 0, W, H);
   if (visMode === 2) return;
   if (visMode === 1) {
-    c.strokeStyle = '#3dff6e'; c.lineWidth = 1; c.beginPath();
+    c.strokeStyle = T('--spectrum-scope'); c.lineWidth = 1; c.beginPath();
     const live = analyser && engine === 'local' && status === 'playing';
     if (live) analyser.getByteTimeDomainData(scopeBuf);
     for (let x = 0; x < W; x++) { const v = live ? scopeBuf[Math.floor(x / W * 1024)] : 128; const y = H / 2 + (v - 128) / 128 * (H / 2); if (x) c.lineTo(x, y); else c.moveTo(x, y); }
@@ -755,10 +777,10 @@ function drawVis() {
     const h = Math.round(levels[i] * (H - 2));
     peaks[i] = Math.max(peaks[i] - 0.5, h);
     for (let y = 0; y < h; y += 2) {
-      const f = y / H; c.fillStyle = f > 0.75 ? '#e8c24a' : f > 0.5 ? '#a8ff3d' : '#2fd85a';
+      const f = y / H; c.fillStyle = f > 0.75 ? T('--spectrum-high') : f > 0.5 ? T('--spectrum-mid') : T('--spectrum-low');
       c.fillRect(i * (bw + gap), H - y - 1, bw, 1);
     }
-    if (peaks[i] > 1) { c.fillStyle = '#c9d0e0'; c.fillRect(i * (bw + gap), H - Math.round(peaks[i]) - 2, bw, 1); }
+    if (peaks[i] > 1) { c.fillStyle = T('--spectrum-peak'); c.fillRect(i * (bw + gap), H - Math.round(peaks[i]) - 2, bw, 1); }
   }
 }
 const big = $('#bigVis'); const bigCtx = big.getContext('2d');
@@ -773,7 +795,7 @@ function drawBigVis() {
   for (let i = 0; i < BIGN; i++) {
     const h = bigLv[i] * H * 0.42;
     const g = c.createLinearGradient(0, H, 0, H - h);
-    g.addColorStop(0, 'rgba(47,216,90,.85)'); g.addColorStop(1, 'rgba(168,255,61,.35)');
+    g.addColorStop(0, T('--bars-bottom')); g.addColorStop(1, T('--bars-top'));
     c.fillStyle = g; c.fillRect(i * bw + 1, H - h, bw - 2, h);
   }
 }
@@ -825,6 +847,7 @@ function renderList() {
 function updatePlTime() {
   const total = S.items.reduce((a, b) => a + (b.duration || 0), 0);
   const selTotal = S.items.filter(i => S.sel.has(i.id)).reduce((a, b) => a + (b.duration || 0), 0);
+  $('#plSum').textContent = `\u00b7 ${S.tabs[S.tab].name.toUpperCase()} \u00b7 ${S.items.length}`;   // shown while the playlist is rolled up
   $('#plTime').textContent = `${S.items.length} item${S.items.length === 1 ? '' : 's'} · ${S.sel.size > 1 ? fmtShort(selTotal) + '/' : ''}${fmtShort(total) || '0:00'}`;
 }
 function scrollToCurrent() {
@@ -937,7 +960,7 @@ list.addEventListener('contextmenu', (e) => {
       const dl = DL.get(it.id);
       const busy = dl && ['queued', 'updating', 'downloading', 'processing'].includes(dl.status);
       if (busy) entries.push(['Cancel download', () => P.dlCancel(it.id)]);
-      else entries.push(['Download\u2026', () => openDlMenu(it, { x: e.clientX, y: e.clientY })]);
+      else entries.push(['Download\u2026', () => openDlMenu(it, { doc: e.target.ownerDocument, x: e.clientX, y: e.clientY })]);
       const lp = it.localVideo || it.localAudio;
       if (lp) { entries.push(['Show local copy in folder', () => P.showInFolder(lp)], ['Delete local copy', () => deleteLocalCopy(it)]); }
       entries.push(['Open in browser', () => P.openExternal(it.url)]);
@@ -949,41 +972,32 @@ list.addEventListener('contextmenu', (e) => {
   }
   entries.push(['Add files…', openFiles], ['Add folder…', () => openFiles('folder')], ['Add link…', openUrlDialog]);
   if (S.items.length) entries.push(null, ['Sort by title', () => sortList((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }))], ['Randomize order', () => sortList(() => Math.random() - 0.5)], ['Clear playlist', clearList]);
-  showCtxMenu(entries, e.clientX, e.clientY);
+  showCtxMenu(entries, e.clientX, e.clientY, e.target.ownerDocument);
 });
-function showCtxMenu(entries, x, y) {
+function showCtxMenu(entries, x, y, doc) {
   ctx.innerHTML = '';
   for (const en of entries) {
     if (!en) { ctx.appendChild(document.createElement('hr')); continue; }
     const d = document.createElement('div'); d.textContent = en[0]; d.onclick = () => { hideCtx(); en[1](); }; ctx.appendChild(d);
   }
-  ctx.classList.remove('hidden');
-  const w = ctx.offsetWidth, h = ctx.offsetHeight;
-  ctx.style.left = `${Math.min(x, innerWidth - w - 4)}px`;
-  ctx.style.top = `${Math.min(y, innerHeight - h - 4)}px`;
+  WM.popup(ctx, { doc, x, y });
 }
 function hideCtx() { ctx.classList.add('hidden'); }
-document.addEventListener('mousedown', (e) => { if (!ctx.contains(e.target)) hideCtx(); if (!$('#dlMenu').contains(e.target) && e.target !== $('#bDl') && !$('#bDl').contains(e.target)) hideDlMenu(); });
+WM.onDocs('mousedown', (e) => { if (!ctx.contains(e.target)) hideCtx(); if (!$('#dlMenu').contains(e.target) && e.target !== $('#bDl') && !$('#bDl').contains(e.target)) hideDlMenu(); });
 function sortList(fn) { const cur = S.items[S.current]; S.items.sort(fn); if (cur) S.current = S.items.indexOf(cur); renderList(); saveSoon(); }
 
-// playlist resize
-(() => {
-  const h = $('#plResize'); let y0 = 0, h0 = 0;
-  const move = (e) => { S.plHeight = Math.max(80, Math.min(innerHeight - 260, h0 + (y0 - e.clientY))); renderToggles(); };
-  h.addEventListener('mousedown', (e) => { y0 = e.clientY; h0 = $('#plist').offsetHeight; document.addEventListener('mousemove', move); document.addEventListener('mouseup', () => { document.removeEventListener('mousemove', move); saveSoon(); }, { once: true }); });
-})();
 
 // ------------------------------------------------------------------ drag & drop / paste
 let dragDepth = 0;
-document.addEventListener('dragenter', (e) => { e.preventDefault(); if (!draggingInternal) { dragDepth++; $('#dropHint').classList.remove('hidden'); } });
-document.addEventListener('dragleave', (e) => { e.preventDefault(); if (!draggingInternal && --dragDepth <= 0) { dragDepth = 0; $('#dropHint').classList.add('hidden'); } });
-document.addEventListener('dragover', (e) => {
+WM.onDocs('dragenter', (e) => { e.preventDefault(); if (!draggingInternal) { dragDepth++; WM.host($('#dropHint'), e.target.ownerDocument || document).classList.remove('hidden'); } });
+WM.onDocs('dragleave', (e) => { e.preventDefault(); if (!draggingInternal && --dragDepth <= 0) { dragDepth = 0; $('#dropHint').classList.add('hidden'); } });
+WM.onDocs('dragover', (e) => {
   e.preventDefault();
   e.dataTransfer.dropEffect = draggingInternal ? 'move' : 'copy';
   clearDropMarks();
   const t = dropTarget(e); if (t.li) t.li.classList.add(t.after ? 'drop-after' : 'drop-before');
 });
-document.addEventListener('drop', async (e) => {
+WM.onDocs('drop', async (e) => {
   e.preventDefault(); dragDepth = 0; $('#dropHint').classList.add('hidden');
   const t = dropTarget(e); clearDropMarks();
   const at = t.li ? t.index : undefined;
@@ -995,7 +1009,7 @@ document.addEventListener('drop', async (e) => {
   const urls = extractUrls(text);
   if (urls.length) addUrls(urls, at);
 });
-document.addEventListener('paste', (e) => {
+WM.onDocs('paste', (e) => {
   if (e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) return;
   const text = e.clipboardData.getData('text/plain');
   const urls = extractUrls(text);
@@ -1086,7 +1100,7 @@ function mdStep(d) {
 function mdSize(force) {
   const c = $('#mdCanvas');
   const r = $('#artWrap').getBoundingClientRect();
-  const scale = Math.min(window.devicePixelRatio || 1, 1.5);
+  const scale = Math.min(VW().devicePixelRatio || 1, 1.5);
   let w = Math.max(64, Math.round(r.width * scale)), h = Math.max(48, Math.round(r.height * scale));
   const cap = 1920 / Math.max(w, h * 16 / 9);   // keep 4K fullscreen smooth
   if (cap < 1) { w = Math.round(w * cap); h = Math.round(h * cap); }
@@ -1096,9 +1110,9 @@ function mdSize(force) {
 }
 function mdFrame(now) {
   if (!MD.active) return;
-  requestAnimationFrame(mdFrame);
-  if (document.hidden || document.body.classList.contains('mini') || !S.showVideo) return;
-  if (S.vis.panel !== 'open' && !document.body.classList.contains('fs')) return;
+  VW().requestAnimationFrame(mdFrame);     // the visualizer window's own frames (keeps going if the player is covered)
+  if (VW().document.hidden || !WM.isShown('video')) return;
+  if (WM.state.video.shade && !WM.body.contains('fs')) return;
   mdSize(false);
   if (S.vis.cycle && status === 'playing' && now - MD.lastSwitch > MD_CYCLE_MS) mdLoad(mdRandomName(), 2.7);
   try { MD.viz.render(); MD.errs = 0; } catch (e) {
@@ -1112,7 +1126,7 @@ async function updateVisLayer() {
   if (want && !(await mdEnsure())) return;
   const on = mdWanted() && !!MD.viz;
   $('#artWrap').classList.toggle('md', on);
-  if (on && !MD.active) { MD.active = true; MD.lastSwitch = performance.now(); requestAnimationFrame(mdFrame); mdShowControls(); }
+  if (on && !MD.active) { MD.active = true; MD.lastSwitch = performance.now(); VW().requestAnimationFrame(mdFrame); mdShowControls(); }
   else if (!on) MD.active = false;
   renderVisBar(); renderVisPanel();
 }
@@ -1120,18 +1134,30 @@ function setVisMode(mode) { S.vis.mode = mode; saveSoon(); updateVisLayer(); }
 function setVisPanel(p) { S.vis.panel = p; renderVisPanel(); saveSoon(); }
 function renderVisPanel() {
   const p = S.vis.panel;
-  document.body.classList.toggle('vismin', p === 'min');
-  document.body.classList.toggle('vishide', p === 'hidden');
+  WM.body.toggle('vismin', p === 'min');
+  WM.body.toggle('vishide', p === 'hidden');
+  syncWindows();
   $('#togVis').classList.toggle('on', p !== 'hidden');
   $('#visMinBtn').innerHTML = p === 'min' ? '&#x25A1;' : '&#x2013;';
   $('#visMinBtn').title = p === 'min' ? 'Expand visualizer' : 'Minimize visualizer';
-  $('#visSum').textContent = `\u00b7 ${S.vis.mode === 'milkdrop' && MD.ok !== false ? 'BUTTERCHURN' : 'BARS'}`;
+  $('#visSum').textContent = WM.body.contains('audvis') ? `\u00b7 ${S.vis.mode === 'milkdrop' && MD.ok !== false ? 'BUTTERCHURN' : 'BARS'}` : '';
   setTimeout(() => { if (MD.active) mdSize(false); }, 0);
 }
-$('#visMinBtn').onclick = () => setVisPanel(S.vis.panel === 'min' ? 'open' : 'min');
-$('#visCloseBtn').onclick = () => { setVisPanel('hidden'); toast('Visualizer closed \u2014 click VIS at the top to bring it back.', 2800); };
+// The video window's – and ✕: the visualizer (audio) and the video have their own open/rolled-up settings.
+function toggleVidShade() {
+  if (WM.body.contains('audvis')) setVisPanel(S.vis.panel === 'min' ? 'open' : 'min');
+  else { S.vidShade = !S.vidShade; syncWindows(); saveSoon(); }
+}
+$('#visMinBtn').onclick = toggleVidShade;
+$('#visCloseBtn').onclick = () => {
+  if (WM.body.contains('audvis')) { setVisPanel('hidden'); toast('Visualizer closed \u2014 click VIS on the player to bring it back.', 2800); }
+  else { S.showVideo = false; renderToggles(); saveSoon(); toast('Video window closed \u2014 click VID on the player to bring it back.', 2800); }
+};
 $('#togVis').onclick = () => setVisPanel(S.vis.panel === 'hidden' ? 'open' : 'hidden');
-$('#visTitle').addEventListener('dblclick', (e) => { if (!e.target.closest('button')) setVisPanel(S.vis.panel === 'min' ? 'open' : 'min'); });
+$('#visTitle').addEventListener('dblclick', (e) => { if (!e.target.closest('button')) toggleVidShade(); });
+const togglePlShade = () => { S.plShade = !S.plShade; syncWindows(); saveSoon(); };
+$('#plMinBtn').onclick = togglePlShade;
+$('#plTitle').addEventListener('dblclick', (e) => { if (!e.target.closest('button')) togglePlShade(); });
 function renderVisBar() {
   $('#mdName').classList.toggle('off', !S.vis.showPreset);
   $('#coverCard').classList.toggle('off', !S.vis.showTrack);
@@ -1140,7 +1166,7 @@ function renderVisBar() {
   const art = img.classList.contains('has') && img.getAttribute('src');
   $('#ccArt').classList.toggle('hidden', !art);
   if (art) $('#ccArt').src = img.src; else $('#ccArt').removeAttribute('src');
-  for (const b of document.querySelectorAll('#visSeg button')) b.classList.toggle('on', b.dataset.m === (MD.ok === false ? 'bars' : S.vis.mode));
+  for (const b of $$('#visSeg button')) b.classList.toggle('on', b.dataset.m === (MD.ok === false ? 'bars' : S.vis.mode));
   const md = S.vis.mode === 'milkdrop' && MD.ok !== false;
   for (const id of ['#mdFav', '#mdPrev', '#mdNext', '#mdPresets']) $(id).classList.toggle('hidden', !md);
   $('#visSeg button[data-m="milkdrop"]').disabled = MD.ok === false;
@@ -1204,14 +1230,14 @@ function openMdPresets() {
   }, $('#mdPresets'));
 }
 $('#mdFav').onclick = (e) => { e.stopPropagation(); const on = toggleFav(); toast(on ? '\u2605 Added to favorites' : 'Removed from favorites', 1300); };
-for (const b of document.querySelectorAll('#visSeg button')) b.onclick = (e) => { e.stopPropagation(); setVisMode(b.dataset.m); };
+for (const b of $$('#visSeg button')) b.onclick = (e) => { e.stopPropagation(); setVisMode(b.dataset.m); };
 $('#mdPrev').onclick = (e) => { e.stopPropagation(); mdStep(-1); };
 $('#mdNext').onclick = (e) => { e.stopPropagation(); mdStep(1); };
 $('#mdPresets').onclick = (e) => { e.stopPropagation(); openMdPresets(); };
 $('#mdFs').onclick = (e) => { e.stopPropagation(); toggleFullscreen(); };
 $('#artWrap').addEventListener('mousemove', mdShowControls);
 for (const id of ['#visBar', '#mdName', '#coverCard']) $(id).addEventListener('dblclick', (e) => e.stopPropagation());
-document.addEventListener('visibilitychange', () => { if (!document.hidden && MD.active) MD.lastSwitch = performance.now(); });
+VW().document.addEventListener('visibilitychange', () => { if (!VW().document.hidden && MD.active) MD.lastSwitch = performance.now(); });
 
 // ------------------------------------------------------------------ playlist tabs
 let renamingTab = -1;
@@ -1311,7 +1337,7 @@ $('#tabStrip').addEventListener('contextmenu', (e) => {
     null,
     [S.tabs.length > 1 ? 'Close tab' : 'Clear and reset tab', () => closeTab(i)]
   ];
-  showCtxMenu(entries, e.clientX, e.clientY);
+  showCtxMenu(entries, e.clientX, e.clientY, e.target.ownerDocument);
   void t;
 });
 function moveTab(i, d) {
@@ -1407,7 +1433,7 @@ $('#aboutLic').onclick = () => {
   f.classList.toggle('hidden', !show);
   $('#aboutLic').textContent = show ? 'Hide licenses' : 'View licenses';
 };
-for (const a of document.querySelectorAll('.about-links a')) a.onclick = (e) => { e.preventDefault(); P.openExternal(a.dataset.url); };
+for (const a of $$('.about-links a')) a.onclick = (e) => { e.preventDefault(); P.openExternal(a.dataset.url); };
 
 // ------------------------------------------------------------------ auto-updates (main process: updater.js)
 let UPD = { status: 'idle' };
@@ -1560,58 +1586,67 @@ P.onUpd((st) => { UPD = st; renderUpd(); });
 P.updGet().then((st) => { UPD = st; renderUpd(); });
 
 // ------------------------------------------------------------------ fullscreen & mini
+// Fullscreen = the video window fills its screen. Mini player = only the player window, kept on top.
 async function toggleFullscreen(force) {
-  if (document.body.classList.contains('mini') && force !== false) await toggleMini();
-  if (!S.showVideo && !document.body.classList.contains('fs')) { S.showVideo = true; renderToggles(); }
-  await P.setFullscreen(force);
+  if (WM.body.contains('mini') && force !== false) await toggleMini();
+  const going = force === undefined ? !WM.body.contains('fs') : !!force;
+  if (going) { fsWanted = true; syncWindows(); }
+  const on = await P.setFullscreen(going);
+  if (!on) { fsWanted = false; syncWindows(); }
 }
-P.onFullscreen((on) => { document.body.classList.toggle('fs', on); if (on) bumpIdle(); });
+P.onFullscreen((on) => { fsWanted = false; WM.body.toggle('fs', on); syncWindows(); if (on) bumpIdle(); });
 let idleTimer;
-function bumpIdle() { document.body.classList.remove('idle'); clearTimeout(idleTimer); idleTimer = setTimeout(() => { if (document.body.classList.contains('fs')) document.body.classList.add('idle'); }, 2500); }
-document.addEventListener('mousemove', () => { if (document.body.classList.contains('fs')) bumpIdle(); });
+function bumpIdle() { WM.body.remove('idle'); clearTimeout(idleTimer); idleTimer = setTimeout(() => { if (WM.body.contains('fs')) WM.body.add('idle'); }, 2500); }
+WM.onDocs('mousemove', () => { if (WM.body.contains('fs')) bumpIdle(); });
 async function toggleMini() {
-  const on = !document.body.classList.contains('mini');
-  const h = $('#deck').offsetHeight + 2;
-  if (on) document.body.classList.add('mini');
-  const res = await P.setMini(on, h);
-  document.body.classList.toggle('mini', res);
+  const on = !WM.body.contains('mini');
+  if (on && WM.body.contains('fs')) await toggleFullscreen(false);
+  WM.body.toggle('mini', on);
+  syncWindows({ reflow: false });
+  const res = await P.setMini(on);
   $('#btnMini').title = res ? 'Restore full player (M)' : 'Mini player (M)';
 }
+// Back to normal: leave fullscreen / mini, bring every window back (Reset layout also re-centres them).
+async function restoreWindows() {
+  if (WM.body.contains('fs')) await toggleFullscreen(false);
+  if (WM.body.contains('mini')) await toggleMini();
+  S.showVideo = true; S.showPlaylist = true; S.plShade = false; S.vidShade = false;
+  if (S.eq.panel === 'hidden') S.eq.panel = 'open';
+  if (S.vis.panel === 'hidden') S.vis.panel = 'open';
+  renderEq(); renderVisPanel(); renderToggles();
+  syncWindows({ reflow: false });
+  saveSoon(); setTimeout(drawEqCurve, 300);
+}
+WM.onReset = restoreWindows;
 
 // ------------------------------------------------------------------ wiring
 $('#btnMin').onclick = () => P.minimize();
 $('#btnClose').onclick = () => { recordResume(); saveNow(); P.close(); };
 $('#btnMini').onclick = toggleMini;
-$('#bRestore').onclick = async () => {
-  const wasFs = document.body.classList.contains('fs');
-  document.body.classList.remove('mini'); $('#btnMini').title = 'Mini player (M)';
-  S.showVideo = true; S.showPlaylist = true; S.plHeight = 230; renderToggles();
-  await P.restoreSize();
-  if (wasFs) document.body.classList.remove('fs');
-  saveSoon(); setTimeout(drawEqCurve, 300);
-};
+$('#bRestore').title = 'Back to the normal layout: every window docked under the player';
+$('#bRestore').onclick = async () => { await restoreWindows(); WM.preset('classic'); };
 $('#btnAbout').onclick = openAbout;
-$('#titlebar').addEventListener('dblclick', (e) => { if (!e.target.closest('button')) { if (document.body.classList.contains('mini')) toggleMini(); else P.maximize(); } });
+$('#titlebar').addEventListener('dblclick', (e) => { if (!e.target.closest('button')) toggleMini(); });
 $('#bPrev').onclick = prev; $('#bPlay').onclick = play; $('#bPause').onclick = pause; $('#bStop').onclick = stop; $('#bNext').onclick = () => next(false);
 $('#bEject').onclick = () => openFiles();
 $('#vPlay').onclick = togglePlay; $('#vPrev').onclick = prev; $('#vStop').onclick = stop; $('#vNext').onclick = () => next(false);
 $('#vFs').onclick = () => toggleFullscreen();
 $('#bFull').onclick = () => toggleFullscreen();
-$('#bDl').onclick = () => { const it = dlTarget(); if (it) { const r = $('#bDl').getBoundingClientRect(); openDlMenu(it, { x: r.left, y: r.bottom + 4 }); } else toast('Play or select a YouTube video to download it.'); };
+$('#bDl').onclick = () => { const it = dlTarget(); if (it) { const r = $('#bDl').getBoundingClientRect(); openDlMenu(it, { doc: $('#bDl').ownerDocument, x: r.left, y: r.bottom + 4, flipY: r.top }); } else toast('Play or select a YouTube video to download it.'); };
 const toggleShuffle = () => { S.shuffle = !S.shuffle; S.history = []; renderToggles(); saveSoon(); toast(`Shuffle ${S.shuffle ? 'on' : 'off'}`, 1200); };
 const cycleRepeat = () => { S.repeat = S.repeat === 'off' ? 'all' : S.repeat === 'all' ? 'one' : 'off'; renderToggles(); saveSoon(); toast(`Repeat: ${S.repeat}`, 1200); };
 $('#bShuffle').onclick = toggleShuffle; $('#vShuf').onclick = toggleShuffle;
 $('#bRepeat').onclick = cycleRepeat; $('#vRep').onclick = cycleRepeat;
 $('#togVid').onclick = () => { S.showVideo = !S.showVideo; renderToggles(); saveSoon(); };
 const togglePl = () => { S.showPlaylist = !S.showPlaylist; renderToggles(); saveSoon(); };
-$('#togPl').onclick = togglePl; $('#vPl').onclick = togglePl;
+$('#togPl').onclick = togglePl; $('#vPl').onclick = togglePl; $('#plCloseBtn').onclick = togglePl;
 $('#clock').onclick = () => { S.remaining = !S.remaining; saveSoon(); drawClock(); };
 $('#vol').addEventListener('input', (e) => setVolume(+e.target.value));
 $('#vMute').onclick = () => setMuted(!S.muted);
 (() => {
   const w = $('#wedge');
   const set = (e) => { const r = w.getBoundingClientRect(); setVolume(((e.clientX - r.left) / r.width) * 100); };
-  w.addEventListener('mousedown', (e) => { set(e); const mv = (ev) => set(ev); document.addEventListener('mousemove', mv); document.addEventListener('mouseup', () => document.removeEventListener('mousemove', mv), { once: true }); });
+  w.addEventListener('mousedown', (e) => { set(e); const mv = (ev) => set(ev); const doc = w.ownerDocument; doc.addEventListener('mousemove', mv); doc.addEventListener('mouseup', () => doc.removeEventListener('mousemove', mv), { once: true }); });
   w.addEventListener('wheel', (e) => { e.preventDefault(); setVolume(S.volume + (e.deltaY < 0 ? 5 : -5)); });
 })();
 $('#vol').addEventListener('wheel', (e) => { e.preventDefault(); setVolume(S.volume + (e.deltaY < 0 ? 5 : -5)); });
@@ -1632,9 +1667,9 @@ $('#pRem').onclick = removeSelected; $('#pClr').onclick = clearList;
 $('#pUp').onclick = () => moveSelected(-1); $('#pDown').onclick = () => moveSelected(1);
 $('#stage').addEventListener('dblclick', (e) => { if (e.target === $('#stage') || e.target.closest('#artWrap')) toggleFullscreen(); });
 
-document.addEventListener('keydown', (e) => {
+WM.onDocs('keydown', (e) => {
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' && e.target.type === 'text') return;
-  if (document.querySelector('dialog[open]')) return;
+  if ($('dialog[open]')) return;
   const k = e.key;
   if (k === ' ' ) { e.preventDefault(); togglePlay(); }
   else if (k === 'ArrowRight' && !e.altKey) { e.preventDefault(); seekBy(e.shiftKey ? 30 : 5); }
@@ -1645,7 +1680,7 @@ document.addEventListener('keydown', (e) => {
   else if (k === 'ArrowDown') { e.preventDefault(); if (e.ctrlKey || e.target !== list) setVolume(S.volume - 5); else selectRel(1); }
   else if (k === 'Delete') removeSelected();
   else if (k === 'Enter') { const i = S.items.findIndex(it => S.sel.has(it.id)); if (i >= 0) playIndex(i); }
-  else if (k === 'Escape') { const popOpen = !$('#popMenu').classList.contains('hidden'); hidePop(); hideCtx(); if (!popOpen && document.body.classList.contains('fs')) toggleFullscreen(false); }
+  else if (k === 'Escape') { const popOpen = !$('#popMenu').classList.contains('hidden'); hidePop(); hideCtx(); if (!popOpen && WM.body.contains('fs')) toggleFullscreen(false); }
   else if (k === 'F11' || (k.toLowerCase() === 'f' && !e.ctrlKey)) { e.preventDefault(); toggleFullscreen(); }
   else if (e.ctrlKey && k === 'Tab') { e.preventDefault(); switchTab((S.tab + (e.shiftKey ? S.tabs.length - 1 : 1)) % S.tabs.length); }
   else if (e.ctrlKey && k.toLowerCase() === 't') { e.preventDefault(); renameTab(newTab()); }
@@ -1734,10 +1769,7 @@ async function openDlMenu(item, pos) {
   add('dm-item', '\ud83d\uddc2 Manage library\u2026', openDownloadsManager);
   add('dm-item', 'Change folders…', openDirDialog);
   add('dm-warn', 'Only download videos you have the right to save.');
-  m.classList.remove('hidden');
-  const w = m.offsetWidth, h = m.offsetHeight;
-  m.style.left = `${Math.max(4, Math.min(pos.x, innerWidth - w - 4))}px`;
-  m.style.top = `${Math.max(4, Math.min(pos.y, innerHeight - h - 4))}px`;
+  WM.popup(m, pos);
 }
 async function startDownload(item, kind, quality, quiet) {
   // If the YouTube player already knows this is a live stream, don't even start yt-dlp.
@@ -1787,7 +1819,7 @@ P.onDl((ev) => {
     showDlBar({ text: `✓ Saved: ${title}${note}`, pct: 100, buttons: [['Show in folder', () => P.showInFolder(ev.file)]], hideAfter: 8000 });
   } else if (ev.status === 'error') {
     if (ev.live && item) markLive(item, true);
-    showDlBar({ text: `✕ Download failed: ${ev.error || 'unknown error'}`, pct: 0, buttons: item ? [['Try again', () => openDlMenu(item, { x: innerWidth / 2 - 135, y: innerHeight / 2 - 120 })]] : [], hideAfter: 12000 });
+    showDlBar({ text: `✕ Download failed: ${ev.error || 'unknown error'}`, pct: 0, buttons: item ? [['Try again', () => openDlMenu(item, { doc: $('#dlBar').ownerDocument, x: 20, y: 20 })]] : [], hideAfter: 12000 });
   } else if (ev.status === 'canceled') {
     showDlBar({ text: `Download canceled: ${title}`, pct: 0, hideAfter: 3000 });
   } else {
@@ -1818,6 +1850,7 @@ function renderDlProgress() {
 }
 function showDlBar({ text, pct = 0, busy = false, buttons = [], hideAfter = 0, cancelId = null }) {
   const bar = $('#dlBar');
+  if (bar.classList.contains('hidden')) WM.host(bar, WM.noticeDoc());
   clearTimeout(dlBarTimer);
   $('#dlbText').textContent = text; $('#dlbText').title = text;
   $('#dlbProg').classList.toggle('busy', busy);
@@ -1907,14 +1940,12 @@ function openPop(build, anchor, above) {
   };
   const hr = () => m.appendChild(document.createElement('hr'));
   build(add, hr);
-  m.classList.remove('hidden');
-  const r = anchor.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
-  m.style.left = `${Math.max(4, Math.min(r.left, innerWidth - w - 4))}px`;
-  m.style.top = `${Math.max(4, above || r.bottom + h > innerHeight - 4 ? r.top - h - 3 : r.bottom + 3)}px`;
+  const r = anchor.getBoundingClientRect();
   m.anchor = anchor;
+  WM.popup(m, { doc: anchor.ownerDocument, x: r.left, y: r.bottom + 3, flipY: r.top, above: !!above });
 }
 function hidePop() { $('#popMenu').classList.add('hidden'); }
-document.addEventListener('mousedown', (e) => { const m = $('#popMenu'); if (!m.contains(e.target) && !(m.anchor && m.anchor.contains(e.target))) hidePop(); });
+WM.onDocs('mousedown', (e) => { const m = $('#popMenu'); if (!m.contains(e.target) && !(m.anchor && m.anchor.contains(e.target))) hidePop(); });
 
 // ------------------------------------------------------------------ resume where you left off
 const RESUME_MIN_LEN = 300;   // only items 5 minutes or longer
@@ -2291,7 +2322,7 @@ function dlmRender() {
   $('#dlmClean').disabled = !miss;
   $('#dlmDelAll').disabled = !vis.some(r => !r.missing);
   for (const b of $('#dlmSeg').children) b.classList.toggle('on', b.dataset.f === DLM.filter);
-  for (const th of document.querySelectorAll('#dlmDlg th[data-sort]')) { th.classList.toggle('asc', th.dataset.sort === DLM.sort && DLM.dir > 0); th.classList.toggle('desc', th.dataset.sort === DLM.sort && DLM.dir < 0); }
+  for (const th of $$('#dlmDlg th[data-sort]')) { th.classList.toggle('asc', th.dataset.sort === DLM.sort && DLM.dir > 0); th.classList.toggle('desc', th.dataset.sort === DLM.sort && DLM.dir < 0); }
   const body = $('#dlmBody'); body.innerHTML = '';
   vis.forEach((r, i) => {
     const tr = document.createElement('tr');
@@ -2355,7 +2386,7 @@ $('#dlmAll').onclick = () => {
   for (const r of vis) { if (allOn) DLM.sel.delete(dlmKey(r)); else DLM.sel.add(dlmKey(r)); }
   dlmRender();
 };
-for (const th of document.querySelectorAll('#dlmDlg th[data-sort]')) {
+for (const th of $$('#dlmDlg th[data-sort]')) {
   th.onclick = () => { const k = th.dataset.sort; if (DLM.sort === k) DLM.dir = -DLM.dir; else { DLM.sort = k; DLM.dir = k === 'title' || k === 'kind' ? 1 : -1; } dlmRender(); };
 }
 for (const b of $('#dlmSeg').children) b.onclick = () => { DLM.filter = b.dataset.f; DLM.anchor = -1; dlmRender(); };
@@ -2438,7 +2469,7 @@ async function updateDlInfo() {
 
 // Re-check downloaded copies when you come back to SlopAMP (files deleted in File Explorer).
 let focusCheckAt = 0;
-window.addEventListener('focus', () => {
+WM.onWins('focus', () => {
   const now = Date.now(); if (now - focusCheckAt < 1500) return; focusCheckAt = now;
   verifyLocalCopies().then(() => attachKnownCopies());
   if ($('#dlmDlg').open) dlmRefresh(); else updateDlInfo();
@@ -2451,7 +2482,7 @@ function stateSnapshot() {
     version: 2,
     tabs: S.tabs.map(t => ({ id: t.id, name: t.name, current: t.current, items: t.items.map(({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio }) => ({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio })) })),
     tab: S.tab, playTab: S.playTab, vis: S.vis, volume: S.volume, muted: S.muted, shuffle: S.shuffle, repeat: S.repeat,
-    showVideo: S.showVideo, showPlaylist: S.showPlaylist, remaining: S.remaining, plHeight: S.plHeight, visMode, eq: S.eq,
+    showVideo: S.showVideo, showPlaylist: S.showPlaylist, plShade: S.plShade, vidShade: S.vidShade, remaining: S.remaining, plHeight: S.plHeight, visMode, eq: S.eq,
     resume: S.resume, subsOn: S.subsOn
   };
 }
@@ -2463,23 +2494,35 @@ function saveSoon() {
 function saveNow() { clearTimeout(saveT); P.saveState({ ...stateSnapshot(), flush: true }); }
 
 // ------------------------------------------------------------------ main loop
-let lastUi = 0;
+// Two loops, each on its own window's frames: the player (clock, position, spectrum) and the video
+// window (seek bar, subtitles, BARS visualizer), so one keeps running when the other is covered.
+let lastUi = 0, lastVid = 0;
+function seekPct() {
+  const d = currentDuration(), t = currentTime();
+  return status === 'stopped' || !d ? 0 : Math.min(1000, Math.round(t / d * 1000));
+}
 function tick(ts) {
   if (ts - lastUi > 120) {
     lastUi = ts;
-    const d = currentDuration(), t = currentTime();
-    if (!seeking) {
-      const p = d ? Math.min(1000, Math.round(t / d * 1000)) : 0;
-      const showP = status === 'stopped' ? 0 : p;
-      $('#pos').value = showP; $('#seek').value = showP; $('#seek').style.setProperty('--p', `${showP / 10}%`);
-      $('#vTime').textContent = fmt(status === 'stopped' ? 0 : t);
-    }
-    $('#vDur').textContent = fmt(d);
+    if (!seeking) $('#pos').value = seekPct();
     drawClock();
   }
-  renderSubs();
-  drawVis(); drawBigVis();
+  drawVis();
   requestAnimationFrame(tick);
+}
+function tickVideo(ts) {
+  if (ts - lastVid > 120) {
+    lastVid = ts;
+    if (!seeking) {
+      const p = seekPct();
+      $('#seek').value = p; $('#seek').style.setProperty('--p', `${p / 10}%`);
+      $('#vTime').textContent = fmt(status === 'stopped' ? 0 : currentTime());
+    }
+    $('#vDur').textContent = fmt(currentDuration());
+  }
+  renderSubs();
+  drawBigVis();
+  VW().requestAnimationFrame(tickVideo);
 }
 setInterval(() => { blink = !blink; }, 500);
 
@@ -2503,6 +2546,7 @@ setInterval(() => { blink = !blink; }, 500);
     S.volume = Number.isFinite(st.volume) ? st.volume : 80;
     S.muted = !!st.muted; S.shuffle = !!st.shuffle; S.repeat = ['off', 'all', 'one'].includes(st.repeat) ? st.repeat : 'off';
     S.showVideo = st.showVideo !== false; S.showPlaylist = st.showPlaylist !== false; S.remaining = !!st.remaining;
+    S.plShade = !!st.plShade; S.vidShade = !!st.vidShade;
     S.plHeight = st.plHeight || 230; visMode = st.visMode || 0;
     if (st.eq && Array.isArray(st.eq.gains) && st.eq.gains.length === 10) S.eq = { ...S.eq, ...st.eq };
     if (S.eq.panel === 'hidden') S.eq.panel = 'open';   // the equalizer always shows at launch (minimized stays minimized)
@@ -2519,8 +2563,9 @@ setInterval(() => { blink = !blink; }, 500);
   if (resumeAtBoot) setMarquee(resumeAtBoot); else if (S.anchor >= 0) setMarquee(S.items[S.anchor]); else setMarquee(null);
   if (resumeAtBoot && resumePoint(resumeAtBoot)) toast(`Press Play to continue "${resumeAtBoot.title}" from ${fmt(resumePoint(resumeAtBoot))}`, 5000);
   renderSpeed(); renderCc(); updateDlInfo(); renderVisPanel();
-  requestAnimationFrame(tick);
+  syncWindows({ reflow: false });      // first layout: the windows appear where they were last time
+  requestAnimationFrame(tick); VW().requestAnimationFrame(tickVideo);
   const info = await P.info();
   if (info.pendingOpen && info.pendingOpen.length) { const added = await addPaths(info.pendingOpen); if (added.length) playIndex(S.items.indexOf(added[0])); }
-  window.__phosphor = { __md: () => MD.viz, __mdLoad: (n) => mdLoad(n, 0), newTab, switchTab, closeTab, sendSelectedToTab, renameTab, curItem, __audio: () => ({ actx, analyser, eqNodes }), openDownloadsManager, dlmRefresh, DLM, verifyLocalCopies, setRate, pickSub, subsState: () => SUBS, downloadAll, recordResume, __mediaKey: mediaKey, get dlBatch() { return dlBatch; }, __eqNodes: eqNodes, loadEqPreset, setEqPanel, __markLive: (i, v) => markLive(S.items[i], v), __ytError: (code) => { engine = 'youtube'; onYtError({ data: code }); }, S, playIndex, addUrls, addPaths, next, prev, stop, play, pause, seekTo, setVolume, toggleMini, toggleFullscreen, get engine() { return engine; }, get status() { return status; }, currentTime, currentDuration, L };
+  window.__phosphor = { __md: () => MD.viz, __mdLoad: (n) => mdLoad(n, 0), newTab, switchTab, closeTab, sendSelectedToTab, renameTab, curItem, __audio: () => ({ actx, analyser, eqNodes }), openDownloadsManager, dlmRefresh, DLM, verifyLocalCopies, setRate, pickSub, subsState: () => SUBS, downloadAll, recordResume, __mediaKey: mediaKey, get dlBatch() { return dlBatch; }, __eqNodes: eqNodes, loadEqPreset, setEqPanel, __markLive: (i, v) => markLive(S.items[i], v), __ytError: (code) => { engine = 'youtube'; onYtError({ data: code }); }, S, playIndex, addUrls, addPaths, next, prev, stop, play, pause, seekTo, setVolume, toggleMini, toggleFullscreen, syncWindows, WM, get engine() { return engine; }, get status() { return status; }, currentTime, currentDuration, L };
 })();

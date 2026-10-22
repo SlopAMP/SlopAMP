@@ -11,8 +11,29 @@ FIRST LAUNCH
   Windows may show "Windows protected your PC" because SlopAMP isn't
   code-signed. Click "More info" -> "Run anyway". This only happens once.
 
+WINDOWS
+  * SlopAMP has four windows: the player, the equalizer, the video /
+    visualizer and the playlist. They start stacked together under the
+    player. Drag any window by its title bar to move it; it snaps to screen
+    edges and to the other windows (edge to edge, never overlapping).
+  * Moving the player moves every window snapped to it. Pull a window away
+    to use it on its own, e.g. the visualizer on a second monitor or TV.
+  * Resize the video and the playlist with the grip in their bottom-right
+    corner (or their right / bottom edge). The player and equalizer can be
+    made wider from their right edge.
+  * "-" rolls a window up to its title bar (double-click the title bar does
+    the same); "x" closes it. EQ / VIS / VID / PL on the player bring them
+    back. Windows docked underneath move up and down to stay attached.
+  * Right-click any title bar (or the button next to "?" on the player)
+    for the Layout menu: Classic (stacked), Playlist beside player, Big
+    visualizer, snapping on/off, Keep windows on top and Reset layout.
+  * Reset layout (Ctrl+Alt+R) puts every window back, stacked in the middle
+    of your main screen. Use it if a window ever ends up off screen
+    (SlopAMP also does this by itself when a monitor is unplugged).
+  * Window positions and sizes are remembered between launches.
+
 ADDING THINGS
-  * Drag files or folders onto the window (or onto SlopAMP.exe).
+  * Drag files or folders onto any SlopAMP window (or onto SlopAMP.exe).
   * Paste a YouTube link anywhere with Ctrl+V, or use +URL.
   * Double-click an item to play it. Drag items to reorder them. Del removes them.
   * Your playlist is saved automatically.
@@ -22,8 +43,9 @@ ADDING THINGS
 KEYS
   Space       play / pause          Left/Right   seek 5 s (Shift = 30 s)
   Z X C V B   prev/play/pause/stop/next    Ctrl+Up/Down  volume
-  F or F11    fullscreen (Esc exits) - or the FULLSCREEN button
+  F or F11    fullscreen video (Esc exits) - or the FULLSCREEN button
   M           mini player              E             equalizer
+  Ctrl+Alt+R  reset the window layout
   S / R       shuffle / repeat (off, all, one)
   [ / ]       slower / faster (1x, 1.5x, 2x, 3x)
   Media keys  Play/Pause, Next, Previous and Stop keys on your keyboard work
@@ -47,8 +69,8 @@ VISUALIZER
     preset every 30 seconds; use the arrows or PRESETS in its top-right
     corner to pick one (PRESETS has a search box). The PRESETS menu also turns auto-change, the song
     title flash, the track name (top corner) and the preset name on/off.
-  * The visualizer has its own title bar: "-" minimizes it, "x" closes it;
-    the VIS button at the top brings it back.
+  * The visualizer has its own window: "-" rolls it up, "x" closes it;
+    the VIS button on the player brings it back.
   * Favorites: click the star in the visualizer bar (or next to any preset
     in PRESETS) to mark favorites; they're listed first, and "Only use
     favorites" makes auto-change and N pick just from them.
@@ -74,9 +96,9 @@ SPEED AND SUBTITLES
     captions. Once on, subtitles stay on for the next videos.
 
 EQUALIZER
-  * The 10-band equalizer opens above the video when SlopAMP starts.
-    Click EQ in the top deck (or press E) to show/hide it. "-" in its title bar minimizes it to a thin strip
-    (it keeps working); "x" closes it.
+  * The 10-band equalizer window opens under the player when SlopAMP starts.
+    Click EQ on the player (or press E) to show/hide it. "-" in its title
+    bar rolls it up to a thin strip (it keeps working); "x" closes it.
   * PRESETS: Flat, Rock, Pop, Bass Boost, Treble Boost, Vocal, Classical,
     Dance, Headphones, Laptop speakers. Drag or mouse-wheel any slider;
     double-click a slider to reset it to 0. ON turns the EQ on/off; RESET = flat.
@@ -84,7 +106,7 @@ EQUALIZER
     YouTube's own player, so the EQ can't reach them.
 
 DOWNLOADING YOUTUBE VIDEOS
-  * Click DOWNLOAD (top deck) to save the YouTube video you're watching,
+  * Click DOWNLOAD (on the player) to save the YouTube video you're watching,
     or right-click any YouTube item in the playlist -> Download...
   * Pick Best / 1080p / 720p / 480p video (MP4) or Audio only (MP3).
   * Files go to Downloads\SlopAMP\Video and Downloads\SlopAMP\Audio
@@ -120,7 +142,7 @@ UPDATES
   * SlopAMP checks GitHub once a day for a new version (open "?" to change
     this or to check right away). Choose "Notify me" (the default),
     "Install automatically" or "Off".
-  * A bar under the top deck says when a new version is out. "What's new"
+  * A bar under the player says when a new version is out. "What's new"
     shows the release notes first. The update is downloaded from SlopAMP's
     official GitHub release, its checksum is verified, and SlopAMP restarts
     with your playlists and settings kept. It never installs until you click.

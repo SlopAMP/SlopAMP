@@ -1,0 +1,82 @@
+/* SlopAMP window frames: the title bar, border and resize grip around each window, plus the two
+   helper windows that hold popup menus and dialogs.
+   The frame is built by winmgr.js and is the same for every window, so a skin restyles all the
+   windows here (and in theme.css) without touching the player, equalizer or playlist code.
+
+   <div class="win [shade] [snap-left|right|top|bottom]" data-win="main|eq|video|playlist">
+     <header class="frame-tb">[logo] rule  NAME  [summary]  rule  [buttons]</header>
+     <div class="frame-body"> …the window's content… </div>
+     [<div class="frame-grip"></div>]          (video and playlist: drag to resize)
+   </div>                                                                                         */
+
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--frame-outer); user-select: none; }
+body { font: var(--fs-base)/1.3 var(--font-ui); color: var(--ink); }
+
+.win {
+  position: relative; display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  border: var(--frame-border-w) solid var(--frame-border); background: var(--frame-bg);
+}
+/* the player and equalizer are as tall as their content; a rolled-up window is just its title bar */
+body.fit .win, .win.shade { height: auto; }
+
+/* ---- title bar ---- */
+.frame-tb {
+  flex: none; display: flex; align-items: center; gap: 6px; height: var(--tb-h); padding: 0 4px 0 6px;
+  background: var(--tb-bg); cursor: default; touch-action: none;
+}
+.frame-tb .rule { flex: 1; min-width: 8px; height: var(--tb-rule-h); background: repeating-linear-gradient(180deg, var(--tb-rule) 0 1px, transparent 1px 3px); opacity: .7; }
+.frame-name { color: var(--tb-ink); font: bold var(--fs-title)/1 var(--font-ui); letter-spacing: var(--tb-letter); text-shadow: 0 0 6px var(--tb-glow); white-space: nowrap; }
+.win[data-win="main"] .frame-name { font-size: var(--fs-brand); letter-spacing: var(--tb-brand-letter); }
+.frame-sum { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--green); font: bold var(--fs-s)/1 var(--font-lcd); text-shadow: 0 0 4px var(--green-a50); }
+.win.shade .frame-sum { display: inline; }
+.frame-btns { display: flex; gap: 3px; }
+.frame-btns button { width: var(--tb-btn-w); height: var(--tb-btn-h); padding: 0; font-size: var(--fs-s); line-height: calc(var(--tb-btn-h) - 2px); }
+.frame-btns button.close:hover { background: var(--close-hover); }
+.logo-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, var(--logo-hi), var(--green) 45%, var(--logo-lo)); box-shadow: 0 0 6px var(--green); }
+
+/* ---- content ---- */
+.frame-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+body.fit .frame-body { flex: none; }
+.win.shade .frame-body { display: none; }
+
+/* ---- resize grip (bottom-right corner) ---- */
+.frame-grip {
+  position: absolute; right: 0; bottom: 0; width: var(--grip-size); height: var(--grip-size); z-index: 80; cursor: nwse-resize; touch-action: none;
+  background: linear-gradient(135deg, transparent 50%, var(--grip) 50% 58%, transparent 58% 68%, var(--grip) 68% 76%, transparent 76% 86%, var(--grip) 86%);
+}
+.win.shade .frame-grip { display: none; }
+.frame-edge { position: absolute; z-index: 79; touch-action: none; }
+.frame-edge-r { top: var(--tb-h); right: 0; bottom: 0; width: var(--edge-grab); cursor: ew-resize; }
+.frame-edge-b { left: 0; right: 0; bottom: 0; height: var(--edge-grab); cursor: ns-resize; }
+.win.shade .frame-edge-b { display: none; }
+.win.shade .frame-edge-r { top: 0; }
+body.win-video.fs .frame-edge { display: none; }
+
+/* ---- snapping: the edges that just docked glow for a moment ---- */
+.win::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 100; border: 0 solid var(--snap); }
+.win.snap-left::after { border-left-width: var(--snap-w); }
+.win.snap-right::after { border-right-width: var(--snap-w); }
+.win.snap-top::after { border-top-width: var(--snap-w); }
+.win.snap-bottom::after { border-bottom-width: var(--snap-w); }
+
+/* ---- fullscreen video: no frame ---- */
+body.win-video.fs .win { border: 0; }
+body.win-video.fs .frame-tb, body.win-video.fs .frame-grip { display: none; }
+
+/* ---- helper window: popup menus (sized to the menu by winmgr.js) ---- */
+body.host-popup { background: var(--menu-bg); }
+body.host-popup > * { position: fixed !important; left: 0 !important; top: 0 !important; box-shadow: none !important; max-height: none; }
+body.host-popup #ctx, body.host-popup #eqPresets, body.host-popup #wmMenu { width: max-content; max-width: 420px; }
+body.host-popup #popMenu { width: max-content; max-width: 340px; }
+body.host-popup #popMenu.wide { width: 360px; max-width: none; max-height: 560px; }
+body.host-popup #dlMenu { max-width: none; }
+
+/* ---- helper window: dialogs (sized to the open dialog) ---- */
+body.host-dialog { background: var(--dialog-bg); }
+body.host-dialog dialog { margin: auto; width: 460px; max-width: none; max-height: none; box-shadow: none; }
+body.host-dialog #dlmDlg { width: 640px; margin: auto; }
+body.host-dialog #aboutDlg { width: 400px; }
+body.host-dialog #updDlg { width: 460px; }
+body.host-dialog .dlm-scroll { max-height: 380px; }
+body.host-dialog .upd-notes { max-height: 260px; }
+body.host-dialog .dlg-title, body.host-dialog .dlm-title, body.host-dialog .about-hero { cursor: move; }

@@ -21,7 +21,7 @@ VIAddVersionKey "ProductName" "SlopAMP Portable"
 VIAddVersionKey "FileDescription" "SlopAMP Media Player (portable)"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
-VIAddVersionKey "LegalCopyright" "(c) 2026 bob - MIT License"
+VIAddVersionKey "LegalCopyright" "(c) 2026 SlopAMP (@HeyoPatriot) - MIT License"
 VIAddVersionKey "CompanyName" "SlopAMP"
 
 Section

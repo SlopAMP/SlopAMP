@@ -1,0 +1,62 @@
+name: Bug report
+description: Something in SlopAMP doesn't work the way it should.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Security problems:** please don't post them here. Use [private vulnerability reporting](https://github.com/SlopAMP/SlopAMP/security/advisories/new) instead (see SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: SlopAMP version
+      description: Click **?** on the player to see it.
+      placeholder: "1.3.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: build
+    attributes:
+      label: Which download?
+      options:
+        - Setup (installed)
+        - Portable exe
+        - Running from source
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what happened, and what did you expect instead?
+      placeholder: |
+        1. Dragged the playlist window next to the player
+        2. ...
+        Expected: ...
+        Happened: ...
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: File type or link (if it's about playback)
+      description: For example "MKV with AC3 audio" or the YouTube link. Please don't upload copyrighted media.
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag images in here if the problem is visual.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log (if SlopAMP crashed or froze)
+      description: "`%APPDATA%\\SlopAMP\\slopamp.log` (Portable: `SlopAMP Data\\slopamp.log` next to the exe). It contains file names from your PC, so look it over before pasting."
+      render: text

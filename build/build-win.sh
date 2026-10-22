@@ -49,7 +49,7 @@ WINE="$TOOLS/wine-11.2-amd64-wow64/bin/wine"
   --set-version-string ProductName "SlopAMP" \
   --set-version-string FileDescription "SlopAMP Media Player" \
   --set-version-string CompanyName "SlopAMP" \
-  --set-version-string LegalCopyright "(c) 2026 bob - MIT License" \
+  --set-version-string LegalCopyright "(c) 2026 SlopAMP (@HeyoPatriot) - MIT License" \
   --set-version-string OriginalFilename "SlopAMP.exe" \
   --set-version-string InternalName "SlopAMP" 2>&1 | grep -v -i "fixme" || true
 

@@ -31,7 +31,7 @@ VIAddVersionKey "ProductName" "SlopAMP"
 VIAddVersionKey "FileDescription" "SlopAMP Setup"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
-VIAddVersionKey "LegalCopyright" "(c) 2026 bob - MIT License"
+VIAddVersionKey "LegalCopyright" "(c) 2026 SlopAMP (@HeyoPatriot) - MIT License"
 VIAddVersionKey "CompanyName" "SlopAMP"
 
 !define MUI_ICON "${BUILDDIR}\icon.ico"

@@ -5,6 +5,7 @@ const fs = require('fs');
 const { MediaServer, isMediaFile } = require('./media');
 const { Downloader } = require('./downloader');
 const { Updater } = require('./updater');
+const { WindowManager, PANELS, HOSTS } = require('./windows');
 
 const APP_NAME = 'SlopAMP';
 app.setName(APP_NAME);
@@ -36,14 +37,12 @@ let win = null;
 let server = null;
 let downloader = null;
 let updater = null;
+let wm = null;        // movable windows (see windows.js)
 // Keys owned by the main process; the renderer's state saves must not wipe them.
-const MAIN_KEYS = ['window', 'playlistDir', 'dlVideoDir', 'dlAudioDir', 'ytdlpUpdatedAt', 'downloads', 'update'];
+const MAIN_KEYS = ['window', 'layout', 'playlistDir', 'dlVideoDir', 'dlAudioDir', 'ytdlpUpdatedAt', 'downloads', 'update'];
 const ytdlpDir = [path.join(process.resourcesPath || '', 'ytdlp'), path.join(__dirname, '..', 'vendor', 'ytdlp', process.platform)]
   .find(d => fs.existsSync(path.join(d, process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'))) || path.join(process.resourcesPath || '', 'ytdlp');
-let normalBounds = null;
 let closing = false;
-const DEFAULT_W = 420, DEFAULT_H = 900;
-let isMini = false;
 const pendingOpen = [];
 
 // Another SlopAMP is already running: the lock request has handed it our files (second-instance).
@@ -103,63 +102,76 @@ function flushState() {
   } catch (e) { log('save failed', e); }
 }
 
-// ---------- window ----------
+// ---------- windows ----------
+// The player is the main window; the equalizer, video/visualizer and playlist are child windows the
+// renderer opens with window.open() (windows.js keeps track of where they all are).
+function webPrefs() {
+  return {
+    preload: path.join(__dirname, 'preload.js'),
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+    autoplayPolicy: 'no-user-gesture-required',
+    spellcheck: false,
+    backgroundThrottling: false
+  };
+}
+function guardNavigation(wc) {
+  wc.on('will-navigate', (e, url) => {
+    if (!url.startsWith(server.base)) { e.preventDefault(); if (/^https?:/i.test(url)) shell.openExternal(url); }
+  });
+}
 function createWindow() {
   const state = loadState();
-  const b = state.window || {};
-  const wa = screen.getPrimaryDisplay().workArea;
-  const width = clamp(b.width || DEFAULT_W, 420, wa.width);
-  const height = clamp(b.height || DEFAULT_H, 480, wa.height);
-  const opts = {
-    width, height, minWidth: 420, minHeight: 480,
-    frame: false,
-    backgroundColor: '#1b1d24',
-    title: APP_NAME,
-    icon: path.join(__dirname, 'renderer', 'icon.png'),
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      autoplayPolicy: 'no-user-gesture-required',
-      spellcheck: false
-    }
-  };
-  if (Number.isFinite(b.x) && Number.isFinite(b.y) && onSomeScreen(b.x, b.y)) { opts.x = b.x; opts.y = b.y; }
-  win = new BrowserWindow(opts);
+  wm = new WindowManager({
+    getLayout: () => state.layout,
+    saveLayout: (layout) => setMainState({ layout }),
+    legacyWindow: state.window,
+    legacyPlHeight: state.plHeight,
+    log
+  });
+  // backgroundColor = --frame-outer in theme.css (only seen for a moment before the page paints)
+  const base = { backgroundColor: '#1b1d24', title: APP_NAME, icon: path.join(__dirname, 'renderer', 'icon.png'), webPreferences: webPrefs() };
+  win = new BrowserWindow(wm.mainOptions({ ...base, frame: false, show: false }));
+  wm.attach('main', win);
+  if (isDev) global.__slopamp = { wm };   // for the test scripts
   Menu.setApplicationMenu(null);
 
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  const panelUrl = `${server.base}/app/panel.html`;
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (url.split('?')[0] === panelUrl && (PANELS.includes(frameName) || HOSTS.includes(frameName)) && !wm.wins.has(frameName)) {
+      return { action: 'allow', overrideBrowserWindowOptions: wm.childOptions(frameName, base) };
+    }
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  win.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith(server.base)) { e.preventDefault(); if (/^https?:/i.test(url)) shell.openExternal(url); }
+  win.webContents.on('did-create-window', (child, details) => {
+    child.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+    guardNavigation(child.webContents);
+    wm.attach(details.frameName, child);
   });
-  win.on('enter-full-screen', () => win.webContents.send('fullscreen', true));
-  win.on('leave-full-screen', () => win.webContents.send('fullscreen', false));
-  // Show the window when it's ready, or after 5 s at the latest: a window that never appears can't be closed,
-  // and its invisible SlopAMP would keep running (and block the installer).
+  guardNavigation(win.webContents);
+  // The windows appear together once the renderer has placed them (windows.js start()), or after
+  // 5 s at the latest: a window that never appears can't be closed, and its invisible SlopAMP would
+  // keep running (and block the installer).
   const w = win;
   const reveal = () => { if (!w.isDestroyed() && !w.isVisible()) w.show(); };
-  w.once('ready-to-show', reveal);
-  w.webContents.once('did-finish-load', () => setTimeout(reveal, 500));
   setTimeout(reveal, 5000);
   let reloaded = false;
   w.webContents.on('render-process-gone', (_e, d) => {
     log('renderer gone:', d.reason, d.exitCode);
     if (closing || w.isDestroyed() || d.reason === 'clean-exit') return;
     // Reload once (deferred: reloading inside this event crashes Electron); crashed twice: close instead of leaving a dead window.
-    setTimeout(() => { if (w.isDestroyed()) return; if (!reloaded) { reloaded = true; w.reload(); } else w.destroy(); }, 200);
+    setTimeout(() => {
+      if (w.isDestroyed()) return;
+      if (!reloaded) { reloaded = true; wm.closeAll(); wm.quitting = false; wm.wins = new Map([['main', w]]); wm.started = false; w.reload(); } else w.destroy();
+    }, 200);
   });
   win.on('close', () => {
     // If the page hangs while closing, close the window anyway.
     setTimeout(() => { if (!w.isDestroyed()) { log('window did not close in 5 s; forcing it'); w.destroy(); } }, 5000);
     closing = true;
-    const s = currentState || loadState();
-    s.window = isMini && normalBounds ? normalBounds : win.getNormalBounds();
-    currentState = s;
+    wm.closeAll();
     flushState();
   });
   win.on('closed', () => { win = null; });
@@ -245,9 +257,6 @@ function rememberPlaylistDir(file) {
 }
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-function onSomeScreen(x, y) {
-  return screen.getAllDisplays().some(d => x >= d.bounds.x - 50 && y >= d.bounds.y - 50 && x < d.bounds.x + d.bounds.width && y < d.bounds.y + d.bounds.height);
-}
 
 // ---------- folder expansion ----------
 function expandPaths(paths, out = [], depth = 0) {
@@ -596,42 +605,24 @@ function registerIpc() {
 
   ipcMain.on('win:minimize', () => win && win.minimize());
   ipcMain.on('win:close', () => win && win.close());
-  ipcMain.on('win:maximize', () => { if (!win) return; if (win.isMaximized()) win.unmaximize(); else win.maximize(); });
-  ipcMain.handle('win:fullscreen', (_e, on) => { if (win) win.setFullScreen(on === undefined ? !win.isFullScreen() : !!on); return win && win.isFullScreen(); });
-  // The lightning badge: back to the normal window size (leaves fullscreen / mini / maximized).
-  ipcMain.handle('win:restore-default', () => {
-    if (!win) return false;
-    if (win.isFullScreen()) win.setFullScreen(false);
-    if (isMini) { isMini = false; win.setAlwaysOnTop(false); win.setResizable(true); win.setMinimumSize(420, 480); }
-    if (win.isMaximized()) win.unmaximize();
-    const b = win.getBounds();
-    const wa = screen.getDisplayMatching(b).workArea;
-    const w = Math.min(DEFAULT_W, wa.width), h = Math.min(DEFAULT_H, wa.height);
-    const x = clamp(b.x, wa.x, wa.x + wa.width - w), y = clamp(b.y, wa.y, wa.y + wa.height - h);
-    win.setBounds({ x, y, width: w, height: h }, true);
-    normalBounds = null;
-    return true;
-  });
-  ipcMain.handle('win:mini', (_e, on, miniHeight) => {
-    if (!win) return false;
-    if (win.isFullScreen()) win.setFullScreen(false);
-    if (on && !isMini) {
-      normalBounds = win.getBounds();
-      if (win.isMaximized()) win.unmaximize();
-      isMini = true;
-      win.setMinimumSize(300, 60);
-      win.setResizable(false);
-      win.setAlwaysOnTop(true, 'floating');
-      win.setBounds({ x: normalBounds.x, y: normalBounds.y, width: normalBounds.width, height: Math.round(miniHeight || 150) });
-    } else if (!on && isMini) {
-      isMini = false;
-      win.setAlwaysOnTop(false);
-      win.setResizable(true);
-      win.setMinimumSize(420, 480);
-      if (normalBounds) win.setBounds(normalBounds);
-    }
-    return isMini;
-  });
+  ipcMain.handle('win:fullscreen', (_e, on) => wm.setFullscreen(on));
+  ipcMain.handle('win:mini', (_e, on) => wm.setMini(on));
+  // ---- movable windows (windows.js). A bug here must never freeze SlopAMP behind an error box: log it.
+  const safe = (fn) => (...a) => { try { return fn(...a); } catch (e) { log('window manager error', e); return null; } };
+  ipcMain.on('wm:sync', safe((_e, list, reflow) => wm.sync(Array.isArray(list) ? list : [], !!reflow)));
+  ipcMain.on('wm:drag', safe((_e, phase, id, mode) => {
+    if (phase === 'start') wm.dragStart(String(id), ['resize', 'resize-x', 'resize-y'].includes(mode) ? mode : 'move');
+    else if (phase === 'move') wm.dragMove(); else wm.dragEnd();
+  }));
+  ipcMain.handle('wm:preset', safe((_e, name) => wm.preset(String(name))));
+  ipcMain.handle('wm:option', safe((_e, key, value) => wm.setOption(String(key), value)));
+  ipcMain.handle('wm:info', safe(() => wm.info()));
+  ipcMain.on('wm:popup', safe((_e, o) => { if (o && typeof o === 'object') wm.showPopup(o); }));
+  ipcMain.on('wm:popup-size', safe((_e, o) => { if (o && typeof o === 'object') wm.resizePopup(o); }));
+  ipcMain.on('wm:popup-hide', safe(() => wm.hidePopup()));
+  ipcMain.on('wm:dialog', safe((_e, o) => { if (o && typeof o === 'object') wm.showDialog(o); }));
+  ipcMain.on('wm:dialog-hide', safe(() => wm.hideDialog()));
+  ipcMain.on('wm:dialog-drag', safe((_e, phase) => wm.dialogDrag(String(phase))));
   // ---- auto-updates (see updater.js)
   ipcMain.handle('upd:get', () => updater.snapshot());
   ipcMain.handle('upd:check', () => updater.check(true));

@@ -4,26 +4,16 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' data: blob: https:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; font-src 'self' data:">
 <title>SlopAMP</title>
+<!-- theme.css: every colour, font and size · frame.css: window frames · style.css: the player itself -->
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="frame.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="app">
+<!-- The panels below are wrapped in window frames and spread over separate windows by winmgr.js. -->
 
   <!-- ============ 1. RETRO DECK ============ -->
   <section id="deck">
-    <div class="titlebar" id="titlebar">
-      <span class="logo-dot" title="SlopAMP"></span>
-      <span class="rule"></span>
-      <span class="brand">SLOPAMP</span>
-      <span class="rule"></span>
-      <div class="wbtns">
-        <button id="btnAbout" title="About / licenses">?</button>
-        <button id="btnMin" title="Minimize">&#x2013;</button>
-        <button id="btnMini" title="Mini player (M)">&#x25AD;</button>
-        <button id="btnClose" title="Close">&#x2715;</button>
-      </div>
-    </div>
-
     <div class="deck-body">
       <div class="lcd" id="lcd">
         <div class="lcd-top">
@@ -75,15 +65,12 @@
     </div>
   </section>
 
-  <!-- ============ 2. VIDEO PANE ============ -->
-  <!-- ============ EQUALIZER (between deck and video) ============ -->
+  <!-- update notice (shown under the player) -->
   <div id="updBar" class="hidden" role="status"></div>
 
-  <section id="eqPanel" class="hidden">
-    <div class="eq-title" id="eqTitle">
-      <span class="rule"></span><span class="eq-name">EQUALIZER</span><span class="eq-sum" id="eqSum"></span><span class="rule"></span>
-      <div class="wbtns"><button id="eqMinBtn" title="Minimize equalizer">&#x2013;</button><button id="eqCloseBtn" title="Close equalizer">&#x2715;</button></div>
-    </div>
+  <!-- ============ 2. EQUALIZER ============ -->
+
+  <section id="eqPanel">
     <div class="eq-body" id="eqBody">
       <div class="eq-top">
         <button class="eqbtn" id="eqOn" title="Turn the equalizer on/off"><i class="led"></i>ON</button>
@@ -96,11 +83,8 @@
     </div>
   </section>
 
+  <!-- ============ 3. VIDEO / VISUALIZER ============ -->
   <section id="screen">
-    <div id="visTitle" class="eq-title">
-      <span class="rule"></span><span class="eq-name">VISUALIZER</span><span class="eq-sum" id="visSum"></span><span class="rule"></span>
-      <div class="wbtns"><button id="visMinBtn" title="Minimize visualizer">&#x2013;</button><button id="visCloseBtn" title="Close visualizer">&#x2715;</button></div>
-    </div>
     <div id="stage">
       <video id="video" preload="auto"></video>
       <div id="ytWrap" class="layer"><div id="ytHost"></div></div>
@@ -166,9 +150,8 @@
     </div>
   </section>
 
-  <!-- ============ 3. PLAYLIST ============ -->
+  <!-- ============ 4. PLAYLIST ============ -->
   <section id="plist">
-    <div id="plResize" title="Drag to resize"></div>
     <div id="tabs"><div id="tabStrip"></div><button id="tabAdd" title="New playlist tab (Ctrl+T)">+</button></div>
     <ol id="list" tabindex="0"></ol>
     <div id="plbar">
@@ -201,6 +184,7 @@
   <div id="dlMenu" class="hidden"></div>
   <div id="eqPresets" class="hidden"></div>
   <div id="popMenu" class="hidden"></div>
+  <div id="wmMenu" class="hidden"></div>
   <div id="dlBar" class="hidden">
     <div class="dlb-row"><span class="dlb-text" id="dlbText"></span><button class="dlb-x" id="dlbClose" title="Cancel / close">&#x2715;</button></div>
     <div class="dlb-prog" id="dlbProg"><div class="dlb-fill" id="dlbFill"></div></div>
@@ -288,7 +272,6 @@
       <div class="dlg-btns"><button type="button" class="dim" id="updSkip">Skip this version</button><span class="spacer"></span><button value="later" id="updLater">Later</button><button type="button" class="go" id="updGo"></button></div>
     </form>
   </dialog>
-</div>
-<script src="app.js"></script>
+<script src="winmgr.js"></script>
 </body>
 </html>

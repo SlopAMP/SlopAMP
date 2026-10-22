@@ -1,0 +1,225 @@
+/* SlopAMP theme: every colour, font and size the windows use, in one place.
+   The player (style.css), the window frames (frame.css) and the canvas drawings (clock, spectrum,
+   EQ curve) all read these variables; nothing is hard-coded per window.
+
+   A skin (v1.4) overrides any of these. The names in the first three sections describe what the
+   colour is for; the palette at the bottom holds the remaining shades, named by family and
+   lightness (e.g. --base-34 is a grey at 34% lightness, --accent-27 a dark green).               */
+:root {
+  /* ---------- core colours ---------- */
+  --green: #3dff6e;           /* the glowing LCD green: text, LEDs, highlights */
+  --green-dim: #0c4a1c;
+  --green-mid: #1fbf4a;
+  --amber: #e8c24a;           /* position slider, warnings */
+  --red: #ff4040;
+  --black: #000;
+  --white: #fff;
+  --frame: #2b2e3a;           /* player body */
+  --frame-2: #353948;
+  --bevel-hi: #565c70;        /* 3D button / inset edges */
+  --bevel-lo: #111219;
+  --edge: #0b0c10;            /* dark outlines between parts */
+  --ink: #c9cdd8;             /* normal text */
+  --ink-muted: #9aa2b5;
+  --ink-dim: #8b93a7;
+  --ink-menu: #dfe2ea;
+  --ink-green: #c9ffd6;       /* text on green-tinted panels (toasts, notices, buttons) */
+  --ink-green-dim: #7fd99a;
+  --title-ink: #e9edf7;
+  --lcd: #000;                /* LCD backgrounds */
+  --pl-green: #33e85b;        /* playlist text */
+  --pl-sel: #1b2aa8;          /* selected playlist row / menu hover */
+  --line-green: #2c7a42;      /* green outlines (menus, dialogs, notices) */
+  --line-dim: #333a4a;
+  --btn-top: #4a4f62;         /* 3D buttons: gradient top/bottom and text */
+  --btn-bottom: #33374a;
+  --btn-ink: #d8dbe4;
+  --btn-green: #12301b;       /* green buttons */
+  --btn-green-hover: #1b4a29;
+  --menu-bg: #1f222c;
+  --dialog-bg: #14161d;
+  --notice-bg: #07130a;
+  --shadow: rgba(0,0,0,.6);
+  --vctl: #23252f;            /* video controls bar */
+  --vctl-ink: #c9cdd8;
+  --vctl-line: #3a3f50;
+  --seek: #2f7de1;
+
+  /* ---------- canvas drawings (app.js reads these) ---------- */
+  --lcd-on: var(--green);     /* clock digits */
+  --lcd-off: #0a2412;         /* unlit clock segments */
+  --lcd-glow: rgba(61,255,110,.7);
+  --state-play: var(--green);
+  --state-pause: var(--amber);
+  --state-stop: #c33;
+  --spectrum-low: #2fd85a;    /* the player's little spectrum */
+  --spectrum-mid: #a8ff3d;
+  --spectrum-high: var(--amber);
+  --spectrum-peak: #c9d0e0;
+  --spectrum-scope: var(--green);
+  --bars-bottom: rgba(47,216,90,.85);   /* BARS visualizer gradient */
+  --bars-top: rgba(168,255,61,.35);
+  --eq-curve-axis: #1d3a26;
+  --eq-curve-on: var(--green);
+  --eq-curve-off: #2a6e3a;
+  --eq-fill-up: linear-gradient(var(--amber), var(--green));     /* EQ slider fill, boost / cut */
+  --eq-fill-down: linear-gradient(var(--green), #1b6e2d);
+
+  /* ---------- window frames (frame.css) ---------- */
+  --frame-outer: #1b1d24;     /* behind everything */
+  --frame-bg: #1b1d24;
+  --frame-border: var(--edge);
+  --frame-border-w: 1px;
+  --tb-h: 18px;               /* title bar */
+  --tb-bg: linear-gradient(180deg, #3b3f50, #2d303d);
+  --tb-ink: var(--title-ink);
+  --tb-glow: rgba(61,255,110,.55);
+  --tb-rule: #7a8094;
+  --tb-rule-h: 7px;
+  --tb-letter: 3px;
+  --tb-brand-letter: 4px;
+  --tb-btn-w: 16px;
+  --tb-btn-h: 14px;
+  --close-hover: #a3303a;
+  --logo-hi: #b6ffc9;
+  --logo-lo: #0b6b25;
+  --grip: #7a8094;
+  --grip-size: 12px;
+  --edge-grab: 4px;           /* invisible strip on the right/bottom edges for resizing */
+  --snap: var(--green);       /* edge glow while windows snap together */
+  --snap-w: 2px;
+
+  /* ---------- fonts ---------- */
+  --font-ui: "Segoe UI", Tahoma, Arial, sans-serif;
+  --font-label: Arial, sans-serif;            /* small bold button labels */
+  --font-lcd: "Consolas", "Lucida Console", monospace;
+  --font-digits: Tahoma, Verdana, sans-serif;
+  --font-playlist: Arial, "Segoe UI", sans-serif;
+
+  /* ---------- font sizes ---------- */
+  --fs-xs: 9px;
+  --fs-s: 10px;
+  --fs-s2: 10.5px;
+  --fs-m: 11px;
+  --fs-base: 12px;
+  --fs-m2: 13px;
+  --fs-l: 14px;
+  --fs-playlist: 15px;
+  --fs-xl: 18px;
+  --fs-xxl: 20px;
+  --fs-title: 10px;           /* window titles */
+  --fs-brand: 11px;           /* "SLOPAMP" */
+
+  /* ---------- green glows (the LCD green with transparency) ---------- */
+  --black-a55: rgba(0,0,0,.55);
+  --black-a62: rgba(0,0,0,.62);
+  --black-a70: rgba(0,0,0,.7);
+  --black-a82: rgba(0,0,0,.82);
+  --green-a08: rgba(61,255,110,.08);
+  --green-a15: rgba(61,255,110,.15);
+  --green-a25: rgba(61,255,110,.25);
+  --green-a50: rgba(61,255,110,.5);
+  --green-a55: rgba(61,255,110,.55);
+  --green-a60: rgba(61,255,110,.6);
+  --green-a70: rgba(61,255,110,.7);
+  --green-a95: rgba(61,255,110,.95);
+  --white-a40: rgba(255,255,255,.4);
+
+  /* ---------- palette: the other shades ---------- */
+  /* neutrals (greys, near-blacks) */
+  --base-04: #031006;
+  --base-05-a60: rgba(0,25,8,.6);
+  --base-05-a75: rgba(7,19,10,.75);
+  --base-05-a92: rgba(7,19,10,.92);
+  --base-05-a96: rgba(7,19,10,.96);
+  --base-06: #0d0e12;
+  --base-06b: #07160b;
+  --base-06c: #0c1410;
+  --base-07: #111;
+  --base-07b: #0e0f14;
+  --base-08: #0a1d10;
+  --base-09: #14151b;
+  --base-09b: #12141a;
+  --base-10-a85: rgba(20,22,29,.85);
+  --base-12: #191b22;
+  --base-13: #222;
+  --base-13b: #1d1f27;
+  --base-13c: #1a1d26;
+  --base-14: #1e2029;
+  --base-14b: #1c1f29;
+  --base-17: #253027;
+  --base-17b: #262833;
+  --base-18: #262a36;
+  --base-20: #2a2d3a;
+  --base-20b: #333;
+  --base-20c: #2b2e3b;
+  --base-20d: #2a3a30;
+  --base-21: #2b2f3e;
+  --base-22: #30333f;
+  --base-22b: #2f3240;
+  --base-24: #343848;
+  --base-34b: #4b5164;
+  --base-39: #555b70;
+  --base-42: #5f6678;
+  --base-47: #6b7285;
+  --base-60: #8e93a3;
+  --base-70: #a8adbb;
+  --base-80: #ccc;
+  --base-81: #c7cbd6;
+  --base-81b: #c5cad6;
+  --base-86: #d5d8e0;
+  --base-87b: #d9dce5;
+  --base-96: #eaffef;
+  /* greens */
+  --accent-13-a92: rgba(18,48,27,.92);
+  --accent-16: #1a3a22;
+  --accent-18: #134a25;
+  --accent-20b: #1d4a2a;
+  --accent-23: #0b6b25;
+  --accent-27: #1b6e2d;
+  --accent-27b: #1f6b37;
+  --accent-30: #1d7a35;
+  --accent-36: #3d7a50;
+  --accent-44: #2db34a;
+  --accent-51: #4fb36d;
+  --accent-55-a35: rgba(51,232,91,.35);
+  --accent-62: #7be35a;
+  --accent-73: #9fd3ad;
+  --accent-73b: #8de6a2;
+  --accent-79: #b9d9c1;
+  --accent-92: #d8ffe2;
+  --accent-94: #dfffe7;
+  /* ambers */
+  --warn-10: #2a2208;
+  --warn-13: #3a2e08;
+  --warn-14: #3a300c;
+  --warn-30: #7a6420;
+  --warn-35: #9b7a1a;
+  --warn-36: #8a7230;
+  --warn-54: #b9a35a;
+  --warn-59: #e3c04a;
+  --warn-60-a60: rgba(232,194,74,.6);
+  --warn-78: #f6e39a;
+  --warn-82: #f3e3b0;
+  /* reds */
+  --danger-11: #2a0c0e;
+  --danger-15: #3a1414;
+  --danger-15b: #3d1216;
+  --danger-20: #4d1a1a;
+  --danger-36: #8a3030;
+  --danger-36b: #8a2c33;
+  --danger-63-a60: rgba(255,64,64,.6);
+  --danger-71: #ff6b6b;
+  --danger-74: #ff7a7a;
+  --danger-77: #ff8a8a;
+  --danger-85: #ffb3b3;
+  --danger-92: #ffd5d5;
+  /* blues */
+  --info-27: #1d2a6e;
+  --info-42: #3a6d9a;
+  --info-46: #6a4f9a;
+  --info-75: #7fe0ff;
+  --info-75b: #7fc4ff;
+  /* violets */
+  --violet-83: #c9a7ff;
+}
