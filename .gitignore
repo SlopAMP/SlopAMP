@@ -12,3 +12,6 @@ src/renderer/licenses.html
 Run SlopAMP.bat
 *.part0*
 SlopAMP Data/
+
+# private brainstorming (never publish)
+docs/IDEAS-AND-BUGS.md
