@@ -128,9 +128,10 @@ function createWindow() {
     saveLayout: (layout) => setMainState({ layout }),
     legacyWindow: state.window,
     legacyPlHeight: state.plHeight,
+    version: app.getVersion(),
     log
   });
-  // backgroundColor = --frame-outer in theme.css (only seen for a moment before the page paints)
+  // backgroundColor = --frame-outer in skins/classic.css (only seen for a moment before the page paints)
   const base = { backgroundColor: '#1b1d24', title: APP_NAME, icon: path.join(__dirname, 'renderer', 'icon.png'), webPreferences: webPrefs() };
   win = new BrowserWindow(wm.mainOptions({ ...base, frame: false, show: false }));
   wm.attach('main', win);

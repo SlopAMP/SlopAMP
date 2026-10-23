@@ -1,10 +1,12 @@
-/* SlopAMP theme: every colour, font and size the windows use, in one place.
-   The player (style.css), the window frames (frame.css) and the canvas drawings (clock, spectrum,
-   EQ curve) all read these variables; nothing is hard-coded per window.
+/* SlopAMP skin: "SlopAMP Classic" (the default look) — every colour, glow, border, background,
+   font and size the windows use, in one place. The player (style.css), the window frames (frame.css)
+   and the canvas drawings (clock, spectrum, EQ curve, BARS) all read these variables; nothing is
+   hard-coded per window.
 
-   A skin (v1.4) overrides any of these. The names in the first three sections describe what the
-   colour is for; the palette at the bottom holds the remaining shades, named by family and
-   lightness (e.g. --base-34 is a grey at 34% lightness, --accent-27 a dark green).               */
+   Every other skin in this folder starts from this file and overrides what it changes (skins.js has
+   the list). The names in the first sections describe what the value is for; the palette at the
+   bottom holds the remaining shades, named by family and lightness (e.g. --base-34 is a grey at 34%
+   lightness, --accent-27 a dark green).                                                           */
 :root {
   /* ---------- core colours ---------- */
   --green: #3dff6e;           /* the glowing LCD green: text, LEDs, highlights */
@@ -44,6 +46,31 @@
   --vctl-ink: #c9cdd8;
   --vctl-line: #3a3f50;
   --seek: #2f7de1;
+
+  /* ---------- surfaces (backgrounds of the big areas) ---------- */
+  --deck-bg: linear-gradient(180deg, var(--frame-2), var(--frame) 40%, var(--vctl));   /* the player */
+  --eq-bg: linear-gradient(180deg, var(--base-22), var(--base-17b) 60%, var(--base-14));
+  --vctl-bg: linear-gradient(180deg, var(--base-22b), var(--vctl) 60%, var(--base-13b));  /* video controls */
+  --plbar-bg: linear-gradient(var(--frame-2), var(--vctl));                                 /* playlist buttons */
+  --plbar2-bg: linear-gradient(var(--base-20c), var(--base-14));
+  --tabs-bg: var(--edge);                                                                  /* playlist tabs strip */
+  --list-bg: var(--black);                                                                 /* playlist */
+  --screen-bg: #000;                                                                       /* behind the video */
+  --list-cur: var(--white);                                                                /* the playing item */
+  --badge: var(--green);                                                                   /* the lightning bolt */
+  --badge-glow: var(--green-a60);
+  --badge-glow-hover: var(--green-a95);
+  --lit-ink: var(--green);                                                                 /* lit labels on the panels (FILE, stereo, EQ dB scale) */
+  --btn-on-ink: var(--green);                                                              /* text of switched-on buttons (EQ, VIS, VID, PL, ON) */
+  --tab-count-on: var(--line-green);                                                       /* item count in the open playlist tab */
+  --menu-accent: var(--green);                                                             /* highlighted text in menus and dialogs (titles, ticks) */
+  --menu-hover-ink: var(--ink-menu);                                                       /* menu item text under the mouse */
+  --hint-ink: var(--base-42);                                                              /* small hints in dialogs */
+  --ind-off: var(--base-34b);                                                               /* unlit indicators (mono / stereo) */
+  --list-sel-ink: var(--pl-green);                                                         /* selected playlist rows */
+  --list-cur-sel: var(--list-cur);
+  --ver-ink: var(--tb-ink);                                                                /* the "v1.4.0" label */
+  --ver-opacity: .62;
 
   /* ---------- canvas drawings (app.js reads these) ---------- */
   --lcd-on: var(--green);     /* clock digits */

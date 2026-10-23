@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0 — 2026-10-22
+
+- **Skins.** Ten built-in skins that restyle all four windows (player, equalizer, video/visualizer and playlist), menus and dialogs:
+  - five colours of the standard look: **SlopAMP Classic** (green, the default), **Red Alert**, **Ice Blue**, **Purple Haze** and **Amber**;
+  - five styles with the same window shapes: **Chrome** (light brushed metal), **Walnut Hi-Fi** (wood cabinet, warm orange displays), **Synthwave** (purple, pink and cyan), **Terminal** (flat black, phosphor green, monospace, faint scan lines) and **Pocket LCD** (four shades of olive green).
+- New **SKINS** button on the player (between REPEAT and the lightning bolt), also in the Layout menu as **Skins…**. The picker shows a preview of every skin; clicking one switches instantly, no restart.
+- Your skin is remembered between launches. The lightning bolt and Reset layout only move the windows and never change the skin.
+- Every colour, glow, border and background now comes from the skin file (`src/renderer/skins/`); the clock digits, spectrum, EQ curve and BARS visualizer follow the skin too. All ten skins were checked for readable text in every window, menu and dialog.
+- The player shows its version number ("v1.4.0") next to the green dot, read from the app itself so it's always current.
+
 ## 1.3.0 — 2026-10-22
 
 - **Movable windows.** The player, equalizer, video/visualizer and playlist are now four separate windows. Drag any of them by its title bar; they snap to screen edges and to each other (edge to edge, never overlapping), with a green glow on the edges that snap.

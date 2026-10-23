@@ -32,6 +32,14 @@ WINDOWS
     (SlopAMP also does this by itself when a monitor is unplugged).
   * Window positions and sizes are remembered between launches.
 
+SKINS
+  * Click SKINS on the player (or Skins... in the Layout menu) to change how
+    SlopAMP looks. Ten skins: SlopAMP Classic (green, the default), Red Alert,
+    Ice Blue, Purple Haze, Amber, Chrome, Walnut Hi-Fi, Synthwave, Terminal
+    and Pocket LCD. Click one and it changes right away.
+  * Your skin is remembered. The lightning bolt and Reset layout only move
+    the windows back; they never change your skin.
+
 ADDING THINGS
   * Drag files or folders onto any SlopAMP window (or onto SlopAMP.exe).
   * Paste a YouTube link anywhere with Ctrl+V, or use +URL.

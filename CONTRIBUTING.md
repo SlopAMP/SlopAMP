@@ -31,7 +31,7 @@ Quick start on Windows:
 A few house rules:
 
 - **Windows:** the player, equalizer, video and playlist each live in their own window. In `src/renderer/app.js`, find elements with `$` / `$$` and listen with `WM.onDocs` / `WM.onWins` instead of using `document` directly (BUILDING.md explains why).
-- **Look and feel:** colours, fonts and sizes belong in `src/renderer/theme.css` as CSS variables. Don't hard-code them in `style.css`, `frame.css` or the JavaScript.
+- **Look and feel:** colours, fonts and sizes belong in the skin files as CSS variables: `src/renderer/skins/classic.css` defines them all, and `build/skins/make_skins.py` writes the other skins from it. Don't hard-code them in `style.css`, `frame.css` or the JavaScript, and check a new UI piece in a light skin (Chrome) and a dark one.
 - **Security:** keep `contextIsolation`, `sandbox` and the Content-Security-Policy as they are. Don't add `eval`, remote scripts (other than YouTube's player API) or new network calls without explaining why in the pull request.
 - **Dependencies:** SlopAMP has no npm dependencies at runtime. Please talk to us in an issue before adding one.
 - Keep pull requests focused: one fix or feature each.

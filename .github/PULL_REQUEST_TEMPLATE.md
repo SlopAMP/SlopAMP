@@ -22,6 +22,6 @@
 
 - [ ] One fix or feature in this pull request
 - [ ] Local files, a YouTube link, the equalizer, the visualizer and moving/snapping the windows still work
-- [ ] Colours, fonts and sizes go through `src/renderer/theme.css`, not hard-coded values
+- [ ] Colours, fonts and sizes go through the skin variables (`src/renderer/skins/classic.css`), not hard-coded values, and it looks right in a few skins
 - [ ] No new runtime dependencies, remote scripts or network calls (or explained above)
 - [ ] I agree that my contribution is released under the MIT License

@@ -1,7 +1,7 @@
 /* SlopAMP window frames: the title bar, border and resize grip around each window, plus the two
    helper windows that hold popup menus and dialogs.
    The frame is built by winmgr.js and is the same for every window, so a skin restyles all the
-   windows here (and in theme.css) without touching the player, equalizer or playlist code.
+   windows here (and in the skin files, skins/*.css) without touching the player, equalizer or playlist code.
 
    <div class="win [shade] [snap-left|right|top|bottom]" data-win="main|eq|video|playlist">
      <header class="frame-tb">[logo] rule  NAME  [summary]  rule  [buttons]</header>
@@ -27,6 +27,7 @@ body.fit .win, .win.shade { height: auto; }
 .frame-tb .rule { flex: 1; min-width: 8px; height: var(--tb-rule-h); background: repeating-linear-gradient(180deg, var(--tb-rule) 0 1px, transparent 1px 3px); opacity: .7; }
 .frame-name { color: var(--tb-ink); font: bold var(--fs-title)/1 var(--font-ui); letter-spacing: var(--tb-letter); text-shadow: 0 0 6px var(--tb-glow); white-space: nowrap; }
 .win[data-win="main"] .frame-name { font-size: var(--fs-brand); letter-spacing: var(--tb-brand-letter); }
+.frame-ver { flex: none; color: var(--ver-ink); opacity: var(--ver-opacity); font: var(--fs-xs)/1 var(--font-lcd); letter-spacing: .5px; margin-left: -2px; }
 .frame-sum { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--green); font: bold var(--fs-s)/1 var(--font-lcd); text-shadow: 0 0 4px var(--green-a50); }
 .win.shade .frame-sum { display: inline; }
 .frame-btns { display: flex; gap: 3px; }
@@ -67,6 +68,7 @@ body.win-video.fs .frame-tb, body.win-video.fs .frame-grip { display: none; }
 body.host-popup { background: var(--menu-bg); }
 body.host-popup > * { position: fixed !important; left: 0 !important; top: 0 !important; box-shadow: none !important; max-height: none; }
 body.host-popup #ctx, body.host-popup #eqPresets, body.host-popup #wmMenu { width: max-content; max-width: 420px; }
+body.host-popup #skinMenu { width: max-content; }
 body.host-popup #popMenu { width: max-content; max-width: 340px; }
 body.host-popup #popMenu.wide { width: 360px; max-width: none; max-height: 560px; }
 body.host-popup #dlMenu { max-width: none; }

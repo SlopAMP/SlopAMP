@@ -9,7 +9,7 @@
  *   4. handles dragging, snapping highlights, the Layout menu and Reset layout,
  *   5. then starts the player (app.js).
  *
- * Skins (v1.4) only need to restyle the frames (frame.css) and the colours/fonts/sizes (theme.css):
+ * Skins only restyle the frames (frame.css) and the colours/fonts/sizes (skins/*.css, see skins.js):
  * the player and playlist code never builds or touches a frame. app.js talks to this file through
  * window.WM: WM.$ / WM.$$ find elements in any window, WM.setPanels() shows/hides/shades windows.
  */
@@ -36,7 +36,7 @@
     win.className = 'win'; win.dataset.win = id;
     const tb = document.createElement('header');
     tb.className = 'frame-tb'; tb.id = f.tbId;
-    tb.innerHTML = `${f.logo ? '<span class="logo-dot" title="SlopAMP"></span>' : ''}<span class="rule"></span><span class="frame-name"></span>${f.sumId ? `<span class="frame-sum" id="${f.sumId}"></span>` : ''}<span class="rule"></span><div class="frame-btns"></div>`;
+    tb.innerHTML = `${f.logo ? '<span class="logo-dot" title="SlopAMP"></span><span class="frame-ver" id="verLabel"></span>' : ''}<span class="rule"></span><span class="frame-name"></span>${f.sumId ? `<span class="frame-sum" id="${f.sumId}"></span>` : ''}<span class="rule"></span><div class="frame-btns"></div>`;
     tb.querySelector('.frame-name').textContent = f.title;
     for (const [bid, label, title] of f.buttons) {
       const b = document.createElement('button');
@@ -100,7 +100,7 @@
     return document;
   };
   WM.setTitle = (id, text) => { const f = WM.frame(id); if (f) f.querySelector('.frame-name').textContent = text; };
-  // Read a colour/size from theme.css (for canvas drawing). Cached until the theme changes.
+  // Read a colour/size from the skin (for canvas drawing). Cached until the skin changes.
   const tokens = new Map();
   WM.token = (name) => {
     if (!tokens.has(name)) tokens.set(name, getComputedStyle(document.documentElement).getPropertyValue(name).trim());
@@ -203,6 +203,8 @@
     add(`dm-item${WM.info.onTop ? ' cur' : ''}`, 'Keep windows on top', async () => { WM.info = await P.wmOption('onTop', !WM.info.onTop); });
     m.appendChild(document.createElement('hr'));
     add('dm-item', 'Reset layout<small>Ctrl+Alt+R</small>', () => WM.reset());
+    m.appendChild(document.createElement('hr'));
+    add('dm-item', 'Skins\u2026', () => { if (WM.skins) WM.skins.openPicker(pos); });
     m.classList.remove('hidden');
     WM.popup(m, pos);
   }
@@ -233,7 +235,7 @@
   WM.hidePopups = hideAllPopups;
   function hostPopups(doc) {
     popDoc = doc;
-    for (const sel of ['#ctx', '#dlMenu', '#popMenu', '#eqPresets', '#wmMenu']) { const el = document.querySelector(sel); if (el) doc.body.appendChild(el); }
+    for (const sel of ['#ctx', '#dlMenu', '#popMenu', '#eqPresets', '#wmMenu', '#skinMenu']) { const el = document.querySelector(sel); if (el) doc.body.appendChild(el); }
     let shown = false;
     const check = () => {
       const vis = [...doc.body.children].find(m => !m.classList.contains('hidden'));
@@ -343,8 +345,11 @@
     // a click anywhere else in SlopAMP closes the Layout menu
     WM.onDocs('mousedown', (e) => { const m = WM.$('#wmMenu'); if (m && !m.contains(e.target) && !e.target.closest('#btnLayout')) m.classList.add('hidden'); });
     try { WM.info = await P.wmInfo(); } catch (_) {}
-    const s = document.createElement('script');
-    s.src = 'app.js';
-    document.body.appendChild(s);
+    const ver = WM.$('#verLabel');
+    if (ver && WM.info.version) { ver.textContent = `v${WM.info.version}`; ver.title = `SlopAMP ${WM.info.version}`; }
+    // skins.js (put the saved skin on before anything shows), then the player itself
+    for (const src of ['skins.js', 'app.js']) {
+      await new Promise((res) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = res; document.body.appendChild(s); });
+    }
   })();
 })();

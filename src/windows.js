@@ -11,7 +11,7 @@
 //   { version: 1, skin: 'default', preset: 'classic', snap: true, onTop: false,
 //     windows: { main: {x,y,w,h}, eq: {...}, video: {...}, playlist: {...} },
 //     heights: { main: 171, ... } }      // on-screen heights (a rolled-up window is just its title bar)
-// `skin` is reserved for v1.4 (skins); nothing reads it yet.
+// `skin` is the chosen skin's id (src/renderer/skins.js); "Reset layout" and the lightning bolt never change it.
 
 const { BrowserWindow, screen } = require('electron');
 
@@ -28,8 +28,9 @@ const r4 = (b) => ({ x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w),
 const overlap = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0);
 
 class WindowManager {
-  constructor({ getLayout, saveLayout, log, legacyWindow, legacyPlHeight }) {
+  constructor({ getLayout, saveLayout, log, legacyWindow, legacyPlHeight, version }) {
     this.log = log || (() => {});
+    this.version = version || '';
     this.saveLayout = saveLayout;
     this.wins = new Map();          // id -> BrowserWindow (panels and hosts)
     this.visible = { main: true, eq: false, video: false, playlist: false };
@@ -49,7 +50,7 @@ class WindowManager {
     const ok = (b) => b && [b.x, b.y, b.w, b.h].every(Number.isFinite);
     const out = { version: 1, skin: 'default', preset: 'classic', snap: true, onTop: false, windows: {}, heights: {} };
     if (l && typeof l === 'object') {
-      if (typeof l.skin === 'string' && l.skin) out.skin = l.skin.slice(0, 100);
+      if (typeof l.skin === 'string' && /^[a-z0-9-]{1,40}$/.test(l.skin)) out.skin = l.skin;
       if (PRESETS.includes(l.preset) || l.preset === 'custom') out.preset = l.preset;
       out.snap = l.snap !== false; out.onTop = !!l.onTop;
       for (const id of PANELS) if (l.windows && ok(l.windows[id])) out.windows[id] = r4(l.windows[id]);
@@ -507,6 +508,7 @@ class WindowManager {
   }
   setOption(key, value) {
     if (key === 'snap') this.layout.snap = !!value;
+    else if (key === 'skin') { if (typeof value === 'string' && /^[a-z0-9-]{1,40}$/.test(value)) this.layout.skin = value; }
     else if (key === 'onTop') {
       this.layout.onTop = !!value;
       for (const id of PANELS) { const w = this.wins.get(id); if (w && !w.isDestroyed()) w.setAlwaysOnTop(this.layout.onTop || (id === 'main' && this.mini)); }
@@ -520,7 +522,7 @@ class WindowManager {
     if (m && !m.isDestroyed()) m.setAlwaysOnTop(this.mini || this.layout.onTop, this.mini ? 'floating' : 'normal');
     return this.mini;
   }
-  info() { return { preset: this.layout.preset, snap: this.layout.snap, onTop: this.layout.onTop, skin: this.layout.skin }; }
+  info() { return { preset: this.layout.preset, snap: this.layout.snap, onTop: this.layout.onTop, skin: this.layout.skin, version: this.version }; }
 
   // ---------- popup menus and dialogs ----------
   // x, y (and flipY: the anchor's top edge) are in the coordinates of window `from`.

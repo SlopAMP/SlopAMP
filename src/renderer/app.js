@@ -4,7 +4,7 @@ const P = window.phosphor;
 // The player's panels are spread over several windows (winmgr.js): $ / $$ search all of them.
 const $ = WM.$, $$ = WM.$$;
 const VW = () => WM.wins.video || window;          // the video/visualizer window
-const T = (name) => WM.token(name);                // colours from theme.css, for canvas drawing
+const T = (name) => WM.token(name);                // colours from the skin (skins/*.css), for canvas drawing
 
 // ------------------------------------------------------------------ state
 const S = {
