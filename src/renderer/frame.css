@@ -27,7 +27,7 @@ body.fit .win, .win.shade { height: auto; }
 .frame-tb .rule { flex: 1; min-width: 8px; height: var(--tb-rule-h); background: repeating-linear-gradient(180deg, var(--tb-rule) 0 1px, transparent 1px 3px); opacity: .7; }
 .frame-name { color: var(--tb-ink); font: bold var(--fs-title)/1 var(--font-ui); letter-spacing: var(--tb-letter); text-shadow: 0 0 6px var(--tb-glow); white-space: nowrap; }
 .win[data-win="main"] .frame-name { font-size: var(--fs-brand); letter-spacing: var(--tb-brand-letter); }
-.frame-ver { flex: none; color: var(--ver-ink); opacity: var(--ver-opacity); font: var(--fs-xs)/1 var(--font-lcd); letter-spacing: .5px; margin-left: -2px; }
+.frame-ver { flex: none; color: var(--ver-ink); opacity: var(--ver-opacity); font: var(--fs-ver)/1 var(--font-lcd); letter-spacing: .5px; margin-left: -2px; }
 .frame-sum { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--green); font: bold var(--fs-s)/1 var(--font-lcd); text-shadow: 0 0 4px var(--green-a50); }
 .win.shade .frame-sum { display: inline; }
 .frame-btns { display: flex; gap: 3px; }

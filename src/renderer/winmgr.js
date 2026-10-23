@@ -218,7 +218,8 @@
 
   // ---------------------------------------------------------------- popup menus (own window)
   // The menus live in a small always-on-top window so they can stick out of the window they open from.
-  // pos: { doc, x, y, flipY } in client coordinates of `doc` (flipY = top of the button, to open above it).
+  // pos: { doc, x, y, flipY } in client coordinates of `doc` (flipY = top of the button, to open above it);
+  // pos.remember = 'name': a movable popup that reopens where it was last dragged to (the skin picker).
   let popDoc = null;
   WM.popup = (el, pos = {}) => {
     const doc = pos.doc || WM.activeDoc || document;
@@ -229,7 +230,7 @@
     el.classList.remove('hidden');
     el.style.left = '0px'; el.style.top = '0px';
     const r = el.getBoundingClientRect();
-    P.wmPopup({ from, x: pos.x || 0, y: pos.y || 0, w: r.width, h: r.height, flipY: pos.flipY, above: !!pos.above });
+    P.wmPopup({ from, x: pos.x || 0, y: pos.y || 0, w: r.width, h: r.height, flipY: pos.flipY, above: !!pos.above, remember: pos.remember });
   };
   function hideAllPopups() { if (popDoc) for (const m of popDoc.body.children) m.classList.add('hidden'); }
   WM.hidePopups = hideAllPopups;

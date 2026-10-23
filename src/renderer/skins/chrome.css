@@ -145,6 +145,10 @@
   --menu-hover-ink: #ffffff;
   --hint-ink: #596173;
   --list-sel-ink: #ffffff;
+  --field-bg: #ffffff;
+  --field-ink: #1f2633;
+  --field-line: #8a919e;
+  --color-scheme: light;
 }
 
 /* labels and icons that sit on the light metal */

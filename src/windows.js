@@ -10,7 +10,8 @@
 // Saved layout (state.layout):
 //   { version: 1, skin: 'default', preset: 'classic', snap: true, onTop: false,
 //     windows: { main: {x,y,w,h}, eq: {...}, video: {...}, playlist: {...} },
-//     heights: { main: 171, ... } }      // on-screen heights (a rolled-up window is just its title bar)
+//     heights: { main: 171, ... },       // on-screen heights (a rolled-up window is just its title bar)
+//     panels: { skins: {x,y} } }          // where the skin picker was dragged to
 // `skin` is the chosen skin's id (src/renderer/skins.js); "Reset layout" and the lightning bolt never change it.
 
 const { BrowserWindow, screen } = require('electron');
@@ -48,7 +49,7 @@ class WindowManager {
   // ---------- layout model ----------
   normalize(l, legacy, legacyPl) {
     const ok = (b) => b && [b.x, b.y, b.w, b.h].every(Number.isFinite);
-    const out = { version: 1, skin: 'default', preset: 'classic', snap: true, onTop: false, windows: {}, heights: {} };
+    const out = { version: 1, skin: 'default', preset: 'classic', snap: true, onTop: false, windows: {}, heights: {}, panels: {} };
     if (l && typeof l === 'object') {
       if (typeof l.skin === 'string' && /^[a-z0-9-]{1,40}$/.test(l.skin)) out.skin = l.skin;
       if (PRESETS.includes(l.preset) || l.preset === 'custom') out.preset = l.preset;
@@ -56,6 +57,8 @@ class WindowManager {
       for (const id of PANELS) if (l.windows && ok(l.windows[id])) out.windows[id] = r4(l.windows[id]);
       // heights the windows really had (rolled-up windows are shorter than windows[id].h)
       if (l.heights && typeof l.heights === 'object') for (const id of PANELS) if (Number.isFinite(l.heights[id])) out.heights[id] = Math.round(l.heights[id]);
+      // where movable popups (the skin picker) were left: { skins: {x, y} }
+      if (l.panels && typeof l.panels === 'object') for (const [k, v] of Object.entries(l.panels)) if (/^[a-z]{1,20}$/.test(k) && v && Number.isFinite(v.x) && Number.isFinite(v.y)) out.panels[k] = { x: Math.round(v.x), y: Math.round(v.y) };
     }
     if (PANELS.every(id => out.windows[id])) {
       for (const id of PANELS) { const b = out.windows[id]; b.w = Math.max(MIN[id][0], b.w); b.h = Math.max(MIN[id][1], b.h); }
@@ -526,28 +529,64 @@ class WindowManager {
 
   // ---------- popup menus and dialogs ----------
   // x, y (and flipY: the anchor's top edge) are in the coordinates of window `from`.
-  showPopup({ from, x, y, w, h, flipY, above }) {
+  // `remember`: a movable popup (the skin picker) that reopens where it was last dragged to.
+  showPopup({ from, x, y, w, h, flipY, above, remember }) {
     const pop = this.wins.get('popup'), src = this.wins.get(PANELS.includes(from) || HOSTS.includes(from) ? from : 'main');
     if (!pop || !src) return;
     const cb = src.getContentBounds();
     let sx = Math.round(cb.x + x), sy = Math.round(cb.y + y);
     w = Math.max(40, Math.ceil(w)); h = Math.max(20, Math.ceil(h));
-    const disp = screen.getDisplayNearestPoint({ x: sx, y: sy });
-    const a = src.isFullScreen() ? disp.bounds : disp.workArea;
-    if (Number.isFinite(flipY) && (above || sy + h > a.y + a.height - 4)) sy = Math.round(cb.y + flipY - h - 3);
-    sx = Math.max(a.x + 4, Math.min(sx, a.x + a.width - w - 4));
-    sy = Math.max(a.y + 4, Math.min(sy, a.y + a.height - h - 4));
-    pop.setBounds({ x: sx, y: sy, width: w, height: h });
+    this.popupRemember = typeof remember === 'string' && /^[a-z]{1,20}$/.test(remember) ? remember : null;
+    const saved = this.popupRemember && this.layout.panels && this.layout.panels[this.popupRemember];
+    if (saved) {
+      const r = this.onScreenRect({ x: saved.x, y: saved.y, width: w, height: h });
+      pop.setBounds({ ...r, width: w, height: h });
+    } else {
+      const disp = screen.getDisplayNearestPoint({ x: sx, y: sy });
+      const a = src.isFullScreen() ? disp.bounds : disp.workArea;
+      if (Number.isFinite(flipY) && (above || sy + h > a.y + a.height - 4)) sy = Math.round(cb.y + flipY - h - 3);
+      sx = Math.max(a.x + 4, Math.min(sx, a.x + a.width - w - 4));
+      sy = Math.max(a.y + 4, Math.min(sy, a.y + a.height - h - 4));
+      pop.setBounds({ x: sx, y: sy, width: w, height: h });
+    }
     if (!pop.isVisible()) { pop.setAlwaysOnTop(true, 'pop-up-menu'); pop.show(); }
     pop.focus();
   }
   resizePopup({ w, h }) {
     const pop = this.wins.get('popup'); if (!pop || !pop.isVisible()) return;
     const b = pop.getBounds();
-    const a = screen.getDisplayMatching(b).workArea;
     w = Math.ceil(w); h = Math.ceil(h);
-    const y = Math.max(a.y + 4, Math.min(b.y, a.y + a.height - h - 4));
-    pop.setBounds({ x: b.x, y, width: w, height: h });
+    pop.setBounds(this.onScreenRect({ x: b.x, y: b.y, width: w, height: h }));
+  }
+  // A rectangle moved fully onto the screen it's (mostly) on.
+  onScreenRect(r) {
+    const a = screen.getDisplayMatching(r).workArea;
+    const x = Math.max(a.x, Math.min(r.x, a.x + a.width - r.width));
+    const y = Math.max(a.y, Math.min(r.y, a.y + a.height - r.height));
+    return { x: Math.round(x), y: Math.round(y), width: r.width, height: r.height };
+  }
+  // Drag the popup window by the cursor (the skin picker's title); it's kept on screen and remembered.
+  popupDrag(phase) {
+    const pop = this.wins.get('popup'); if (!pop || pop.isDestroyed()) return;
+    if (phase === 'start') {
+      this.popDrag = { cur: screen.getCursorScreenPoint(), b: pop.getBounds() };
+      clearInterval(this.popTimer); clearTimeout(this.popKill);
+      this.popTimer = setInterval(() => { try { this.popupDrag('move'); } catch (e) { this.log('popup drag failed', e); this.popupDrag('end'); } }, 15);
+      this.popKill = setTimeout(() => this.popupDrag('end'), 120000);
+      return;
+    }
+    if (phase === 'end') {
+      clearInterval(this.popTimer); clearTimeout(this.popKill);
+      if (!this.popDrag) return;
+      this.popDrag = null;
+      const r = this.onScreenRect(pop.getBounds());
+      pop.setBounds(r);
+      if (this.popupRemember) { this.layout.panels = { ...(this.layout.panels || {}), [this.popupRemember]: { x: r.x, y: r.y } }; this.persist(); }
+      return;
+    }
+    const d = this.popDrag; if (!d) return;
+    const c = screen.getCursorScreenPoint();
+    pop.setBounds({ ...d.b, x: d.b.x + c.x - d.cur.x, y: d.b.y + c.y - d.cur.y });
   }
   hidePopup() { const pop = this.wins.get('popup'); if (pop && pop.isVisible()) pop.hide(); }
   // Dialogs open centred over the player's screen area.

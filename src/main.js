@@ -621,6 +621,7 @@ function registerIpc() {
   ipcMain.on('wm:popup', safe((_e, o) => { if (o && typeof o === 'object') wm.showPopup(o); }));
   ipcMain.on('wm:popup-size', safe((_e, o) => { if (o && typeof o === 'object') wm.resizePopup(o); }));
   ipcMain.on('wm:popup-hide', safe(() => wm.hidePopup()));
+  ipcMain.on('wm:popup-drag', safe((_e, phase) => wm.popupDrag(String(phase))));
   ipcMain.on('wm:dialog', safe((_e, o) => { if (o && typeof o === 'object') wm.showDialog(o); }));
   ipcMain.on('wm:dialog-hide', safe(() => wm.hideDialog()));
   ipcMain.on('wm:dialog-drag', safe((_e, phase) => wm.dialogDrag(String(phase))));

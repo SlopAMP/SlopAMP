@@ -470,16 +470,21 @@ body.mini #updBar { display: none; }
 .upd-head button:hover:not(:disabled) { background: var(--btn-green-hover); }
 .upd-head button:disabled { opacity: .6; cursor: default; }
 .upd-mode { display: flex; align-items: center; gap: 8px; color: var(--base-81b); flex-wrap: wrap; }
-.upd-mode select { background: var(--black); color: var(--ink-green); border: 1px solid var(--line-dim); padding: 3px 6px; font: inherit; }
+.upd-mode select { background: var(--field-bg); color: var(--field-ink); border: 1px solid var(--field-line); padding: 3px 6px; font: inherit; color-scheme: var(--color-scheme); }
+/* the open list of a dropdown: Windows draws it with the options' own colours */
+select option { background: var(--field-bg); color: var(--field-ink); }
+select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink); }
 .upd-hint { color: var(--hint-ink); font-size: var(--fs-m); }
 
 /* ---- SKINS button and the skin picker (skins.js) */
 .transport .tog.wide { display: inline-flex; align-items: center; white-space: nowrap; }
 .transport { gap: 5px; }
 #skinMenu { position: fixed; z-index: 76; background: var(--menu-bg); border: 1px solid var(--line-green); box-shadow: 0 4px 16px var(--shadow); padding: 8px 8px 6px; color: var(--ink-menu); font: var(--fs-base) var(--font-ui); }
-#skinMenu .sk-head { display: flex; align-items: baseline; gap: 8px; margin: 0 2px 4px; color: var(--menu-accent); font: bold var(--fs-s) var(--font-ui); letter-spacing: 3px; }
+#skinMenu .sk-head { display: flex; align-items: center; gap: 8px; margin: -2px 0 4px 2px; cursor: move; touch-action: none; color: var(--menu-accent); font: bold var(--fs-s) var(--font-ui); letter-spacing: 3px; }
 #skinMenu .sk-head span { flex: 1; }
 #skinMenu .sk-head small { letter-spacing: 0; color: var(--ink-dim); font-weight: normal; }
+#skinMenu .sk-x { flex: none; width: 20px; height: 18px; padding: 0; border: 1px solid var(--line-dim); background: none; color: var(--ink-menu); font-size: var(--fs-s); cursor: pointer; }
+#skinMenu .sk-x:hover { background: var(--close-hover); color: var(--white); border-color: var(--close-hover); }
 #skinMenu .sk-sec { color: var(--ink-dim); font: var(--fs-xs) var(--font-ui); letter-spacing: 1.5px; text-transform: uppercase; margin: 6px 2px 4px; }
 #skinMenu .sk-grid { display: grid; grid-template-columns: repeat(5, 104px); gap: 6px; }
 #skinMenu .sk-card { border: 1px solid var(--line-dim); padding: 4px; cursor: pointer; }

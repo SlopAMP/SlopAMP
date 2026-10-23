@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('phosphor', {
   wmPopup: (o) => ipcRenderer.send('wm:popup', o),
   wmPopupSize: (o) => ipcRenderer.send('wm:popup-size', o),
   wmPopupHide: () => ipcRenderer.send('wm:popup-hide'),
+  wmPopupDrag: (phase) => ipcRenderer.send('wm:popup-drag', phase),
   wmDialog: (o) => ipcRenderer.send('wm:dialog', o),
   wmDialogHide: () => ipcRenderer.send('wm:dialog-hide'),
   wmDialogDrag: (phase) => ipcRenderer.send('wm:dialog-drag', phase),

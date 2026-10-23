@@ -65,16 +65,17 @@
   function renderPicker() {
     const m = WM.$('#skinMenu'); if (!m) return;
     const group = (g) => SKINS.filter(s => s.group === g).map(card).join('');
-    m.innerHTML = `<div class="sk-head"><span>SKINS</span><small>click to switch</small></div>`
+    m.innerHTML = `<div class="sk-head" title="Drag to move"><span>SKINS</span><small>click to switch \u00b7 drag here to move</small><button type="button" class="sk-x" title="Close (Esc)">&#x2715;</button></div>`
       + `<div class="sk-sec">Colors</div><div class="sk-grid">${group('Colors')}</div>`
       + `<div class="sk-sec">Styles</div><div class="sk-grid">${group('Styles')}</div>`
       + `<div class="sk-foot">Your skin is remembered. The lightning bolt resets the layout, never the skin.</div>`;
   }
-  // pos: { doc, x, y, flipY } like WM.popup
+  // pos: { doc, x, y, flipY } like WM.popup. The picker is a small movable panel: it reopens where it
+  // was last dragged to (remembered in the layout) and stays open until ✕, Esc or SKINS again.
   function openPicker(pos) {
     const m = WM.$('#skinMenu');
     renderPicker();
-    WM.popup(m, pos);
+    WM.popup(m, { ...pos, remember: 'skins' });
   }
   function togglePicker() {
     const m = WM.$('#skinMenu');
@@ -86,10 +87,23 @@
   WM.skins = { list: SKINS, apply, openPicker, get current() { return current; } };
 
   const m = WM.$('#skinMenu');
-  m.addEventListener('click', (e) => { const c = e.target.closest('.sk-card'); if (c && c.dataset.skin !== current) apply(c.dataset.skin); });
+  m.addEventListener('click', (e) => {
+    if (e.target.closest('.sk-x')) { m.classList.add('hidden'); return; }
+    const c = e.target.closest('.sk-card'); if (c && c.dataset.skin !== current) apply(c.dataset.skin);
+  });
+  // drag the picker by its title (the main process moves the window, keeps it on screen and remembers it)
+  m.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest('.sk-head');
+    if (!h || e.button !== 0 || e.target.closest('button')) return;
+    e.preventDefault();
+    try { h.setPointerCapture(e.pointerId); } catch (_) {}
+    P.wmPopupDrag('start');
+    let ended = false;
+    const end = () => { if (!ended) { ended = true; P.wmPopupDrag('end'); } };
+    h.addEventListener('pointerup', end, { once: true });
+    h.addEventListener('lostpointercapture', end, { once: true });
+  });
   WM.$('#bSkins').addEventListener('click', (e) => { e.stopPropagation(); togglePicker(); });
-  // a click anywhere else in SlopAMP closes the picker
-  WM.onDocs('mousedown', (e) => { if (!m.contains(e.target) && !e.target.closest('#bSkins') && !e.target.closest('#wmMenu')) m.classList.add('hidden'); });
 
   apply(WM.info && WM.info.skin, false);     // the saved skin, before the windows appear
 })();

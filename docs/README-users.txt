@@ -36,7 +36,8 @@ SKINS
   * Click SKINS on the player (or Skins... in the Layout menu) to change how
     SlopAMP looks. Ten skins: SlopAMP Classic (green, the default), Red Alert,
     Ice Blue, Purple Haze, Amber, Chrome, Walnut Hi-Fi, Synthwave, Terminal
-    and Pocket LCD. Click one and it changes right away.
+    and Pocket LCD. Click one and it changes right away. Drag the picker by
+    its title to move it (it reopens there); x or Esc closes it.
   * Your skin is remembered. The lightning bolt and Reset layout only move
     the windows back; they never change your skin.
 

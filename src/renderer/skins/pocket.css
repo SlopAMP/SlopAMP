@@ -179,6 +179,10 @@
   --list-sel-ink: #9bbc0f;
   --list-cur-sel: #9bbc0f;
   --ind-off: #306230;
+  --field-bg: #9bbc0f;
+  --field-ink: #0f380f;
+  --field-line: #0f380f;
+  --color-scheme: light;
   --frame-border: #306230;
   --tb-ink: #9bbc0f;
   --spectrum-high: #0f380f;

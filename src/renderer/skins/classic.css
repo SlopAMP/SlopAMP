@@ -70,7 +70,12 @@
   --list-sel-ink: var(--pl-green);                                                         /* selected playlist rows */
   --list-cur-sel: var(--list-cur);
   --ver-ink: var(--tb-ink);                                                                /* the "v1.4.0" label */
-  --ver-opacity: .62;
+  --ver-opacity: .72;
+  --fs-ver: 11px;                                                                          /* its size */
+  --field-bg: var(--black);                                                                /* dropdowns (About box) */
+  --field-ink: var(--ink-green);
+  --field-line: var(--line-dim);
+  --color-scheme: dark;                                                                    /* native parts of form controls */
 
   /* ---------- canvas drawings (app.js reads these) ---------- */
   --lcd-on: var(--green);     /* clock digits */
