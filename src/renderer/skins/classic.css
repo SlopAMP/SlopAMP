@@ -72,6 +72,7 @@
   --ver-ink: var(--tb-ink);                                                                /* the "v1.4.0" label */
   --ver-opacity: .72;
   --fs-ver: 11px;                                                                          /* its size */
+  --doc-bg: var(--white);                                                                  /* behind the licenses page (About > View licenses; its text is dark) */
   --field-bg: var(--black);                                                                /* dropdowns (About box) */
   --field-ink: var(--ink-green);
   --field-line: var(--line-dim);

@@ -110,7 +110,7 @@ chrome.update({
     '--ver-ink': '#1d2430', '--ver-opacity': '.7', '--close-hover': '#d0414c',
     '--lit-ink': '#075a8a', '--btn-on-ink': '#075a8a', '--tab-count-on': '#4f9fd0',
     '--menu-accent': '#075a8a', '--menu-hover-ink': '#ffffff', '--hint-ink': '#596173', '--list-sel-ink': '#ffffff',
-    '--field-bg': '#ffffff', '--field-ink': '#1f2633', '--field-line': '#8a919e', '--color-scheme': 'light',
+    '--field-bg': '#ffffff', '--field-ink': '#1f2633', '--field-line': '#8a919e', '--color-scheme': 'light', '--doc-bg': '#ffffff',
 })
 write('chrome', 'Chrome', 'light brushed-metal frames; the screens stay dark.', chrome, '''
 /* labels and icons that sit on the light metal */
@@ -202,7 +202,7 @@ pocket.update({
     '--deck-bg': G[0], '--eq-bg': G[0], '--vctl-bg': G[2], '--plbar-bg': G[2], '--plbar2-bg': G[2],
     '--lit-ink': G[3], '--btn-on-ink': G[0], '--tab-count-on': G[1], '--menu-hover-ink': G[3], '--hint-ink': G[0],
     '--list-sel-ink': G[3], '--list-cur-sel': G[3], '--ind-off': G[1],
-    '--field-bg': G[3], '--field-ink': G[0], '--field-line': G[0], '--color-scheme': 'light',
+    '--field-bg': G[3], '--field-ink': G[0], '--field-line': G[0], '--color-scheme': 'light', '--doc-bg': '#ffffff',
     '--menu-bg': G[3], '--dialog-bg': G[3], '--notice-bg': G[3], '--vctl': G[2], '--vctl-ink': G[0], '--vctl-line': G[1],
     '--frame-outer': G[0], '--frame-bg': G[0], '--frame-border': G[1], '--tb-bg': G[0], '--tb-ink': G[3], '--tb-glow': clear, '--tb-rule': G[1],
     '--spectrum-low': G[0], '--spectrum-mid': G[0], '--spectrum-high': G[0], '--spectrum-peak': G[1], '--spectrum-scope': G[0],

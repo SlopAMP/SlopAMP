@@ -241,7 +241,7 @@ dialog::backdrop { background: var(--shadow); }
 .dlg-btns { display: flex; justify-content: flex-end; gap: 8px; }
 #urlText { width: 100%; background: var(--black); color: var(--green); border: 1px solid var(--line-dim); font: var(--fs-base) var(--font-lcd); padding: 6px; resize: vertical; user-select: text; }
 .about-body p { margin: 0 0 8px; color: var(--base-81b); }
-#licFrame { width: 100%; height: 220px; border: 1px solid var(--line-dim); background: var(--white); }
+#licFrame { width: 100%; height: 220px; border: 1px solid var(--line-dim); background: var(--doc-bg); }
 
 /* ============ FULLSCREEN (the video window) ============ */
 body.fs #screen { position: fixed; inset: 0; z-index: 40; }
@@ -417,7 +417,7 @@ body.fs #subs { bottom: 9%; }
 .about-links { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: var(--fs-base); color: var(--hint-ink); }
 .about-links a { color: var(--ink-green-dim); text-decoration: none; border-bottom: 1px dotted var(--line-green); }
 .about-links a:hover { color: var(--ink-green); }
-#licFrame { width: 100%; height: 220px; border: 1px solid var(--line-green); background: var(--white); margin-top: 6px; }
+#licFrame { width: 100%; height: 220px; border: 1px solid var(--line-green); background: var(--doc-bg); margin-top: 6px; }
 
 /* ---- Auto-updates: bar under the deck, "What's new" box, About-box section */
 #updBar { flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 8px; min-height: 28px; background: var(--base-05-a96); border-bottom: 1px solid var(--line-green); color: var(--ink-green); font-size: var(--fs-base); }

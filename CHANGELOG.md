@@ -1,11 +1,15 @@
 # Changelog
 
+## 1.4.2 — 2026-10-23
+
+- About → View licenses: the third-party notices are readable in the Chrome and Pocket LCD skins (dark text on a light box, like the other skins). Their box used to come out black or dark green.
+- 1.4.0 and 1.4.1 were test builds only; everything below is part of this release.
+
 ## 1.4.1 — 2026-10-23
 
 - The skin picker is now a small movable panel: drag it by its title, and it reopens where you left it (also after a restart), always fully on screen. It has a ✕ button (Esc works too) and stays open while you try skins. This works the same from the SKINS button and from Layout → Skins….
-- The "v1.4.1" version label next to the green dot is a little bigger and easier to read.
+- The version label next to the green dot is a little bigger and easier to read.
 - The update setting in the About box ("When a new version is out") is readable in every skin, both closed and open. Its list used to show dark text on black in some skins.
-- 1.4.0 was only a test build; everything below is part of this release.
 
 ## 1.4.0 — 2026-10-22
 
