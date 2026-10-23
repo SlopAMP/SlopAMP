@@ -1527,11 +1527,15 @@ function renderUpdAbout() {
   const checked = st.lastCheck ? ` · checked ${when(st.lastCheck)}` : '';
   let html;
   if (st.status === 'checking') html = 'Checking…';
-  else if (r && ['available', 'downloading', 'verifying', 'ready', 'error'].includes(st.status) && r.version !== st.current) html = `<span class="new">${updEsc(r.version)} available</span>${checked}`;
+  else if (r && st.status === 'ready') html = `<span class="new">${updEsc(r.version)} ready to install</span>${checked}`;
+  else if (r && ['available', 'downloading', 'verifying', 'error'].includes(st.status) && r.version !== st.current) html = `<span class="new">${updEsc(r.version)} available</span>${checked}`;
   else if (st.status === 'error' && st.error === 'offline') html = `Couldn’t reach GitHub${checked}`;
   else html = st.lastCheck ? `<span class="ok">Up to date</span>${checked}` : 'Not checked yet';
   $('#updStatus').innerHTML = st.test ? `<span class="new">TEST FEED</span> · ${html}` : html;
-  $('#updCheck').disabled = st.status === 'checking';
+  // The button says what the next click does: check → install (or download page) → restart.
+  const [label, tip] = updAboutButton(st);
+  $('#updCheck').textContent = label; $('#updCheck').title = tip;
+  $('#updCheck').disabled = ['checking', 'downloading', 'verifying', 'installing'].includes(st.status);
   const sel = $('#updModeSel');
   sel.querySelector('option[value="auto"]').hidden = !st.canInstall;
   sel.value = !st.canInstall && st.mode === 'auto' ? 'notify' : (st.mode || 'notify');
@@ -1565,8 +1569,32 @@ function updAction(a) {
   else if (a === 'check') updCheckNow();
   else if (a === 'dismiss') { if (UPD.status === 'updated') { updLocal.hideUpdated = true; renderUpd(); } else P.updDismiss(); }
 }
+// About box button: [label, tooltip] for the update state (updAboutClick does the matching action).
+function updAboutButton(st) {
+  const v = st.release && st.release.version;
+  switch (st.status) {
+    case 'checking': return ['Checking\u2026', ''];
+    case 'available': return st.canInstall ? ['Install update\u2026', `See what’s new in ${v} and install it`] : ['Download page', `Open the download page for ${v}`];
+    case 'downloading': return [`Downloading\u2026 ${st.total ? Math.min(100, Math.floor(st.received / st.total * 100)) : 0}%`, ''];
+    case 'verifying': return ['Verifying\u2026', 'Checking the download against the release’s SHA256'];
+    case 'ready': return ['Restart and install', `${v} is downloaded and verified. SlopAMP closes, installs it and reopens`];
+    case 'installing': return ['Installing\u2026', ''];
+    case 'error': if (st.release && st.error === 'download') return ['Try again', 'Download the update again']; break;
+  }
+  return ['Check for updates', 'Ask GitHub for a newer version'];
+}
+function updAboutClick() {
+  const st = UPD;
+  if (st.status === 'available') { if (st.canInstall) openUpdNotes(); else P.updPage(); }
+  else if (st.status === 'ready') { updLocal.notNow = false; P.updInstall(); }
+  else if (st.status === 'error' && st.release && st.error === 'download') P.updDownload(false);
+  else updCheckNow();
+}
 async function updCheckNow() {
   const st = await P.updCheck();
+  // Use the answer right away: the matching update event can arrive after it, and the "what's new"
+  // box below needs the release (before 1.4.3 the first check found the update but showed nothing).
+  UPD = st; renderUpd();
   if (st.status === 'uptodate') toast(`SlopAMP ${st.current} is the latest version.`);
   else if (st.release && ['available', 'ready'].includes(st.status)) openUpdNotes();
 }
@@ -1579,7 +1607,7 @@ $('#updGo').onclick = () => {
   else { updLocal.notNow = false; P.updDownload(true); }
 };
 $('#updSkip').onclick = () => { $('#updDlg').close(); P.updSkip(); };
-$('#updCheck').onclick = updCheckNow;
+$('#updCheck').onclick = updAboutClick;
 $('.logo-dot').addEventListener('click', () => { if ($('.logo-dot').classList.contains('has-upd')) { if (UPD.status === 'error') updAction('page'); else openUpdNotes(); } });
 $('#updModeSel').onchange = (e) => P.updMode(e.target.value);
 P.onUpd((st) => { UPD = st; renderUpd(); });

@@ -155,6 +155,9 @@ UPDATES
     shows the release notes first. The update is downloaded from SlopAMP's
     official GitHub release, its checksum is verified, and SlopAMP restarts
     with your playlists and settings kept. It never installs until you click.
+  * In the "?" box the button follows the update: "Check for updates",
+    then "Install update..." once one is found, and "Restart and install"
+    when it's downloaded and verified.
   * The portable exe can't update itself: it tells you and opens the
     download page.
 

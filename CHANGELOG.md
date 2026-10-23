@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.3 — 2026-10-23
+
+- About box: the button under the update status now says what clicking it will do. Once an update is found it reads **Install update…** (opens What's new, where you confirm), while downloading it shows the progress, and when a downloaded update is verified it reads **Restart and install**. The portable exe shows **Download page**, and after a failed download it reads **Try again**. It's greyed out while checking, downloading or installing.
+- About → Check for updates: the first click that finds a new version now opens What's new right away. Before, it only changed the status line and you had to click a second time.
+- The status line says "ready to install" once a downloaded update is verified.
+
 ## 1.4.2 — 2026-10-23
 
 - About → View licenses: the third-party notices are readable in the Chrome and Pocket LCD skins (dark text on a light box, like the other skins). Their box used to come out black or dark green.
