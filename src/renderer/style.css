@@ -420,17 +420,18 @@ body.fs #subs { bottom: 9%; }
 #licFrame { width: 100%; height: 220px; border: 1px solid var(--line-green); background: var(--doc-bg); margin-top: 6px; }
 
 /* ---- Auto-updates: bar under the deck, "What's new" box, About-box section */
-#updBar { flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 8px; min-height: 28px; background: var(--base-05-a96); border-bottom: 1px solid var(--line-green); color: var(--ink-green); font-size: var(--fs-base); }
+#updBar { position: relative; flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 8px; min-height: 28px; background: var(--base-05-a96); border-bottom: 1px solid var(--line-green); color: var(--ink-green); font-size: var(--fs-base); }
 #updBar .ico { width: 14px; height: 14px; flex: none; fill: currentColor; color: var(--green); filter: drop-shadow(0 0 4px var(--green-a60)); }
 #updBar .msg { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #updBar .msg b { color: var(--white); font-weight: 600; }
+#updBar .prog.line { position: absolute; left: 0; right: 0; bottom: -1px; width: auto; height: 3px; border: 0; background: var(--line-green); }
+#updBar .msg .sub { color: var(--ink-green-dim); margin-left: 4px; }
 #updBar button { flex: none; white-space: nowrap; background: var(--btn-green); border: 1px solid var(--line-green); color: var(--ink-green); padding: 2px 8px; font-size: var(--fs-m); }
 #updBar button:hover { background: var(--btn-green-hover); }
 #updBar button.link { background: none; border: 0; color: var(--ink-green-dim); padding: 2px 4px; text-decoration: underline dotted; text-underline-offset: 2px; }
 #updBar button.x { background: none; border: 0; color: var(--ink-green-dim); padding: 2px 4px; }
 #updBar .prog { flex: none; width: 90px; height: 8px; border: 1px solid var(--line-green); background: var(--black); }
 #updBar .prog i { display: block; height: 100%; background: linear-gradient(90deg, var(--line-green), var(--green)); box-shadow: 0 0 6px var(--green-a50); }
-#updBar .pct { flex: none; width: 34px; text-align: right; font: bold var(--fs-m) var(--font-lcd); color: var(--green); font-variant-numeric: tabular-nums; }
 #updBar.warn { background: var(--warn-10); border-bottom-color: var(--warn-30); color: var(--warn-82); }
 #updBar.warn .ico { color: var(--amber); filter: none; }
 #updBar.warn button:not(.x) { background: var(--warn-14); border-color: var(--warn-30); color: var(--warn-82); }

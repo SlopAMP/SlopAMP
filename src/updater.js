@@ -167,6 +167,7 @@ class Updater {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
+        if (ac.signal.aborted) throw new Error('cancelled');   // also stops the local test feed, which ignores the signal
         const buf = Buffer.from(value);
         hash.update(buf); received += buf.length;
         if (!out.write(buf)) await new Promise(ok => out.once('drain', ok));

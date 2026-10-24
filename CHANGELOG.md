@@ -1,8 +1,15 @@
 # Changelog
 
+## 1.4.4 — 2026-10-23
+
+- The update bar under the player now uses the same words as the About box button: **Install update…** when a new version is found, **Downloading… N%** while it downloads, **Verifying…** while the download is checked, and **Restart and install** when it's ready.
+- In "Install automatically" mode the bar says **Downloading 1.4.x in the background… N%**, so you can see the download has started by itself. SlopAMP still asks before it restarts.
+- The download progress is now a thin line along the bottom of the bar, and **Cancel** is a link. The text no longer gets cut off at the default 420 px width (before, "42 of 155 MB" showed as "42 of 155 …").
+- **Cancel** during a download now always stops it and goes back to "Install update…". (With a local test release, as used for testing updates, Cancel used to be ignored.)
+
 ## 1.4.3 — 2026-10-23
 
-- About box: the button under the update status now says what clicking it will do. Once an update is found it reads **Install update…** (opens What's new, where you confirm), while downloading it shows the progress, and when a downloaded update is verified it reads **Restart and install**. The portable exe shows **Download page**, and after a failed download it reads **Try again**. It's greyed out while checking, downloading or installing.
+- About box: the button under the update status now says what clicking it will do. Once an update is found it reads **Install update…** (opens What's new, where you confirm), while downloading it shows the progress, and when a downloaded update is verified it reads **Restart and install**. The portable exe shows **Download page**, and after a failed download it reads **Try again**. While SlopAMP is busy, the button shows what it's doing and can't be clicked: **Checking…**, **Downloading… N%**, **Verifying…** and **Installing…**.
 - About → Check for updates: the first click that finds a new version now opens What's new right away. Before, it only changed the status line and you had to click a second time.
 - The status line says "ready to install" once a downloaded update is verified.
 

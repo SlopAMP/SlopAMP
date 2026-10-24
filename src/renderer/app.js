@@ -1483,16 +1483,19 @@ function updBarHtml(st) {
   const x = '<button class="x" data-a="dismiss" title="Hide">&#x2715;</button>';
   switch (st.status) {
     case 'available': return st.canInstall
-      ? `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is out</span><button class="link" data-a="notes">What’s new</button><button data-a="notes">Update</button>${x}`
+      ? `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is out</span><button class="link" data-a="notes">What’s new</button><button data-a="notes">Install update…</button>${x}`
       : `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is out (portable)</span><button class="link" data-a="notes">What’s new</button><button data-a="page">Download page</button>${x}`;
     case 'downloading': {
       const p = st.total ? Math.min(100, Math.floor(st.received / st.total * 100)) : 0;
-      return `${UPD_ICON.down}<span class="msg">Downloading ${v} · ${Math.round((st.received || 0) / 1048576)} of ${updMB(st.total)}</span><span class="prog"><i style="width:${p}%"></i></span><span class="pct">${p}%</span><button data-a="cancel">Cancel</button>`;
+      const bg = st.mode === 'auto' && !st.installAfter;
+      const msg = bg ? `Downloading ${v} in the background… ${p}%` : `Downloading… ${p}% <span class="sub">${Math.round((st.received || 0) / 1048576)} of ${updMB(st.total)}</span>`;
+      const tip = bg ? 'Install automatically is on. SlopAMP asks before it restarts.' : '';
+      return `${UPD_ICON.down}<span class="msg" title="${tip}">${msg}</span><span class="prog line"><i style="width:${p}%"></i></span><button class="link" data-a="cancel">Cancel</button>`;
     }
-    case 'verifying': return `${UPD_ICON.shield}<span class="msg">Checking the download against the release’s SHA256…</span>`;
+    case 'verifying': return `${UPD_ICON.shield}<span class="msg">Verifying… <span class="sub">checking the SHA256</span></span>`;
     case 'ready': return st.installAfter && !updLocal.notNow
-      ? `${UPD_ICON.shield}<span class="msg" title="SlopAMP will close, install the update and reopen"><b>Verified.</b> Restarting to update in ${updLocal.countdown} s</span><button data-a="install">Restart now</button><button class="link" data-a="notnow">Not now</button>`
-      : `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is ready to install</span><button class="link" data-a="notes">What’s new</button><button data-a="install">Restart now</button>${x}`;
+      ? `${UPD_ICON.shield}<span class="msg" title="SlopAMP will close, install the update and reopen"><b>Verified.</b> Restarting in ${updLocal.countdown} s</span><button data-a="install">Restart and install</button><button class="link" data-a="notnow">Not now</button>`
+      : `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is ready</span><button class="link" data-a="notes">What’s new</button><button data-a="install">Restart and install</button>${x}`;
     case 'installing': return `${UPD_ICON.shield}<span class="msg">Installing ${v}… SlopAMP will reopen by itself</span>`;
     case 'updated': return updLocal.hideUpdated ? '' : `${UPD_ICON.bolt}<span class="msg">Updated to ${v}</span><button class="link" data-a="notes">What’s new</button>${x}`;
     case 'error':
