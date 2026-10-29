@@ -1,11 +1,12 @@
 # Changelog
 
-## Next (2.3.1 or 2.4.0) — planned, not built
+## 2.3.1 — unreleased
 
-- **Remove the old SLOP code completely** (hidden since 2.3.0): the SLOP window and button code, LOOK, packs, the stream trim, prompt / lyrics.txt, motion.mp4, Zip pack and Open in slop.cc. CLIP, SHOTS and the Library must keep working. Users' existing `Downloads\SlopAMP\Slop` folders are **not** deleted.
-- From now on all editing work goes into CLIP.
+- **The old SLOP code is gone** (idea #17; hidden since 2.3.0): the SLOP window and its button code, LOOK, packs, the YouTube stream trim, the prompt / lyrics.txt, motion.mp4, Zip pack and Open in slop.cc are removed from the app. All editing is CLIP from now on: MP3 / MP4 clips, SHOTS (with Burst ×5), the EDIT button and Library → CLIPS work as in 2.3.0. Your existing packs stay in `Downloads\SlopAMP\Slop` (SlopAMP never deletes that folder; open it in Explorer). A saved layout from an older version that still has the SLOP window in it loads fine.
+- **Lightning bolt** (idea #18): always brings back **Classic (stacked)**. The one exception: when **Classic (stacked, No EQ)** was the last layout you picked in the Layout menu, the bolt brings that back, with the EQ hidden and no gap (also after you've moved a window, and after a restart). EQ / E under No EQ switches to Classic (stacked), so the bolt then shows the EQ. Its tooltip says which one you'll get. Reset layout (Ctrl+Alt+R) is unchanged: everything back, EQ included.
+- Fixes: with Classic (stacked, No EQ), moving a window and restarting SlopAMP brought the EQ back; it stays hidden now. CLIP's waveform redraws in the new colours when you change skins.
 
-## 2.3.0 — unreleased
+## 2.3.0 — 2026-10-29
 
 - **CLIP** (ideas #12 / #13): cut a piece out of a song or video and save it as a new MP3 or MP4, in its own SlopAMP window (like SLOP). Right-click a song or video in the playlist (also YT / X History) or the Library → **Clip MP3…** / **Clip video…**; a YouTube or X item that isn't downloaded yet is downloaded first, then CLIP opens. Layout → CLIP opens it empty (Clip what's playing, Pick a file…, or drop a file on it).
 - In / Out on a waveform with green handles (drag the edges or the clip, drag a new range, type times, ±0.1 s), zoom, a preview with a strip of frames for videos, Play clip / Loop / short previews around each edge. The preview plays inside CLIP and pauses SlopAMP's player. Space, I / O, G (a shot) and ← → work on CLIP only while its window is the active one.

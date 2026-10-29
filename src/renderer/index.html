@@ -44,7 +44,7 @@
         </div>
         <div class="actrow">
           <button class="tog wide" id="bDl" title="Download the YouTube video you're watching (or the selected one)" disabled><svg viewBox="0 0 16 16" class="tog-ico"><path d="M7 1h2v7l2.5-2.5 1.4 1.4L8 11.8 3.1 6.9l1.4-1.4L7 8zM2 13h12v2H2z"/></svg>DOWNLOAD</button>
-          <button class="tog wide slop" id="bSlop" title="EDIT: cut a clip from the selected or playing song or video (CLIP). Right-click: Clip MP3 / Clip video, Library → CLIPS"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M4.5 1.5a2.5 2.5 0 0 1 1.9 4.1L8 7.3l4.6-4.8 1.4.1-5 5.4 5 5.4-1.4.1L8 8.7 6.4 10.4a2.5 2.5 0 1 1-1.2-.9L6.9 8 5.2 6.4A2.5 2.5 0 1 1 4.5 1.5zm0 1.2a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6zm0 8a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6z"/></svg>EDIT</button>
+          <button class="tog wide edit" id="bEdit" title="EDIT: cut a clip from the selected or playing song or video (CLIP). Right-click: Clip MP3 / Clip video, Library → CLIPS"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M4.5 1.5a2.5 2.5 0 0 1 1.9 4.1L8 7.3l4.6-4.8 1.4.1-5 5.4 5 5.4-1.4.1L8 8.7 6.4 10.4a2.5 2.5 0 1 1-1.2-.9L6.9 8 5.2 6.4A2.5 2.5 0 1 1 4.5 1.5zm0 1.2a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6zm0 8a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6z"/></svg>EDIT</button>
           <button class="tog wide" id="bFull" title="Fullscreen (F)"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M1 1h5v2H3v3H1zM10 1h5v5h-2V3h-3zM1 10h2v3h3v2H1zM13 10h2v5h-5v-2h3z"/></svg>FULLSCREEN</button>
         </div>
       </div>
@@ -183,152 +183,73 @@
     </div>
   </section>
 
-  <!-- SLOP (1.6): its own window (winmgr.js), built by app.js "SLOP" -->
-  <section id="slopPanel">
-    <div class="slop-empty" id="slopEmpty">
-      <div class="slop-empty-t">SLOP</div>
-      <p>Play a YouTube video, then right-click <b>EDIT</b> &rarr; <b>SLOP this YouTube moment</b>, or press <b>G</b> to grab the frame you're watching.</p>
-      <p class="dim"><b>G</b> adds a frame, <b>I</b> and <b>O</b> set where the clip starts and ends, in any SlopAMP window while you watch. Your packs are in Library &rarr; SLOP.</p>
-      <div class="slop-empty-btns"><button type="button" class="sb" id="slopEmptyStart" disabled>SLOP this video</button><button type="button" class="sb dim" id="slopEmptyLib">Open Library &rarr; SLOP</button></div>
-    </div>
-    <div class="slop-main hidden" id="slopMain">
-      <div class="slop-sum">
-        <span class="dlm-lcd" id="slopClock" title="Where the player is">&#9654; 0:00</span>
-        <span class="slop-src" id="slopSrc"></span>
-        <span class="slop-sp"></span>
-        <button type="button" class="sb" id="slopAddF" title="Grab the frame the player shows now (G)">+ Frame <kbd>G</kbd></button>
-        <button type="button" class="sb dim" id="slopSetIn" title="The clip starts where the player is (I)">Set In <kbd>I</kbd></button>
-        <button type="button" class="sb dim" id="slopSetOut" title="The clip ends where the player is (O)">Set Out <kbd>O</kbd></button>
-        <button type="button" class="sb dim" id="slopNew" title="Start another pack of this video">New pack</button>
-      </div>
-      <div class="slop-scroll">
-        <div class="slop-sec">
-          <div class="slop-h"><span class="n">1</span>AUDIO<span class="r"><span class="dim" id="slopSongSt"></span><span class="slop-pill" id="slopPill"><i></i><em></em></span><button type="button" class="sb dim" id="slopSongBtn"></button></span></div>
-          <div class="slop-wave" id="slopWave" title="Click to jump the player there · drag the green edges (or the clip) · drag on the wave for a new clip"><canvas id="slopWaveC"></canvas><div class="slop-wave-msg" id="slopWaveMsg"></div></div>
-          <div class="slop-ruler" id="slopRuler"></div>
-          <div class="slop-row">
-            <label>Before <span class="slop-step"><button type="button" data-f="before" data-d="-5" title="5 s less">&minus;</button><input type="text" id="slopBefore" inputmode="numeric" maxlength="4" spellcheck="false"><button type="button" data-f="before" data-d="5" title="5 s more">+</button></span> s</label>
-            <label>After <span class="slop-step"><button type="button" data-f="after" data-d="-5" title="5 s less">&minus;</button><input type="text" id="slopAfter" inputmode="numeric" maxlength="4" spellcheck="false"><button type="button" data-f="after" data-d="5" title="5 s more">+</button></span> s</label>
-            <span class="slop-lcd" id="slopRange"></span>
-            <button type="button" class="sb dim" id="slopPlayClip">&#9654; Play clip</button>
-            <span class="dim slop-hint">the numbers are seconds around the moment; the wave and the numbers stay in sync</span>
-          </div>
-          <div class="slop-row">
-            <span class="slop-cb on" title="Always in the pack">&#x2713;</span><span>Clip &rarr; <b>audio.mp3</b></span>
-            <label class="slop-ck"><input type="checkbox" id="slopCkSong"> Whole song &rarr; <b>song.mp3</b> <span class="dim" id="slopSongLen"></span></label>
-            <label class="slop-ck"><input type="checkbox" id="slopCkClip2"> Second clip &rarr; <b>audio-2.mp3</b> <span class="dim" id="slopClip2Range"></span></label>
-          </div>
-        </div>
-        <div class="slop-sec">
-          <div class="slop-h"><span class="n">2</span>LOOK<span class="r dim" id="slopRefCount"></span></div>
-          <div class="slop-look">
-            <div class="slop-big" id="slopBig"><img id="slopBigImg" alt=""><span class="slop-bdg lead" id="slopBigLead">&#9733; LEAD</span><span class="slop-bdg res" id="slopBigRes"></span><span class="slop-big-wait" id="slopBigWait"></span></div>
-            <div class="slop-side" id="slopSide">
-              <div><b id="slopRefFile"></b> <span class="dim" id="slopRefAt"></span></div>
-              <div id="slopRefSt"></div>
-              <label class="dim slop-lbl" for="slopRefName">Name (what slop.cc calls this reference)</label>
-              <input type="text" id="slopRefName" maxlength="40" spellcheck="false" placeholder="e.g. Singer, Stage, Red jacket">
-              <div class="slop-chips" id="slopKinds"><button type="button" data-kind="person">person</button><button type="button" data-kind="look">look</button><button type="button" data-kind="prop">prop</button><button type="button" data-kind="place">place</button></div>
-              <div class="slop-chips"><button type="button" id="slopLead">&#9733; Lead</button><button type="button" class="sb dim" id="slopPrev" title="One second earlier">&#9664; 1 s</button><button type="button" class="sb" id="slopRegrab" title="Grab this frame again">&#x21BB; Re-grab</button><button type="button" class="sb dim" id="slopNext" title="One second later">1 s &#9654;</button><button type="button" class="sb dim" id="slopDelRef" title="Remove this frame from the pack">&#x1F5D1;</button></div>
-            </div>
-          </div>
-          <div class="slop-strip" id="slopStrip"></div>
-          <div class="slop-burst hidden" id="slopBurst"></div>
-          <div class="slop-row">
-            <label class="slop-ck"><input type="checkbox" id="slopCkMotion"> Motion reference &rarr; <b>motion.mp4</b></label>
-            <span class="dim">silent, around the lead frame:</span>
-            <span class="slop-step"><button type="button" data-f="motion" data-d="-1" title="1 s shorter">&minus;</button><input type="text" id="slopMotionLen" readonly><button type="button" data-f="motion" data-d="1" title="1 s longer">+</button></span>
-            <span class="dim" id="slopMotionInfo"></span>
-          </div>
-        </div>
-        <div class="slop-sec">
-          <div class="slop-h"><span class="n">3</span>HOW DO YOU WANT TO SLOP THIS?<span class="r"><span class="dim" id="slopLyrInfo"></span><button type="button" class="sb dim hidden" id="slopLyrBtn">View</button></span></div>
-          <pre class="slop-lyrics hidden" id="slopLyrics"></pre>
-          <div class="slop-sug hidden" id="slopSug"><span>Suggested:</span><q id="slopSugText"></q><button type="button" class="sb dim" id="slopSugUse">Use</button></div>
-          <div class="slop-chips" id="slopChips"><button type="button" data-idea="roast">Roast</button><button type="button" data-idea="remake">Remake</button><button type="button" data-idea="music">Music video</button><button type="button" data-idea="custom">Custom</button></div>
-          <textarea id="slopText" rows="3" maxlength="4000" spellcheck="true" placeholder="Pick an idea above or write your own&#8230;"></textarea>
-          <div class="slop-row"><button type="button" class="sb dim" id="slopCopy">&#x2398; Copy</button><button type="button" class="sb dim" id="slopSave">&#x1F4BE; Save prompt.txt</button><span class="dim">prompt.txt ends with a short rights note; the copy is the prompt only</span></div>
-        </div>
-      </div>
-      <div class="slop-leave" id="slopLeave"></div>
-      <div class="slop-bar">
-        <button type="button" class="sb dim" id="slopFolderBtn" title="Show the pack in Explorer">&#x1F4C1; Open folder</button>
-        <button type="button" class="sb dim" id="slopZipBtn" title="One .zip of the pack, next to its folder (for sharing or backup)">&#x1F5DC; Zip pack</button>
-        <button type="button" class="sb dim" id="slopSignup" title="slop.cc in your browser">Sign up / sign in at slop.cc</button>
-        <span class="slop-sp"></span>
-        <button type="button" class="sb dim" id="slopDiscard" title="Move this pack to the Recycle Bin">Discard pack</button>
-        <button type="button" class="sb go" id="slopGo">Open in Slop.cc (new video) &#9656;</button>
-      </div>
-    </div>
-  </section>
-
   <!-- CLIP (2.3): its own window (winmgr.js), built by app.js "CLIP" -->
   <section id="clipPanel">
-    <div class="slop-empty" id="clipEmpty">
-      <div class="slop-empty-t">CLIP</div>
+    <div class="ed-empty" id="clipEmpty">
+      <div class="ed-empty-t">CLIP</div>
       <p>Cut a piece out of a song or video and save it as a new MP3 or MP4. The original file is never changed.</p>
       <p class="dim">Right-click a song or video in the playlist or the Library &rarr; <b>Clip MP3&#8230;</b> or <b>Clip video&#8230;</b>, or drop a file here.</p>
-      <div class="slop-empty-btns"><button type="button" class="sb" id="clipEmptyCur" disabled>Clip what&#8217;s playing</button><button type="button" class="sb dim" id="clipEmptyPick">Pick a file&#8230;</button><button type="button" class="sb dim" id="clipEmptyLib">Library &rarr; CLIPS</button></div>
+      <div class="ed-empty-btns"><button type="button" class="sb" id="clipEmptyCur" disabled>Clip what&#8217;s playing</button><button type="button" class="sb dim" id="clipEmptyPick">Pick a file&#8230;</button><button type="button" class="sb dim" id="clipEmptyLib">Library &rarr; CLIPS</button></div>
     </div>
-    <div class="slop-main hidden" id="clipMain">
-      <div class="slop-sum">
+    <div class="ed-main hidden" id="clipMain">
+      <div class="ed-sum">
         <span class="dlm-lcd" id="clipClock" title="Where the preview is">&#9654; 0:00.0</span>
-        <span class="slop-src" id="clipSrc"></span>
-        <span class="slop-sp"></span>
+        <span class="ed-src" id="clipSrc"></span>
+        <span class="ed-sp"></span>
         <button type="button" class="sb dim" id="clipSetIn" title="The clip starts where the preview is (I, while CLIP is the active window)">Set In <kbd>I</kbd></button>
         <button type="button" class="sb dim" id="clipSetOut" title="The clip ends where the preview is (O, while CLIP is the active window)">Set Out <kbd>O</kbd></button>
         <span class="dim">Save as</span><div class="dlm-seg clip-kind" id="clipKind"><button type="button" data-k="mp3">MP3</button><button type="button" data-k="mp4">MP4</button></div>
       </div>
-      <div class="slop-scroll">
-        <div class="slop-sec">
-          <div class="slop-h"><span class="n">1</span>TRIM<span class="r"><span class="dim" id="clipZoomInfo"></span><span class="dim">zoom</span><button type="button" class="sb dim" id="clipZoomOut" title="Show more of the file">&minus;</button><button type="button" class="sb dim" id="clipZoomIn" title="Zoom in around the clip">+</button><button type="button" class="sb dim" id="clipFit" title="Show the whole file">Fit</button></span></div>
+      <div class="ed-scroll">
+        <div class="ed-sec">
+          <div class="ed-h"><span class="n">1</span>TRIM<span class="r"><span class="dim" id="clipZoomInfo"></span><span class="dim">zoom</span><button type="button" class="sb dim" id="clipZoomOut" title="Show more of the file">&minus;</button><button type="button" class="sb dim" id="clipZoomIn" title="Zoom in around the clip">+</button><button type="button" class="sb dim" id="clipFit" title="Show the whole file">Fit</button></span></div>
           <div class="clip-prev hidden" id="clipPrev"><video id="clipVideo" playsinline preload="auto"></video><span class="clip-prev-t" id="clipPrevT"></span><span class="clip-prev-msg hidden" id="clipPrevMsg"></span></div>
           <div class="clip-film hidden" id="clipFilm"></div>
-          <div class="slop-wave clip-wave" id="clipWave" title="Click to move the preview there · drag the green edges (or the clip) · drag on the wave for a new clip"><canvas id="clipWaveC"></canvas><div class="slop-wave-msg" id="clipWaveMsg"></div></div>
-          <div class="slop-ruler" id="clipRuler"></div>
-          <div class="slop-row">
-            <label>In <span class="slop-step clip-tm"><button type="button" data-e="in" data-d="-0.1" title="0.1 s earlier">&minus;</button><input type="text" id="clipIn" spellcheck="false" maxlength="12"><button type="button" data-e="in" data-d="0.1" title="0.1 s later">+</button></span></label>
-            <label>Out <span class="slop-step clip-tm"><button type="button" data-e="out" data-d="-0.1" title="0.1 s earlier">&minus;</button><input type="text" id="clipOut" spellcheck="false" maxlength="12"><button type="button" data-e="out" data-d="0.1" title="0.1 s later">+</button></span></label>
-            <span class="slop-lcd" id="clipLen">LENGTH 0:00.0</span>
+          <div class="ed-wave clip-wave" id="clipWave" title="Click to move the preview there · drag the green edges (or the clip) · drag on the wave for a new clip"><canvas id="clipWaveC"></canvas><div class="ed-wave-msg" id="clipWaveMsg"></div></div>
+          <div class="ed-ruler" id="clipRuler"></div>
+          <div class="ed-row">
+            <label>In <span class="ed-step clip-tm"><button type="button" data-e="in" data-d="-0.1" title="0.1 s earlier">&minus;</button><input type="text" id="clipIn" spellcheck="false" maxlength="12"><button type="button" data-e="in" data-d="0.1" title="0.1 s later">+</button></span></label>
+            <label>Out <span class="ed-step clip-tm"><button type="button" data-e="out" data-d="-0.1" title="0.1 s earlier">&minus;</button><input type="text" id="clipOut" spellcheck="false" maxlength="12"><button type="button" data-e="out" data-d="0.1" title="0.1 s later">+</button></span></label>
+            <span class="ed-lcd" id="clipLen">LENGTH 0:00.0</span>
             <button type="button" class="sb" id="clipPlay" title="Play the clip (Space, while CLIP is the active window)">&#9654; Play clip</button>
             <button type="button" class="sb dim" id="clipLoop" title="Play the clip over and over">&#8634; Loop</button>
             <button type="button" class="sb dim" id="clipEdgeIn" title="Play the 3 s around the In point">&#9664;| In</button>
             <button type="button" class="sb dim" id="clipEdgeOut" title="Play the 3 s around the Out point">Out |&#9654;</button>
           </div>
-          <div class="slop-row dim clip-hint">drag the green edges or the clip itself &middot; drag on the wave for a new range &middot; &larr; &rarr; move the edge you touched last by 0.1 s, Shift = 1 s &middot; Space plays the clip</div>
+          <div class="ed-row dim clip-hint">drag the green edges or the clip itself &middot; drag on the wave for a new range &middot; &larr; &rarr; move the edge you touched last by 0.1 s, Shift = 1 s &middot; Space plays the clip</div>
         </div>
-        <div class="slop-sec">
-          <div class="slop-h"><span class="n">2</span>SAVE AS<span class="r dim" id="clipFmtInfo"></span></div>
-          <div class="slop-row clip-name-row"><span>Name</span><input type="text" id="clipName" maxlength="150" spellcheck="false"><span class="dim" id="clipExt">.mp3</span></div>
-          <div class="slop-row clip-opts" id="clipOptsMp3">
-            <div class="clip-col"><label class="slop-ck"><input type="checkbox" id="clipFadeIn"> Fade in <span class="dim">0.5 s</span></label><label class="slop-ck"><input type="checkbox" id="clipFadeOut"> Fade out <span class="dim">2 s</span></label></div>
+        <div class="ed-sec">
+          <div class="ed-h"><span class="n">2</span>SAVE AS<span class="r dim" id="clipFmtInfo"></span></div>
+          <div class="ed-row clip-name-row"><span>Name</span><input type="text" id="clipName" maxlength="150" spellcheck="false"><span class="dim" id="clipExt">.mp3</span></div>
+          <div class="ed-row clip-opts" id="clipOptsMp3">
+            <div class="clip-col"><label class="ed-ck"><input type="checkbox" id="clipFadeIn"> Fade in <span class="dim">0.5 s</span></label><label class="ed-ck"><input type="checkbox" id="clipFadeOut"> Fade out <span class="dim">2 s</span></label></div>
             <div class="clip-col"><label><input type="radio" name="clipQ" value="copy" id="clipQCopy"> <span><b>Same quality as the file</b> <span class="dim" id="clipQCopyNote">&middot; no re-encode (off when a fade is on)</span></span></label><label><input type="radio" name="clipQ" value="320" id="clipQ320"> <span><b>MP3 320 kbps</b> <span class="dim">&middot; re-encoded, needed for fades</span></span></label></div>
           </div>
-          <div class="slop-row clip-opts hidden" id="clipOptsMp4">
+          <div class="ed-row clip-opts hidden" id="clipOptsMp4">
             <div class="clip-col"><label><input type="radio" name="clipCut" value="exact" id="clipCutExact"> <span><b>Exact cut</b> <span class="dim">&middot; re-encodes, starts on the frame you picked (a little slower)</span></span></label><label><input type="radio" name="clipCut" value="fast" id="clipCutFast"> <span><b>Fast cut</b> <span class="dim" id="clipFastNote">&middot; no re-encode, may start up to a few seconds early (keyframes)</span></span></label></div>
-            <div class="clip-col"><label class="slop-ck"><input type="checkbox" id="clipAlsoMp3"> Also save the sound as MP3 &rarr; <b>mp3clips</b></label></div>
+            <div class="clip-col"><label class="ed-ck"><input type="checkbox" id="clipAlsoMp3"> Also save the sound as MP3 &rarr; <b>mp3clips</b></label></div>
           </div>
-          <div class="slop-row"><label class="slop-ck"><input type="checkbox" id="clipAddTo"> <span id="clipAddToLabel">Add to the playlist when it&#8217;s saved</span></label><span class="dim">&middot; the original file is never changed; every clip is a new file</span></div>
+          <div class="ed-row"><label class="ed-ck"><input type="checkbox" id="clipAddTo"> <span id="clipAddToLabel">Add to the playlist when it&#8217;s saved</span></label><span class="dim">&middot; the original file is never changed; every clip is a new file</span></div>
         </div>
-        <div class="slop-sec clip-shots hidden" id="clipShots">
-          <div class="slop-h"><span class="n">3</span>SHOTS<span class="clip-opt">optional &middot; full-size frames for references</span><span class="r"><span class="dim" id="clipShotCount"></span><button type="button" class="sb dim" id="clipShotAdd" title="Save the frame the preview shows, full size (G, while CLIP is the active window)">+ Shot <kbd>G</kbd></button><button type="button" class="sb dim" id="clipBurst" title="5 frames across the clip; keep the good ones">Burst &times;5</button><button type="button" class="sb dim" id="clipShotToggle" title="Show / hide the shots">&#9662;</button></span></div>
+        <div class="ed-sec clip-shots hidden" id="clipShots">
+          <div class="ed-h"><span class="n">3</span>SHOTS<span class="clip-opt">optional &middot; full-size frames for references</span><span class="r"><span class="dim" id="clipShotCount"></span><button type="button" class="sb dim" id="clipShotAdd" title="Save the frame the preview shows, full size (G, while CLIP is the active window)">+ Shot <kbd>G</kbd></button><button type="button" class="sb dim" id="clipBurst" title="5 frames across the clip; keep the good ones">Burst &times;5</button><button type="button" class="sb dim" id="clipShotToggle" title="Show / hide the shots">&#9662;</button></span></div>
           <div class="clip-shot-body hidden" id="clipShotBody">
-            <div class="slop-strip" id="clipShotStrip"></div>
+            <div class="ed-strip" id="clipShotStrip"></div>
             <div class="clip-shot-ed hidden" id="clipShotEd">
               <div class="clip-shot-meta"><b id="clipShotFile"></b> <span class="dim" id="clipShotAt"></span></div>
-              <div class="slop-chips"><input type="text" id="clipShotName" maxlength="40" spellcheck="false" placeholder="Name, e.g. Singer"><button type="button" data-kind="person">person</button><button type="button" data-kind="look">look</button><button type="button" data-kind="prop">prop</button><button type="button" data-kind="place">place</button>
+              <div class="ed-chips"><input type="text" id="clipShotName" maxlength="40" spellcheck="false" placeholder="Name, e.g. Singer"><button type="button" data-kind="person">person</button><button type="button" data-kind="look">look</button><button type="button" data-kind="prop">prop</button><button type="button" data-kind="place">place</button>
                 <button type="button" class="sb dim" id="clipShotLead" title="The lead is ref-01">&#9733; Lead</button><button type="button" class="sb dim" id="clipShotPrev" title="Grab it again 1 s earlier">&#9664; 1 s</button><button type="button" class="sb dim" id="clipShotRe" title="Grab this moment again">&#x21BB;</button><button type="button" class="sb dim" id="clipShotNext" title="Grab it again 1 s later">1 s &#9654;</button><button type="button" class="sb dim" id="clipShotDel" title="Delete this shot (Recycle Bin)">&#x1F5D1;</button></div>
             </div>
-            <div class="slop-burst hidden" id="clipBurstBox"></div>
-            <div class="slop-row dim clip-shot-where"><span id="clipShotWhere"></span><button type="button" class="sb dim" id="clipShotDir">&#x1F4C1; Open folder</button></div>
+            <div class="ed-burst hidden" id="clipBurstBox"></div>
+            <div class="ed-row dim clip-shot-where"><span id="clipShotWhere"></span><button type="button" class="sb dim" id="clipShotDir">&#x1F4C1; Open folder</button></div>
           </div>
         </div>
       </div>
-      <div class="slop-leave clip-saved hidden" id="clipSaved"></div>
-      <div class="slop-bar">
+      <div class="ed-leave clip-saved hidden" id="clipSaved"></div>
+      <div class="ed-bar">
         <button type="button" class="sb dim" id="clipFolderBtn">&#x1F4C1; Open mp3clips folder</button>
         <button type="button" class="sb dim" id="clipLibBtn">Library &rarr; CLIPS</button>
-        <span class="slop-sp"></span>
+        <span class="ed-sp"></span>
         <button type="button" class="sb dim" id="clipReset">Reset to the whole file</button>
         <button type="button" class="sb dim hidden" id="clipCancel">Cancel</button>
         <button type="button" class="sb go" id="clipSave">&#9986; Save clip</button>
@@ -346,18 +267,18 @@
       <button type="button" class="sb dim" id="ytwMore" title="More: open in your normal browser, clear YouTube data">&#9881;</button>
     </div>
     <div class="ytw-view" id="ytwView"><div class="ytw-wait" id="ytwWait">Loading YouTube&#8230;</div></div>
-    <div class="ytw-stat"><span id="ytwStatL"></span><span class="slop-sp"></span><span id="ytwStatR">links to other sites open in your normal browser</span></div>
+    <div class="ytw-stat"><span id="ytwStatL"></span><span class="ed-sp"></span><span id="ytwStatR">links to other sites open in your normal browser</span></div>
   </section>
 
   <!-- Skin Editor (1.7): its own window (winmgr.js), run by skins.js "Skin Editor" -->
   <section id="skinEdPanel">
-    <div class="sked-top"><label class="dim" for="skedBase">Start from</label><select id="skedBase" title="The skin you start from"></select><span class="slop-sp"></span><button type="button" class="sb dim" id="skedReset" title="Undo every change since you opened or saved">Reset all</button></div>
+    <div class="sked-top"><label class="dim" for="skedBase">Start from</label><select id="skedBase" title="The skin you start from"></select><span class="ed-sp"></span><button type="button" class="sb dim" id="skedReset" title="Undo every change since you opened or saved">Reset all</button></div>
     <div class="sked-groups" id="skedGroups"></div>
     <div class="sked-status" id="skedStatus"></div>
     <div class="sked-bar">
       <button type="button" class="sb dim" id="skedImport" title="Add a skin someone shared (.css)">Import&#8230;</button>
       <button type="button" class="sb dim" id="skedExport" title="Save a copy of this skin to share">Export&#8230;</button>
-      <span class="slop-sp"></span>
+      <span class="ed-sp"></span>
       <input type="text" id="skedName" maxlength="60" placeholder="Name your skin" spellcheck="false">
       <button type="button" class="sb" id="skedSaveAs" title="Save as a new skin of yours (Enter)">Save as</button>
       <button type="button" class="sb go" id="skedSave">Save</button>
@@ -423,20 +344,13 @@
   <dialog id="dlmDlg">
     <div class="dlm-title"><span>LIBRARY</span><button type="button" id="dlmX" title="Close (Esc)">&#x2715;</button></div>
     <div class="dlm-sum"><span class="dlm-lcd" id="dlmCount">0 FILES</span><span class="dlm-miss" id="dlmMiss"></span>
-      <div class="dlm-seg" id="dlmSeg"><button type="button" data-f="all" class="on" title="Videos, MP3s and saved playlists">ALL</button><button type="button" data-f="video">VIDEO</button><button type="button" data-f="audio">MP3</button><button type="button" data-f="playlist">PLAYLISTS</button><button type="button" data-f="clips" title="Your MP3 and MP4 clips (made with CLIP)">CLIPS</button><button type="button" data-f="slop">SLOP</button><button type="button" data-f="skins">SKINS</button></div></div>
+      <div class="dlm-seg" id="dlmSeg"><button type="button" data-f="all" class="on" title="Videos, MP3s and saved playlists">ALL</button><button type="button" data-f="video">VIDEO</button><button type="button" data-f="audio">MP3</button><button type="button" data-f="playlist">PLAYLISTS</button><button type="button" data-f="clips" title="Your MP3 and MP4 clips (made with CLIP)">CLIPS</button><button type="button" data-f="skins">SKINS</button></div></div>
     <div class="dlm-searchrow"><input type="text" id="dlmSearch" placeholder="Search your library&#8230;" spellcheck="false"><button type="button" id="dlmSearchX" class="hidden" title="Clear search">&#x2715;</button></div>
     <div class="clsub" id="clsub"><button type="button" data-c="all">All clips</button><button type="button" data-c="mp3clip">MP3 clips</button><button type="button" data-c="mp4clip">MP4 clips</button></div>
     <div class="dlm-scroll"><table class="dlm-table">
       <thead><tr><th class="c"><span class="dlm-cb" id="dlmAll" title="Select all"></span></th><th data-sort="title">Title</th><th data-sort="kind">Type</th><th data-sort="size" class="r">Size</th><th data-sort="mtime" class="r">Date</th><th></th></tr></thead>
       <tbody id="dlmBody"></tbody>
     </table><div class="dlm-empty hidden" id="dlmEmpty"></div></div>
-    <div class="dlm-slop" id="dlmSlop">
-      <div class="sl-tools"><span class="dim">Sort</span><select id="slSort"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="title">Title A&ndash;Z</option><option value="size">Biggest first</option></select><span class="sl-sp"></span><div class="dlm-seg" id="slView"><button type="button" data-v="grid">&#9638; Grid</button><button type="button" data-v="list">&#9776; List</button></div></div>
-      <div class="sl-tags" id="slTags"></div>
-      <div class="sl-main"><div class="sl-grid" id="slGrid"></div><div class="sl-pv" id="slPv"></div></div>
-    </div>
-    <div class="dlm-bar sl-bar"><button type="button" class="red" id="slDel" disabled>&#x1F5D1; Delete selected</button><button type="button" class="red" id="slDelAll">Delete all packs&#8230;</button><button type="button" class="dim" id="slZip" disabled>&#x1F5DC; Zip selected</button><span class="spacer"></span><button type="button" class="dim" id="slOpenDir">&#x1F4C1; Open Slop folder</button></div>
-    <div class="dlm-note sl-note">Deleted packs go to the Recycle Bin. Double-click a pack to open it in SLOP and keep working on it. Ctrl/Shift-click or the boxes select several.</div>
     <div class="dlm-bar cl-bar"><button type="button" id="clAdd" disabled>&#9654; Add to playlist</button><button type="button" class="dim" id="clAgain" disabled>&#9986; Clip again&#8230;</button><button type="button" class="red" id="clDel" disabled>&#x1F5D1; Delete selected</button><span class="spacer"></span><button type="button" class="dim" id="clDir3">&#x1F4C1; mp3clips</button><button type="button" class="dim" id="clDir4">&#x1F4C1; mp4clips</button></div>
     <div class="dlm-note cl-note">Clips are files in Downloads\SlopAMP\mp3clips and Downloads\SlopAMP\mp4clips (files you put there show up too). Double-click plays a clip; &#8220;Clip again&#8221; reopens CLIP on the original with the same In/Out. Deleted clips go to the Recycle Bin.</div>
     <div class="dlm-skins" id="dlmSkins"><div class="skl-list" id="sklList"></div></div>

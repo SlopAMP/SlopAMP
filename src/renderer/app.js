@@ -29,7 +29,7 @@ const S = {
   resume: {},          // 'f:<path>' | 'y:<videoId>' -> { t: seconds, at: timestamp }
   rate: 1,             // playback speed (this session only)
   subsOn: false,       // subtitles stay on for the next items once turned on
-  lib: { w: 0, h: 0, view: 'grid' },   // the Library's size once resized (0: default) and the SLOP view
+  lib: { w: 0, h: 0, view: 'grid' },   // the Library's size once resized (0: default); `view` was SLOP's (kept so old state reads)
   vis: { mode: 'milkdrop', preset: '', cycle: true, panel: 'open', showTitle: false, showPreset: true, showTrack: false, favs: [], favOnly: false }   // audio visualizer: milkdrop (Butterchurn) | bars; panel: open | min | hidden
 };
 // S.items / S.current always mean the tab that's on screen.
@@ -709,7 +709,6 @@ function syncWindows(opts = {}) {
     eq: { visible: !mini && S.eq.panel !== 'hidden', shade: S.eq.panel === 'min' },
     video: { visible: !mini && (fs || (S.showVideo && !(audvis && S.vis.panel === 'hidden'))), shade: vidShade, title: audvis ? 'VISUALIZER' : 'VIDEO' },
     playlist: { visible: !mini && S.showPlaylist, shade: S.plShade },
-    slop: { visible: !mini && slopVisible, shade: slopShade },
     skined: { visible: !mini && !!(WM.skins && WM.skins.editorOpen), shade: !!(WM.skins && WM.skins.editorShade) },
     clip: { visible: !mini && !!clipVisible, shade: !!clipShade },          // CLIP (2.3)
     ytweb: { visible: !mini && !!ytwVisible, shade: !!ytwShade }            // YOUTUBE window (2.3)
@@ -717,7 +716,6 @@ function syncWindows(opts = {}) {
   const btn = (id, min, what) => { const b = $(id); if (!b) return; b.innerHTML = min ? '&#x25A1;' : '&#x2013;'; b.title = `${min ? 'Expand' : 'Minimize'} ${what}`; };
   btn('#visMinBtn', vidShade, audvis ? 'visualizer' : 'video');
   btn('#plMinBtn', S.plShade, 'playlist');
-  btn('#slopMinBtn', slopShade, 'SLOP');
   btn('#skedMinBtn', !!(WM.skins && WM.skins.editorShade), 'the skin editor');
   btn('#clipMinBtn', !!clipShade, 'CLIP');
   btn('#ytwMinBtn', !!ytwShade, 'YOUTUBE');
@@ -790,7 +788,7 @@ function buildEq() {
 function setEqPanel(mode) {
   S.eq.panel = mode; renderEq(); saveSoon();
   // 2.3: EQ (or E) under Classic (stacked, No EQ): the EQ goes back in its spot and the layout is Classic (stacked)
-  if (mode !== 'hidden' && WM.info.preset === 'classic-noeq') WM.preset('classic');
+  if (mode !== 'hidden' && (WM.info.lastPreset || WM.info.preset) === 'classic-noeq') WM.preset('classic');
 }
 // Layout → Classic (stacked, No EQ) hides the EQ window (the EQ itself keeps working: on/off, bands and preset
 // don't change); Layout → Classic (stacked) shows it again. winmgr.js calls this before the layout is applied.
@@ -2120,11 +2118,11 @@ async function toggleMini() {
   $('#btnMini').title = res ? 'Restore full player (M)' : 'Mini player (M)';
 }
 // Back to normal: leave fullscreen / mini, bring every window back (Reset layout also re-centres them).
-async function restoreWindows() {
+async function restoreWindows(opts = {}) {
   if (WM.body.contains('fs')) await toggleFullscreen(false);
   if (WM.body.contains('mini')) await toggleMini();
   S.showVideo = true; S.showPlaylist = true; S.plShade = false; S.vidShade = false;
-  if (S.eq.panel === 'hidden') S.eq.panel = 'open';
+  if (S.eq.panel === 'hidden' && !opts.keepEqHidden) S.eq.panel = 'open';
   if (S.vis.panel === 'hidden') S.vis.panel = 'open';
   renderEq(); renderVisPanel(); renderToggles();
   syncWindows({ reflow: false });
@@ -2136,8 +2134,14 @@ WM.onReset = restoreWindows;
 $('#btnMin').onclick = () => P.minimize();
 $('#btnClose').onclick = () => { recordResume(); saveNow(); P.close(); };
 $('#btnMini').onclick = toggleMini;
-$('#bRestore').title = 'Back to the normal layout: every window docked under the player';
-$('#bRestore').onclick = async () => { await restoreWindows(); WM.preset('classic'); };
+// The lightning bolt (2.3.1): always Classic (stacked), except when Classic (stacked, No EQ) was the last layout
+// picked from the Layout menu: then that one, with the EQ hidden. (E under No EQ switches to Classic (stacked);
+// Reset layout, Ctrl+Alt+R, is unchanged and counts as Classic (stacked).)
+const boltPreset = () => ((WM.info.lastPreset || WM.info.preset) === 'classic-noeq' ? 'classic-noeq' : 'classic');
+const boltTitle = () => { $('#bRestore').title = `Back to the normal layout: ${boltPreset() === 'classic-noeq' ? 'Classic (stacked, No EQ)' : 'Classic (stacked)'}, every window docked under the player`; };
+boltTitle();
+$('#bRestore').addEventListener('mouseenter', boltTitle);
+$('#bRestore').onclick = async () => { const p = boltPreset(); await restoreWindows({ keepEqHidden: p === 'classic-noeq' }); WM.preset(p); };
 $('#btnAbout').onclick = openAbout;
 $('#titlebar').addEventListener('dblclick', (e) => { if (!e.target.closest('button')) toggleMini(); });
 $('#bPrev').onclick = prev; $('#bPlay').onclick = play; $('#bPause').onclick = pause; $('#bStop').onclick = stop; $('#bNext').onclick = () => next(false);
@@ -2213,7 +2217,7 @@ WM.onDocs('keydown', (e) => {
   else if (k === ']') stepRate(1); else if (k === '[') stepRate(-1);
   else if (k === 'e') setEqPanel(S.eq.panel === 'hidden' ? 'open' : 'hidden');
   else if (k === 'm') toggleMini(); else if (k === 's') toggleShuffle(); else if (k === 'r') cycleRepeat(); else if (k === 'l') openFiles();
-  // 2.3: G / I / O no longer feed SLOP (hidden: it would make packs nobody can see); they work in CLIP while it's active
+  // G / I / O: CLIP's keys while the CLIP window is active (clipKey above); nothing elsewhere since SLOP went (2.3)
 });
 function selectRel(d) {
   if (!S.items.length) return;
@@ -2224,480 +2228,10 @@ function selectRel(d) {
 
 P.onOpenFiles(async (paths) => { const added = await addPaths(paths); if (added.length) playIndex(S.items.indexOf(added[0])); });
 
-// ------------------------------------------------------------------ SLOP
-// The SLOP window (1.6): builds a pack of a YouTube moment for slop.cc while the video keeps playing.
-// The pack itself (files, song download, clips, frames, burst, motion, captions, zip) is made by
-// main.js ("SLOP (1.6)"); this draws it and sends the user's changes. G / I / O work in every window.
-const SLOP_IDEAS = {
-  roast: 'Roast this moment: a short, over-the-top comedy take on what happens in the frame, set to the clip.',
-  remake: 'Remake this moment in a completely new style. Keep the mood and the beat of the clip.',
-  music: 'Make a music video for this clip, with visuals inspired by the frame.',
-  custom: ''
-};
-const SLOP_MIN_SIDE = 512;          // slop.cc warns about reference images smaller than this
-const SL = { id: null, pack: null, peaks: null, sel: null, picks: {}, draft: null, justOpened: false };
-var slopVisible = false, slopShade = false;   // var: syncWindows() reads them, and it can run before this line
-let slopTick = null, slopTextT = null, slopNameT = null, slopLenT = null, slopOpening = null;
-const slopAudio = new Audio();
-const slopTime = (t) => fmt(t).replace(/^0(\d)/, '$1');
-const slopEsc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-function slopTarget() { const it = curItem(); return it && it.type === 'youtube' && it.vid && !it.live ? it : null; }
-// 2.3: the old SLOP button is EDIT now (lit while CLIP is open). SLOP is hidden for now: no button, menu item or Library tab,
-// and G / I / O don't feed it; its code and the packs in Downloads\SlopAMP\Slop stay so it can come back.
-function updateSlopButton() { const b = $('#bSlop'); if (b) b.classList.toggle('on', !!clipVisible); const e = $('#slopEmptyStart'); if (e) e.disabled = !slopTarget(); }
-const slopIsPlaying = () => { const it = slopTarget(); return !!(it && SL.pack && SL.pack.d.video.id === it.vid); };
-function slopRect() {
-  const el = engine === 'local' ? $('#video') : $('#ytWrap');
-  const b = el && el.getBoundingClientRect();
-  return b && b.width ? { x: b.left, y: b.top, width: b.width, height: b.height } : null;
-}
-
-// ---- the window
-function slopShow(on) {
-  slopVisible = on;
-  syncWindows();
-  updateSlopButton();
-  clearInterval(slopTick);
-  if (on) { slopTick = setInterval(slopClock, 400); slopRender(); requestAnimationFrame(slopDrawWave); }
-  else slopAudio.pause();
-}
-async function slopToggle() {
-  if (slopVisible) { slopShow(false); return; }
-  slopShow(true);
-  if (slopTarget() && !slopIsPlaying()) await slopEnsure();
-}
-// The pack of the video that's playing: the open one, its newest one, or a new one (which grabs the moment).
-async function slopEnsure(opts = {}) {
-  const it = slopTarget();
-  if (!it) { toast('SLOP works with YouTube videos: play one first.'); return null; }
-  if (!opts.fresh && slopIsPlaying()) return SL.pack;
-  if (slopOpening) return slopOpening;
-  slopOpening = (async () => {
-    const at = currentTime();
-    const r = await P.slopOpen({ url: it.url, title: it.title, at, dur: currentDuration() || it.duration || 0, fresh: !!opts.fresh });
-    if (!r || !r.ok) { toast((r && r.error) || 'SLOP couldn’t start.'); return null; }
-    slopSetPack(r.pack);
-    if (r.created && !opts.noGrab) P.slopFrame({ id: r.pack.id, t: at, rect: slopRect() });
-    return r.pack;
-  })();
-  try { return await slopOpening; } finally { slopOpening = null; }
-}
-async function slopOpenPack(id) {        // from the Library
-  const r = await P.slopLoad(id);
-  if (!r || !r.ok) { toast((r && r.error) || 'That pack couldn’t be opened.'); return; }
-  slopSetPack(r.pack);
-  if (!slopVisible) slopShow(true);
-}
-function slopSetPack(pack) {
-  if (SL.id !== pack.id) { SL.peaks = null; SL.sel = null; SL.picks = {}; SL.justOpened = false; slopAudio.pause(); $('#slopText').value = pack.d.prompt.text || ''; $('#slopLyrics').classList.add('hidden'); }
-  SL.id = pack.id; SL.pack = pack;
-  if (pack.peaksReady && !SL.peaks) P.slopPeaks(pack.id).then((pk) => { if (pk && SL.id === pack.id) { SL.peaks = pk; slopDrawWave(); } });
-  slopRender();
-}
-function slopClear() { SL.id = null; SL.pack = null; SL.peaks = null; slopAudio.pause(); slopRender(); }
-
-// ---- hotkeys while watching: G frame, I / O clip start / end
-async function slopKey(k) {
-  const it = slopTarget();
-  if (!it) { toast('SLOP works with YouTube videos.'); return; }
-  const t = currentTime(), had = slopIsPlaying();
-  const pack = await slopEnsure({ noGrab: k !== 'frame' });
-  if (!pack) return;
-  if (k === 'frame') {
-    if (had) P.slopFrame({ id: pack.id, t, rect: slopRect() });     // a new pack already grabbed this moment
-    toast(`SLOP: frame at ${slopTime(t)} added${slopVisible ? '' : ' (Layout → SLOP shows the pack)'}`);
-  } else {
-    const c = { ...pack.d.audio.clip };
-    if (k === 'in') { c.in = t; if (c.out <= t + 1) c.out = t + 30; } else { c.out = t; if (c.in >= t - 1) c.in = Math.max(0, t - 30); }
-    const r = await P.slopSet({ id: pack.id, patch: { clip: c } });
-    if (r && r.ok) slopSetPack(r.pack);
-    toast(`SLOP: clip ${k === 'in' ? 'starts' : 'ends'} at ${slopTime(t)}`);
-  }
-}
-
-// ---- drawing
-function slopClock() {
-  if (!slopVisible) return;
-  const el = $('#slopClock'); if (!el) return;
-  el.innerHTML = `${status === 'playing' ? '&#9654;' : '&#10074;&#10074;'} ${slopTime(currentTime())}`;
-  if (slopIsPlaying()) slopDrawWave();
-}
-function slopView() {        // the time range the wave shows
-  const p = SL.pack, pk = SL.peaks;
-  if (pk) return [pk.start, pk.start + pk.dur];
-  const dur = p.d.video.duration || Math.max(p.d.audio.clip.out, p.d.audio.clip2.out) * 1.25 || 60;
-  return [0, dur];
-}
-function slopClips() { const a = SL.pack.d.audio; return { clip: SL.draft && SL.draft.which === 'clip' ? SL.draft : a.clip, clip2: SL.draft && SL.draft.which === 'clip2' ? SL.draft : a.clip2 }; }
-function slopDrawWave() {
-  const c = $('#slopWaveC'); if (!c || !SL.pack || !slopVisible) return;
-  const w = c.clientWidth, h = c.clientHeight, dpr = c.ownerDocument.defaultView.devicePixelRatio || 1;
-  if (!w || !h) return;
-  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
-  const x = c.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, w, h);
-  const [v0, v1] = slopView(), px = (t) => (t - v0) / (v1 - v0) * w;
-  const { clip, clip2 } = slopClips(), a2 = SL.pack.d.audio.clip2.on;
-  const green = WM.token('--green'), line = WM.token('--line-green'), warn = WM.token('--warn-ink'), amber = WM.token('--amber');
-  x.globalAlpha = 0.16; x.fillStyle = green; x.fillRect(px(clip.in), 0, px(clip.out) - px(clip.in), h);
-  if (a2) { x.globalAlpha = 0.1; x.fillStyle = warn; x.fillRect(px(clip2.in), 0, px(clip2.out) - px(clip2.in), h); }
-  x.globalAlpha = 1;
-  const pk = SL.peaks;
-  if (pk) {
-    const n = pk.peaks.length, bw = Math.max(1, w / n);
-    for (let i = 0; i < n; i++) {
-      const t = pk.start + (i + 0.5) / n * pk.dur, v = pk.peaks[i] / 100 * (h / 2 - 3), inClip = t >= clip.in && t <= clip.out;
-      x.fillStyle = inClip ? green : line; x.globalAlpha = inClip ? 1 : 0.55;
-      x.fillRect(i * w / n, h / 2 - v, Math.max(1, bw - 0.4), Math.max(1, v * 2));
-    }
-    x.globalAlpha = 1;
-  } else { x.fillStyle = line; x.globalAlpha = 0.5; x.fillRect(0, h / 2, w, 1); x.globalAlpha = 1; }
-  const handle = (t, col) => { x.fillStyle = col; x.fillRect(px(t) - 1.5, 0, 3, h); x.fillRect(px(t) - 5, 0, 10, 7); x.fillRect(px(t) - 5, h - 7, 10, 7); };
-  handle(clip.in, green); handle(clip.out, green);
-  if (a2) { x.strokeStyle = warn; x.setLineDash([5, 4]); x.lineWidth = 1.5; x.strokeRect(px(clip2.in), 1, px(clip2.out) - px(clip2.in), h - 2); x.setLineDash([]); handle(clip2.in, warn); handle(clip2.out, warn); }
-  for (const r of SL.pack.refs) { x.fillStyle = r.lead ? warn : line; x.beginPath(); x.moveTo(px(r.t), h); x.lineTo(px(r.t) - 5, h - 9); x.lineTo(px(r.t) + 5, h - 9); x.fill(); }
-  x.fillStyle = warn; x.globalAlpha = 0.8; x.fillRect(px(SL.pack.d.at) - 0.5, 0, 1, h); x.globalAlpha = 1;   // the moment
-  if (slopIsPlaying()) { x.fillStyle = amber; x.fillRect(px(currentTime()) - 1, 0, 2, h); }          // the player
-}
-function slopRuler() {
-  const el = $('#slopRuler'); if (!el || !SL.pack) return;
-  const [v0, v1] = slopView(), n = 8;
-  el.innerHTML = Array.from({ length: n + 1 }, (_, i) => `<span>${slopTime(v0 + (v1 - v0) * i / n)}</span>`).join('');
-}
-
-function slopRender() {
-  const p = SL.pack;
-  $('#slopEmpty').classList.toggle('hidden', !!p);
-  $('#slopMain').classList.toggle('hidden', !p);
-  updateSlopButton();
-  if (!p) { WM.setTitle('slop', 'SLOP'); const s = $('#slopSum'); if (s) s.textContent = ''; return; }
-  const d = p.d;
-  WM.setTitle('slop', 'SLOP');
-  const sum = $('#slopSum'); if (sum) sum.textContent = d.title;
-  $('#slopSrc').innerHTML = `<b>${slopEsc(d.title)}</b> · YouTube · ${slopEsc(d.video.id)}`; $('#slopSrc').title = p.dir;
-  slopRenderAudio(); slopRenderLook(); slopRenderPrompt(); slopRenderLeave();
-  slopClock(); slopRuler(); slopDrawWave();
-}
-function slopRenderAudio() {
-  const p = SL.pack, d = p.d, s = p.song, a = d.audio, { clip } = slopClips();
-  const pill = $('#slopPill'), btn = $('#slopSongBtn');
-  const pct = Math.max(0, Math.min(100, Math.floor(s.pct || 0)));
-  const label = { none: 'STARTING…', queued: 'STARTING…', downloading: s.pct > 0 && s.pct < 100 ? `SONG ${pct}%` : 'GETTING THE SONG…', processing: 'MAKING THE WAVE…', ready: '✓ SONG READY', stopped: 'STOPPED', error: '✕ FAILED' }[s.status] || '';
-  pill.querySelector('em').textContent = label;
-  pill.querySelector('i').style.width = s.status === 'downloading' && s.pct > 0 ? `${pct}%` : '';
-  pill.className = 'slop-pill' + (s.status === 'ready' ? ' done' : s.status === 'error' ? ' err' : s.status === 'stopped' ? ' stop' : s.status === 'downloading' && s.pct > 0 ? ' pct' : '');
-  btn.classList.toggle('hidden', s.status === 'ready' || s.status === 'processing');
-  btn.innerHTML = ['none', 'queued', 'downloading'].includes(s.status) ? '&#9632; Stop' : s.status === 'error' ? '&#x21BB; Try again' : '&#9654; Start';
-  btn.title = ['none', 'queued', 'downloading'].includes(s.status) ? 'Stop downloading the song' : 'Download the song from YouTube';
-  const st = $('#slopSongSt');
-  st.textContent = s.status === 'error' ? (s.error || '') : s.status === 'stopped' ? 'the clips are made from the song once it’s here'
-    : s.status === 'downloading' ? [s.speed, s.eta ? `${s.eta} left` : ''].filter(Boolean).join(' · ') || 'song from YouTube'
-    : a.src && !a.src.full ? `long video: only ${slopTime(a.src.start)}\u2013${slopTime(a.src.end)} is downloaded` : s.status === 'ready' ? '' : 'song from YouTube';
-  st.title = st.textContent;
-  $('#slopWaveMsg').textContent = SL.peaks ? '' : s.status === 'error' ? 'No wave: the song didn’t download.' : s.status === 'stopped' ? 'Start the song download to see the wave.' : 'The wave appears when the song is here.';
-  const before = Math.round((d.at - clip.in) * 10) / 10, after = Math.round((clip.out - d.at) * 10) / 10;
-  const doc = $('#slopBefore').ownerDocument;
-  if (doc.activeElement !== $('#slopBefore')) $('#slopBefore').value = String(before);
-  if (doc.activeElement !== $('#slopAfter')) $('#slopAfter').value = String(after);
-  $('#slopRange').innerHTML = `${slopTime(clip.in)} &ndash; ${slopTime(clip.out)} <small>${slopTime(clip.out - clip.in)}</small>${p.busy.audio ? ' <small>making&#8230;</small>' : ''}`;
-  $('#slopPlayClip').disabled = !p.urls.audio;
-  $('#slopPlayClip').innerHTML = slopAudio.paused ? '&#9654; Play clip' : '&#9632; Stop';
-  const songOk = !a.src || a.src.full;
-  $('#slopCkSong').checked = !!a.song.on && songOk; $('#slopCkSong').disabled = !songOk;
-  $('#slopSongLen').textContent = songOk ? (d.video.duration ? `(${slopTime(d.video.duration)})` : '') : '(not for long videos)';
-  $('#slopCkClip2').checked = !!a.clip2.on;
-  $('#slopClip2Range').textContent = a.clip2.on ? `${slopTime(a.clip2.in)}–${slopTime(a.clip2.out)} · drag the dashed range on the wave` : '';
-}
-function slopSelRef() {
-  const refs = SL.pack.refs;
-  let r = refs.find(x => x.n === SL.sel);
-  if (!r) { r = refs.find(x => x.lead) || refs[0] || null; SL.sel = r ? r.n : null; }
-  return r;
-}
-function slopRenderLook() {
-  const p = SL.pack, refs = p.refs, r = slopSelRef();
-  $('#slopRefCount').textContent = refs.length ? `${refs.length} reference${refs.length > 1 ? 's' : ''} · slop.cc: one or two clear ones per person` : '';
-  const img = $('#slopBigImg'), src = r ? (r.busy && r.preview) || r.url || r.preview : null;
-  if (src) { if (img.getAttribute('src') !== src) img.src = src; } else img.removeAttribute('src');
-  img.style.opacity = r && r.busy ? '.5' : '';
-  $('#slopBigLead').classList.toggle('hidden', !(r && r.lead));
-  const res = $('#slopBigRes'), small = r && r.file && Math.min(r.w, r.h) < SLOP_MIN_SIDE;
-  res.classList.toggle('hidden', !r || (!r.file && !r.preview));
-  if (r) { res.textContent = r.busy ? 'GRABBING…' : r.file ? `${small ? '⚠ ' : ''}${r.w} × ${r.h}` : 'PREVIEW'; res.classList.toggle('warn', !!small); }
-  $('#slopBigWait').textContent = !r ? 'Press G or + Frame' : !src ? 'GRABBING…' : '';
-  $('#slopSide').classList.toggle('off', !r);
-  for (const id of ['#slopRefName', '#slopLead', '#slopPrev', '#slopRegrab', '#slopNext', '#slopDelRef']) $(id).disabled = !r;
-  for (const b of $$('#slopKinds button')) { b.disabled = !r; b.classList.toggle('on', !!r && r.kind === b.dataset.kind); }
-  if (r) {
-    $('#slopRefFile').textContent = r.file && !r.file.startsWith('.') ? r.file : 'ref.png';
-    $('#slopRefAt').textContent = `at ${slopTime(r.t)}`;
-    const nameEl = $('#slopRefName');
-    if (nameEl.ownerDocument.activeElement !== nameEl || nameEl.dataset.n !== String(r.n)) { nameEl.value = r.name || ''; nameEl.dataset.n = String(r.n); }
-    $('#slopLead').classList.toggle('on', !!r.lead);
-    $('#slopLead').title = r.lead ? 'This is the lead reference (ref-01)' : 'Make this the lead reference (ref-01)';
-    const size = `${(r.window && r.window.w) || r.w}×${(r.window && r.window.h) || r.h}`;
-    let st;
-    if (r.busy) st = `<span class="dim">${r.preview ? 'Window picture for now. Getting the full-size frame from the video&#8230;' : 'Getting the full-size frame from the video&#8230;'}</span>`;
-    else if (r.error) st = `<span class="warn">&#9888; Couldn’t get the frame from the video</span><br><span class="dim">${slopEsc(r.error)}</span><br><span class="dim">Re-grab tries again${r.window ? ', or </span><button type="button" class="slop-link" id="slopUseWin">use the window picture (' + size + ')</button>' : '.</span>'}`;
-    else if (r.from === 'window') st = `<span class="warn">Using the window picture (${r.w}×${r.h})</span><br><span class="dim">Not from the video itself: smaller, may show player buttons.${small ? ` Under ${SLOP_MIN_SIDE} px, so slop.cc may warn.` : ''}</span>`;
-    else if (r.file) st = small ? `<span class="ok">&#x2713; Frame from the video itself</span><br><span class="warn">&#9888; This video is only ${r.w}×${r.h} (low resolution), so slop.cc may warn</span>`
-      : `<span class="ok">&#x2713; Full-size frame from the video itself (${r.w}×${r.h})</span>`;
-    else st = '';
-    $('#slopRefSt').innerHTML = st;
-  } else { $('#slopRefFile').textContent = ''; $('#slopRefAt').textContent = ''; $('#slopRefSt').innerHTML = '<span class="dim">No frames yet.</span>'; }
-  // the strip
-  const tiles = refs.map(x => {
-    const u = (x.busy && x.preview) || x.url || x.preview, t = x.busy ? 'busy' : x.error ? 'err' : '';
-    return `<div class="slop-th${x.n === SL.sel ? ' sel' : ''} ${t}" data-n="${x.n}" title="${slopEsc(x.file || '')}">${u ? `<img src="${slopEsc(u)}" alt="">` : '<span class="slop-th-wait">&#8230;</span>'}${x.lead ? '<span class="slop-th-lead">&#9733; LEAD</span>' : ''}<span class="slop-th-t">${slopTime(x.t)}</span>${x.busy ? '<span class="slop-th-busy">GRABBING</span>' : x.error ? '<span class="slop-th-busy err">&#9888;</span>' : ''}<div class="slop-th-cap">${slopEsc(x.name || `ref-${String(refs.indexOf(x) + 1).padStart(2, '0')}`)} <span>${x.kind || ''}</span></div></div>`;
-  }).join('');
-  const now = slopIsPlaying() ? currentTime() : p.d.at;
-  const bursting = p.burst && p.burst.running;
-  $('#slopStrip').innerHTML = tiles + `<button type="button" class="slop-add" id="slopAddTile">+ Frame at ${slopTime(now)}<br><span class="dim">or press G</span></button>`
-    + `<button type="button" class="slop-add" id="slopBurstTile" ${p.burst ? 'disabled' : ''}>${bursting ? 'Burst running&#8230;' : 'Burst &times;5'}<br><span class="dim">pick the best</span></button>`;
-  slopRenderBurst();
-  // motion
-  const m = p.d.motion;
-  $('#slopCkMotion').checked = !!m.on;
-  $('#slopMotionLen').value = `${m.len || 3} s`;
-  const lead = refs.find(x => x.lead), center = lead ? lead.t : p.d.at, len = m.len || 3;
-  $('#slopMotionInfo').innerHTML = !m.on ? `(2–5 s · 1080p · ${slopTime(Math.max(0, center - len / 2))}–${slopTime(center + len / 2)})`
-    : p.busy.motion ? 'making motion.mp4&#8230;' : p.busy.motionErr ? `<span class="warn">&#9888; ${slopEsc(p.busy.motionErr)}</span>` : p.files.motion ? `<span class="ok">&#x2713; ${len} s from ${slopTime(m.start != null ? m.start : center - len / 2)}</span>` : 'waiting&#8230;';
-}
-function slopRenderBurst() {
-  const p = SL.pack, b = p.burst, el = $('#slopBurst');
-  el.classList.toggle('hidden', !b);
-  if (!b) { SL.picks = {}; return; }
-  const n = Object.values(SL.picks).filter(Boolean).length, done = b.items.filter(i => i.status !== 'waiting' && i.status !== 'grabbing').length;
-  el.innerHTML = `<div class="slop-burst-h"><b>BURST</b> <span class="dim">${b.running ? `grabbing ${Math.min(done + 1, b.items.length)} of ${b.items.length}&#8230;` : 'keep the best one or two: slop.cc prefers a few clear references to many similar ones'}</span></div><div class="slop-burst-row">`
-    + b.items.map(i => `<div class="slop-bi${SL.picks[i.i] ? ' ' + SL.picks[i.i] : ''}" data-i="${i.i}">${i.url ? `<img src="${slopEsc(i.url)}" alt="">` : `<span class="slop-th-wait">${i.status === 'error' ? '&#9888;' : i.status === 'grabbing' ? 'GRABBING' : '&#8230;'}</span>`}<span class="slop-th-t">${slopTime(i.t)}</span>`
-      + (i.status === 'ok' ? `<div class="slop-bi-btns"><button type="button" data-role="lead" class="${SL.picks[i.i] === 'lead' ? 'on' : ''}">&#9733; Lead</button><button type="button" data-role="ref" class="${SL.picks[i.i] === 'ref' ? 'on' : ''}">Ref</button></div>` : `<div class="slop-bi-btns dim">${slopEsc(i.error || '')}</div>`) + '</div>').join('')
-    + `</div><div class="slop-row"><button type="button" class="sb" id="slopBurstKeep" ${n ? '' : 'disabled'}>Keep ${n || ''}</button><button type="button" class="sb dim" id="slopBurstCancel">${b.running ? 'Stop' : 'Cancel'}</button></div>`;
-}
-function slopRenderPrompt() {
-  const p = SL.pack, d = p.d;
-  const ta = $('#slopText');
-  if (ta.ownerDocument.activeElement !== ta && ta.value !== (d.prompt.text || '')) ta.value = d.prompt.text || '';
-  for (const b of $$('#slopChips button')) b.classList.toggle('on', b.dataset.idea === d.prompt.idea);
-  $('#slopSug').classList.toggle('hidden', !d.suggestion);
-  $('#slopSugText').textContent = d.suggestion || '';
-  const c = d.audio.clip;
-  $('#slopLyrInfo').innerHTML = d.lyrics ? `lyrics ${slopTime(c.in)}–${slopTime(c.out)} from YouTube captions &rarr; <b>lyrics.txt</b> (${d.lyrics.lines} line${d.lyrics.lines > 1 ? 's' : ''})`
-    : p.details === 'pending' ? 'looking for captions&#8230;' : 'no captions for this part of the video';
-  $('#slopLyrBtn').classList.toggle('hidden', !d.lyrics);
-  $('#slopLyrics').textContent = p.lyricsText || '';
-  if (!d.lyrics) $('#slopLyrics').classList.add('hidden');
-}
-function slopRenderLeave() {
-  const p = SL.pack, d = p.d, f = p.files, refs = p.refs.filter(r => r.file && !r.busy);
-  const short = p.dir.replace(/^.*?([^\\/]+[\\/]SlopAMP[\\/])/i, '$1');
-  const ready = (f.audio || f.song) && refs.length && !p.busy.audio && !p.busy.song;
-  const go = $('#slopGo');
-  go.disabled = !ready;
-  go.title = ready ? 'Opens the folder and slop.cc in your browser, and copies your prompt' : !refs.length ? 'Grab a frame first' : 'Waiting for the audio';
-  const rights = '<div class="slop-rights">Upload only what you have the rights or permission for: the song, every face, logo and image. AI generation doesn’t create those rights; slop.cc asks you to confirm once per project.</div>';
-  if (SL.justOpened) {
-    $('#slopLeave').innerHTML = '<div class="slop-done">&#x2713; The folder and slop.cc are open, and your prompt is copied.</div>'
-      + `<ol class="slop-steps"><li>On slop.cc, attach the song: <b>${f.song ? 'song.mp3' : 'audio.mp3'}</b>${f.song ? ' (or the clip, <b>audio.mp3</b>)' : ''}.</li><li>Attach the references, <b>ref-01</b> (the lead) first, and give each the name in its file name.</li>`
-      + `<li>Click the message box, paste (<b>Ctrl+V</b>) and send. slop.cc asks you to confirm the rights first.</li></ol><div class="slop-where" title="${slopEsc(p.dir)}">${slopEsc(short)}</div>`;
-    return;
-  }
-  const chip = (on, icon, name, extra, wait) => `<span class="slop-file${on ? '' : ' wait'}">${icon} <b>${slopEsc(name)}</b>${extra ? ' ' + extra : ''}${wait && !on ? ' ' + wait : ''}</span>`;
-  const c = d.audio.clip;
-  const chips = [];
-  if (d.audio.song.on && (!d.audio.src || d.audio.src.full)) chips.push(chip(f.song && !p.busy.song, '&#9835;', 'song.mp3', d.video.duration ? slopTime(d.video.duration) : '', p.busy.song ? 'making&#8230;' : 'waiting for the song'));
-  chips.push(chip(f.audio && !p.busy.audio, '&#9835;', 'audio.mp3', slopTime(c.out - c.in), p.busy.audio ? 'making&#8230;' : 'waiting for the song'));
-  if (d.audio.clip2.on) chips.push(chip(f.audio2 && !p.busy.audio2, '&#9835;', 'audio-2.mp3', slopTime(d.audio.clip2.out - d.audio.clip2.in), 'making&#8230;'));
-  for (const r of refs) chips.push(chip(true, '&#9635;', r.file, `${r.lead ? '&#9733;' : ''}${Math.min(r.w, r.h) < SLOP_MIN_SIDE ? ' &#9888;' : ''}`));
-  if (d.motion.on) chips.push(chip(f.motion && !p.busy.motion, '&#127902;', 'motion.mp4', `${d.motion.len} s`, 'making&#8230;'));
-  chips.push(chip(f.prompt, '&#9998;', 'prompt.txt', '', f.prompt ? '' : '(on Save or Open)'));
-  if (d.lyrics) chips.push(chip(f.lyrics, '&#9834;', 'lyrics.txt'));
-  chips.push(chip(true, '&#x2139;', 'source.txt'));
-  $('#slopLeave').innerHTML = `<div class="slop-lh">IN THIS PACK · <span title="${slopEsc(p.dir)}">${slopEsc(short)}</span></div><div class="slop-files">${chips.join('')}</div>${rights}`;
-}
-
-// ---- wave: click = jump the player there, drag an edge / the clip, drag elsewhere = a new clip
-function slopWaveDown(e) {
-  if (!SL.pack || e.button !== 0) return;
-  const c = $('#slopWaveC'), r = c.getBoundingClientRect(), [v0, v1] = slopView();
-  const tAt = (cx) => v0 + Math.max(0, Math.min(1, (cx - r.left) / r.width)) * (v1 - v0);
-  const xOf = (t) => r.left + (t - v0) / (v1 - v0) * r.width;
-  const a = SL.pack.d.audio, x0 = e.clientX, t0 = tAt(x0);
-  const near = [['clip', 'in'], ['clip', 'out']].concat(a.clip2.on ? [['clip2', 'in'], ['clip2', 'out']] : []).map(([w, k]) => ({ w, k, d: Math.abs(xOf(a[w][k]) - x0) })).filter(h => h.d <= 7).sort((p, q) => p.d - q.d)[0];
-  const inside = (w) => a[w].on !== false && t0 >= a[w].in && t0 <= a[w].out;
-  const which = near ? near.w : inside('clip') ? 'clip' : a.clip2.on && inside('clip2') ? 'clip2' : 'clip';
-  const mode = near ? near.k : inside(which) ? 'move' : 'new';
-  const start = { ...a[which] };
-  let moved = false;
-  try { c.setPointerCapture(e.pointerId); } catch (_) {}
-  const move = (ev) => {
-    if (!moved && Math.abs(ev.clientX - x0) < 4) return;
-    moved = true;
-    const t = tAt(ev.clientX), dt = t - t0, lo = v0, hi = v1;
-    let i = start.in, o = start.out;
-    if (mode === 'in') i = Math.min(t, o - 1);
-    else if (mode === 'out') o = Math.max(t, i + 1);
-    else if (mode === 'move') { const len = o - i; i = Math.max(lo, Math.min(hi - len, start.in + dt)); o = i + len; }
-    else { i = Math.min(t0, t); o = Math.max(t0, t); if (o - i < 1) o = i + 1; }
-    SL.draft = { which, in: Math.max(0, i), out: o };
-    slopDrawWave(); if (which === 'clip') slopRenderAudio();
-  };
-  const up = async () => {
-    c.removeEventListener('pointermove', move); c.removeEventListener('pointerup', up); c.removeEventListener('pointercancel', up);
-    if (!moved) { SL.draft = null; if (slopIsPlaying()) { seekTo(t0); slopDrawWave(); } else toast('Play this video to jump to that point.'); return; }
-    const dr = SL.draft; SL.draft = null;
-    const res = await P.slopSet({ id: SL.pack.id, patch: { [dr.which]: { in: dr.in, out: dr.out } } });
-    if (res && res.ok) slopSetPack(res.pack);
-  };
-  c.addEventListener('pointermove', move); c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
-}
-function slopSetLen(field, v) {
-  if (!SL.pack) return;
-  const d = SL.pack.d, c = d.audio.clip;
-  v = Number(v); if (!Number.isFinite(v)) return;
-  const i = field === 'before' ? d.at - v : c.in, o = field === 'after' ? d.at + v : c.out;
-  if (o - i < 1) return;
-  clearTimeout(slopLenT);
-  SL.draft = { which: 'clip', in: Math.max(0, i), out: o };
-  slopDrawWave(); slopRenderAudio();
-  slopLenT = setTimeout(async () => {
-    const dr = SL.draft; SL.draft = null; if (!dr || !SL.pack) return;
-    const res = await P.slopSet({ id: SL.pack.id, patch: { clip: { in: dr.in, out: dr.out } } });
-    if (res && res.ok) slopSetPack(res.pack);
-  }, 600);
-}
-async function slopPatch(patch) { if (!SL.pack) return; const r = await P.slopSet({ id: SL.pack.id, patch }); if (r && r.ok) slopSetPack(r.pack); }
-function slopGrab(n, t) {
-  if (!SL.pack) return;
-  if (slopIsPlaying() && Math.abs(currentTime() - t) > 0.3) seekTo(t);      // the player shows that moment too
-  setTimeout(() => P.slopFrame({ id: SL.pack.id, n, t, rect: slopIsPlaying() ? slopRect() : null }), slopIsPlaying() ? 450 : 0);
-}
-
-// ---- events from main
-P.onSlop((ev) => {
-  if (ev.type === 'pack') { if (ev.pack.id === SL.id) slopSetPack(ev.pack); if (typeof slopLibChanged === 'function') slopLibChanged(ev.pack.id); }
-  else if (ev.type === 'peaks') { if (ev.id === SL.id) { SL.peaks = ev.peaks; if (SL.pack) { slopRuler(); slopRenderAudio(); } slopDrawWave(); } }
-  else if (ev.type === 'renamed') { if (SL.id === ev.from) SL.id = ev.to; }
-  else if (ev.type === 'gone') { if (SL.id === ev.id) slopClear(); }
-});
-slopAudio.addEventListener('ended', () => { if (SL.pack) slopRenderAudio(); });
-slopAudio.addEventListener('pause', () => { if (SL.pack) slopRenderAudio(); });
-
-// ---- wiring
-// WM.slop = { toggle: () => slopToggle() };   // Layout → SLOP: hidden with SLOP in 2.3 (un-comment to bring SLOP back)
-$('#slopCloseBtn').onclick = () => slopShow(false);
-$('#slopMinBtn').onclick = () => { slopShade = !slopShade; syncWindows(); };
-$('#slopEmptyStart').onclick = () => slopEnsure();
-$('#slopEmptyLib').onclick = () => openDownloadsManager('slop');
-$('#slopAddF').onclick = () => slopKey('frame');
-$('#slopSetIn').onclick = () => slopKey('in');
-$('#slopSetOut').onclick = () => slopKey('out');
-$('#slopNew').onclick = () => { if (slopTarget()) slopEnsure({ fresh: true }); else toast('Play the video to start another pack of it.'); };
-$('#slopSongBtn').onclick = async () => {
-  if (!SL.pack) return;
-  const busy = ['none', 'queued', 'downloading'].includes(SL.pack.song.status);
-  const r = await P.slopSong({ id: SL.pack.id, action: busy ? 'stop' : 'start' });
-  if (r && r.ok) slopSetPack(r.pack);
-};
-$('#slopWaveC').addEventListener('pointerdown', slopWaveDown);
-new ResizeObserver(() => { if (slopVisible) requestAnimationFrame(slopDrawWave); }).observe($('#slopWave'));
-for (const id of ['slopBefore', 'slopAfter']) {
-  const inp = $('#' + id), field = id === 'slopBefore' ? 'before' : 'after';
-  inp.addEventListener('input', () => { inp.value = inp.value.replace(/[^\d.-]/g, ''); if (inp.value && inp.value !== '-') slopSetLen(field, inp.value); });
-  inp.addEventListener('keydown', (e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); slopSetLen(field, Number(inp.value || 0) + (e.key === 'ArrowUp' ? 1 : -1)); inp.value = String(Number(inp.value || 0) + (e.key === 'ArrowUp' ? 1 : -1)); } });
-  inp.addEventListener('blur', () => { if (SL.pack) slopRenderAudio(); });
-}
-$('#slopPanel').addEventListener('click', (e) => {
-  const st = e.target.closest('.slop-step button');
-  if (st && SL.pack) {
-    const d = SL.pack.d, c = d.audio.clip, by = Number(st.dataset.d);
-    if (st.dataset.f === 'before') slopSetLen('before', Math.round(d.at - c.in) + by);
-    else if (st.dataset.f === 'after') slopSetLen('after', Math.round(c.out - d.at) + by);
-    else if (st.dataset.f === 'motion') slopPatch({ motion: { len: (d.motion.len || 3) + by } });
-    return;
-  }
-  const th = e.target.closest('.slop-th');
-  if (th) { SL.sel = Number(th.dataset.n); slopRenderLook(); return; }
-  if (e.target.closest('#slopAddTile')) { slopKey('frame'); return; }
-  if (e.target.closest('#slopBurstTile') && SL.pack) { SL.picks = {}; P.slopBurst({ id: SL.pack.id, count: 5 }); return; }
-  const bi = e.target.closest('.slop-bi button[data-role]');
-  if (bi) {
-    const i = Number(bi.closest('.slop-bi').dataset.i), role = bi.dataset.role;
-    if (role === 'lead') for (const k of Object.keys(SL.picks)) if (SL.picks[k] === 'lead') SL.picks[k] = 'ref';
-    SL.picks[i] = SL.picks[i] === role ? null : role;
-    slopRenderBurst(); return;
-  }
-  if (e.target.closest('#slopBurstKeep') && SL.pack) { P.slopBurst({ id: SL.pack.id, keep: Object.entries(SL.picks).filter(([, r]) => r).map(([i, role]) => ({ i: Number(i), role })) }); SL.picks = {}; return; }
-  if (e.target.closest('#slopBurstCancel') && SL.pack) { P.slopBurst({ id: SL.pack.id, cancel: true }); SL.picks = {}; return; }
-  if (e.target.closest('#slopUseWin') && SL.pack) { P.slopUseWindow({ id: SL.pack.id, n: SL.sel }); return; }
-});
-$('#slopKinds').addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-kind]'), r = SL.pack && slopSelRef(); if (!b || !r) return;
-  P.slopRef({ id: SL.pack.id, n: r.n, patch: { kind: r.kind === b.dataset.kind ? '' : b.dataset.kind } });
-});
-$('#slopRefName').addEventListener('input', () => {
-  const r = SL.pack && slopSelRef(); if (!r) return;
-  clearTimeout(slopNameT);
-  const n = r.n, v = $('#slopRefName').value;
-  slopNameT = setTimeout(() => P.slopRef({ id: SL.pack.id, n, patch: { name: v } }), 700);
-});
-$('#slopLead').onclick = () => { const r = SL.pack && slopSelRef(); if (r && !r.lead) P.slopRef({ id: SL.pack.id, n: r.n, patch: { lead: true } }); };
-$('#slopPrev').onclick = () => { const r = SL.pack && slopSelRef(); if (r) slopGrab(r.n, Math.max(0, r.t - 1)); };
-$('#slopNext').onclick = () => { const r = SL.pack && slopSelRef(); if (r) slopGrab(r.n, r.t + 1); };
-$('#slopRegrab').onclick = () => { const r = SL.pack && slopSelRef(); if (r) slopGrab(r.n, r.t); };
-$('#slopDelRef').onclick = () => { const r = SL.pack && slopSelRef(); if (r) { P.slopRef({ id: SL.pack.id, n: r.n, remove: true }); SL.sel = null; } };
-$('#slopCkSong').onchange = (e) => slopPatch({ song: { on: e.target.checked } });
-$('#slopCkClip2').onchange = (e) => slopPatch({ clip2: { on: e.target.checked } });
-$('#slopCkMotion').onchange = (e) => slopPatch({ motion: { on: e.target.checked } });
-$('#slopPlayClip').onclick = () => {
-  if (!SL.pack || !SL.pack.urls.audio) return;
-  if (!slopAudio.paused) { slopAudio.pause(); return; }
-  if (status === 'playing') pause();
-  slopAudio.src = SL.pack.urls.audio; slopAudio.currentTime = 0; slopAudio.play().catch(() => {});
-  slopRenderAudio();
-};
-$('#slopChips').addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-idea]'); if (!b || !SL.pack) return;
-  const t = $('#slopText'), cur = t.value.trim();
-  if (!cur || Object.values(SLOP_IDEAS).includes(cur) || cur === SL.pack.d.suggestion) t.value = SLOP_IDEAS[b.dataset.idea];   // never overwrite what the user wrote
-  slopPatch({ prompt: { text: t.value, idea: b.dataset.idea } });
-  t.focus();
-});
-$('#slopText').addEventListener('input', () => {
-  clearTimeout(slopTextT);
-  slopTextT = setTimeout(() => { if (SL.pack) P.slopSet({ id: SL.pack.id, patch: { prompt: { text: $('#slopText').value } } }); }, 600);
-});
-$('#slopSugUse').onclick = () => {
-  if (!SL.pack) return;
-  const t = $('#slopText'), s = SL.pack.d.suggestion, cur = t.value.trim();
-  t.value = !cur || Object.values(SLOP_IDEAS).includes(cur) ? s : `${cur}\n${s}`;
-  slopPatch({ prompt: { text: t.value } });
-};
-$('#slopLyrBtn').onclick = () => $('#slopLyrics').classList.toggle('hidden');
-$('#slopCopy').onclick = () => { P.slopCopy($('#slopText').value.trim()); toast('Prompt copied.'); };
-$('#slopSave').onclick = async () => { if (!SL.pack) return; const r = await P.slopSavePrompt({ id: SL.pack.id, text: $('#slopText').value }); toast(r && r.ok ? 'prompt.txt saved in the pack, and the prompt is copied.' : 'Couldn’t save prompt.txt.'); };
-$('#slopFolderBtn').onclick = () => { if (SL.pack) P.slopFolder(SL.pack.id); };
-$('#slopZipBtn').onclick = async () => {
-  if (!SL.pack) return;
-  toast('Zipping the pack…', 8000);
-  const [r] = await P.slopZip([SL.pack.id]);
-  if (r && r.file) showDlBar({ text: `✓ Zipped: ${r.file.split(/[\\/]/).pop()} (${fmtSize(r.size)})`, pct: 100, buttons: [['Show in folder', () => P.showInFolder(r.file)]], hideAfter: 8000 });
-  else toast(`Couldn’t zip the pack${r && r.error ? `: ${r.error}` : '.'}`);
-};
-$('#slopSignup').onclick = () => P.slopSignup();
-$('#slopDiscard').onclick = async () => {
-  if (!SL.pack) return;
-  if (!await confirmBox('Discard this pack?', `This moves the pack folder to the Recycle Bin:\n\n${SL.pack.dir}`, 'Discard')) return;
-  const id = SL.pack.id; slopClear(); await P.slopTrash([id]);
-};
-$('#slopGo').onclick = async () => {
-  if (!SL.pack) return;
-  $('#slopGo').disabled = true;
-  const r = await P.slopGo({ id: SL.pack.id, text: $('#slopText').value });
-  if (!r || !r.ok) { toast((r && r.error) || 'Couldn’t open slop.cc.'); if (SL.pack) slopRenderLeave(); return; }
-  SL.justOpened = true; slopSetPack(r.pack);
-  $('#slopGo').innerHTML = 'Open again &#9656;';
-  setTimeout(() => { if (SL.id === r.pack.id) { SL.justOpened = false; $('#slopGo').innerHTML = 'Open in Slop.cc (new video) &#9656;'; if (SL.pack) slopRenderLeave(); } }, 60000);
-};
+// ------------------------------------------------------------------ (2.3.1) SLOP is gone
+// SLOP (1.6–2.3: packs of a YouTube moment for slop.cc) was hidden in 2.3.0 and removed in 2.3.1. Editing is CLIP
+// (below); its reference frames live on as CLIP → SHOTS. Users' Downloads\SlopAMP\Slop folders are never touched.
+const htmlEsc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ------------------------------------------------------------------ downloads (yt-dlp)
 const DL = new Map();   // item id -> { status, kind, pct, speed, eta, part, title }
@@ -2711,7 +2245,7 @@ function dlTarget() {
   if (sel) return sel;
   return isWeb(cur) ? cur : null;
 }
-function updateDlButton() { const b = $('#bDl'); if (b) b.disabled = !dlTarget(); updateSlopButton(); }
+function updateDlButton() { const b = $('#bDl'); if (b) b.disabled = !dlTarget(); }
 function dlOverall(d) {
   if (!d || d.pct == null) return 0;
   if (d.kind === 'audio') return d.pct;
@@ -3292,11 +2826,9 @@ function fmtDate(ms) {
 }
 async function openDownloadsManager(filter) {
   hideDlMenu(); hidePop();
-  if (typeof filter === 'string') DLM.filter = filter;     // 'slop' from the SLOP window
-  if (DLM.filter === 'slop') DLM.filter = 'all';          // 2.3: Library → SLOP is hidden
+  if (typeof filter === 'string') DLM.filter = filter;
   DLM.sel.clear(); DLM.anchor = -1;
   await dlmRefresh();
-  if (slopMode()) await slopLibRefresh();
   if (skinMode()) await sklRefresh();
   dlmApplySize();
   if (!$('#dlmDlg').open) $('#dlmDlg').showModal();
@@ -3330,9 +2862,8 @@ function dlmVisible() {
 }
 function dlmRender() {
   for (const b of $('#dlmSeg').children) b.classList.toggle('on', b.dataset.f === DLM.filter);
-  if (slopMode()) { $('#dlmDlg').classList.remove('skinmode'); slopLibRender(); return; }       // Library → SLOP (see below)
   if (skinMode()) { sklRender(); return; }           // Library → SKINS
-  $('#dlmDlg').classList.remove('slopmode', 'skinmode');
+  $('#dlmDlg').classList.remove('skinmode');
   const cm = clipMode();                             // Library → CLIPS (2.3): own columns, bar and note
   $('#dlmDlg').classList.toggle('clipmode', cm);
   $('#dlmDlg thead tr').innerHTML = cm ? DLM_HEAD_CLIPS : DLM_HEAD;
@@ -3423,7 +2954,7 @@ $('#dlmDlg thead').addEventListener('click', (e) => {
   const th = e.target.closest('th[data-sort]'); if (!th) return;
   const k = th.dataset.sort; if (DLM.sort === k) DLM.dir = -DLM.dir; else { DLM.sort = k; DLM.dir = k === 'title' || k === 'kind' || k === 'from' ? 1 : -1; } dlmRender();
 });
-for (const b of $('#dlmSeg').children) b.onclick = async () => { DLM.filter = b.dataset.f; DLM.anchor = -1; if (slopMode()) await slopLibRefresh(); if (skinMode()) await sklRefresh(); dlmApplySize(); dlmRender(); };
+for (const b of $('#dlmSeg').children) b.onclick = async () => { DLM.filter = b.dataset.f; DLM.anchor = -1; if (skinMode()) await sklRefresh(); dlmApplySize(); dlmRender(); };
 $('#dlmX').onclick = () => $('#dlmDlg').close();
 $('#dlmOpen').onclick = () => clipMode() ? P.clipFolder(CLS.sub === 'mp4clip' ? 'mp4' : 'mp3') : P.dlOpenDir(DLM.filter === 'audio' ? 'audio' : DLM.filter === 'playlist' ? 'playlists' : 'video');
 $('#dlmSearch').addEventListener('input', () => { DLM.anchor = -1; dlmRender(); });
@@ -3452,11 +2983,6 @@ $('#dlmDlg').addEventListener('keydown', (e) => {
     if (e.target && e.target.id === 'sklRenIn') return;
     if (e.key === 'Delete') { e.preventDefault(); if (!$('#sklDel').disabled) $('#sklDel').click(); }
     else if (e.key === 'Enter' && sklOne()) { e.preventDefault(); sklApply(sklOne()); }
-    return;
-  }
-  if (slopMode()) {
-    if (e.key === 'Delete') { e.preventDefault(); $('#slDel').click(); }
-    else if (e.ctrlKey && e.key.toLowerCase() === 'a') { e.preventDefault(); for (const r of slopLibVisible()) SLIB.sel.add(r.id); slopLibRender(); }
     return;
   }
   if (e.key === 'Delete') { e.preventDefault(); $('#dlmDel').click(); }
@@ -3519,7 +3045,7 @@ $('#pDlm').onclick = () => openDownloadsManager();
 // mp3clips) or MP4 (Downloads\SlopAMP\mp4clips). The original is never changed. Trim only (no splicing,
 // volume, crop, text…). The cutting is done by main.js / clip.js; this draws the window and the Library rows.
 // The preview plays inside CLIP (the main player pauses, so there's never double audio). I / O / Space /
-// arrows act on CLIP only while the CLIP window is the active one (SLOP keeps I / O everywhere else).
+// arrows act on CLIP only while the CLIP window is the active one.
 var clipVisible = false, clipShade = false;   // var: syncWindows() reads them, and it can run before this line
 const CL = { file: null, info: null, item: null, srcTitle: '', kind: 'mp3', in: 0, out: 0, v0: 0, v1: 0, peaks: null, last: 'out', loop: false,
   range: null, raf: 0, nameTouched: false, saved: [], job: null, pending: null, framesKey: '', framesT: 0, quality: '320', cut: 'exact',
@@ -3543,7 +3069,7 @@ function clipShow(on) {
   clipVisible = !!on;
   if (on) clipShade = false; else clipStopPreview();
   syncWindows();
-  updateSlopButton();
+  updateEditButton();
   if (on) { clipRender(); setTimeout(() => { clipDraw(); clipRuler(); }, 60); }
 }
 WM.clip = { toggle: () => clipShow(!clipVisible), open: (f, o) => clipOpen(f, o) };
@@ -3680,7 +3206,7 @@ function clipRenderSaved() {
   if (!CL.saved.length) return;
   const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const dirs = [...new Set(CL.saved.map(f => f.kind === 'mp4' ? 'mp4clips' : 'mp3clips'))].map(d => `Downloads\\SlopAMP\\${d}`).join(' · ');
-  box.innerHTML = `<div class="slop-lh">SAVED FROM THIS ${CL.info && CL.info.hasVideo ? 'VIDEO' : 'FILE'} · ${esc(dirs)}</div><div class="slop-files">${CL.saved.map((f, i) => `<span class="slop-file clip-file" data-i="${i}" title="${esc(f.path)}\nClick: show in folder">${f.kind === 'mp4' ? '&#x1F39E;' : '&#9835;'} ${esc(f.path.split(/[\\/]/).pop())} ${clipFmt(f.duration, false)}</span>`).join('')}</div>`;
+  box.innerHTML = `<div class="ed-lh">SAVED FROM THIS ${CL.info && CL.info.hasVideo ? 'VIDEO' : 'FILE'} · ${esc(dirs)}</div><div class="ed-files">${CL.saved.map((f, i) => `<span class="ed-file clip-file" data-i="${i}" title="${esc(f.path)}\nClick: show in folder">${f.kind === 'mp4' ? '&#x1F39E;' : '&#9835;'} ${esc(f.path.split(/[\\/]/).pop())} ${clipFmt(f.duration, false)}</span>`).join('')}</div>`;
 }
 $('#clipSaved').addEventListener('click', (e) => { const el = e.target.closest('.clip-file'); if (el) { const f = CL.saved[+el.dataset.i]; if (f) P.showInFolder(f.path); } });
 function clipZoomTo(a, b) {
@@ -3951,7 +3477,7 @@ function clipRenderShots() {
   $('#clipShotToggle').title = CL.shotsOpen ? 'Hide the shots' : 'Show the shots';
   $('#clipBurst').disabled = !!CL.shotBusy;
   const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  $('#clipShotStrip').innerHTML = shots.length ? shots.map(s => `<div class="slop-th${s.n === CL.shotSel ? ' sel' : ''}" data-n="${s.n}" title="${esc(s.file)}"><img src="${esc(s.url)}" alt="" draggable="false">${s.lead ? '<span class="slop-th-lead">&#9733; LEAD</span>' : ''}<span class="slop-th-t">${clipFmt(s.t, false)}</span><div class="slop-th-cap">${esc(s.name || s.file.replace(/\.png$/, ''))}${s.kind ? ` <span>${s.kind}</span>` : ''}</div></div>`).join('')
+  $('#clipShotStrip').innerHTML = shots.length ? shots.map(s => `<div class="ed-th${s.n === CL.shotSel ? ' sel' : ''}" data-n="${s.n}" title="${esc(s.file)}"><img src="${esc(s.url)}" alt="" draggable="false">${s.lead ? '<span class="ed-th-lead">&#9733; LEAD</span>' : ''}<span class="ed-th-t">${clipFmt(s.t, false)}</span><div class="ed-th-cap">${esc(s.name || s.file.replace(/\.png$/, ''))}${s.kind ? ` <span>${s.kind}</span>` : ''}</div></div>`).join('')
     : `<span class="dim">No shots yet: move the preview to a good frame and press <b>+ Shot</b> (or G), or try <b>Burst ×5</b>.</span>`;
   const s = shots.find(x => x.n === CL.shotSel);
   $('#clipShotEd').classList.toggle('hidden', !s);
@@ -3967,7 +3493,7 @@ function clipRenderShots() {
   if (burst.length) {
     CL.burstPick = CL.burstPick && CL.burstPick.length === burst.length ? CL.burstPick : burst.map(() => false);
     const k = CL.burstPick.filter(Boolean).length;
-    box.innerHTML = `<div class="slop-burst-h"><b>BURST</b> · pick the ones to keep</div><div class="clip-burst-row">${burst.map((b, i) => `<div class="clip-burst-th${CL.burstPick[i] ? ' on' : ''}" data-i="${i}"><img src="${esc(b.url)}" alt="" draggable="false"><span class="chk">${CL.burstPick[i] ? '&#10003; keep' : '&nbsp;'}</span><span class="slop-th-t">${clipFmt(b.t, false)}</span></div>`).join('')}</div><div class="slop-row"><button type="button" class="sb" id="clipBurstKeep"${k ? '' : ' disabled'}>Keep ${k || ''}</button><button type="button" class="sb dim" id="clipBurstDrop">Discard the rest</button></div>`;
+    box.innerHTML = `<div class="ed-burst-h"><b>BURST</b> · pick the ones to keep</div><div class="clip-burst-row">${burst.map((b, i) => `<div class="clip-burst-th${CL.burstPick[i] ? ' on' : ''}" data-i="${i}"><img src="${esc(b.url)}" alt="" draggable="false"><span class="chk">${CL.burstPick[i] ? '&#10003; keep' : '&nbsp;'}</span><span class="ed-th-t">${clipFmt(b.t, false)}</span></div>`).join('')}</div><div class="ed-row"><button type="button" class="sb" id="clipBurstKeep"${k ? '' : ' disabled'}>Keep ${k || ''}</button><button type="button" class="sb dim" id="clipBurstDrop">Discard the rest</button></div>`;
   }
   $('#clipShotWhere').textContent = v && v.dir ? `Saved in ${v.dir}` : '';
 }
@@ -4002,7 +3528,7 @@ $('#clipShotAdd').onclick = clipShotAdd;
 $('#clipBurst').onclick = clipShotBurst;
 $('#clipShotToggle').onclick = () => { CL.shotsOpen = !CL.shotsOpen; clipRenderShots(); };
 $('#clipShotStrip').addEventListener('click', (e) => {
-  const th = e.target.closest('.slop-th'); if (!th) return;
+  const th = e.target.closest('.ed-th'); if (!th) return;
   CL.shotSel = +th.dataset.n; clipRenderShots();
   const s = CL.shots.shots.find(x => x.n === CL.shotSel);
   if (s && CL.info.previewUrl) { clipMedia.currentTime = s.t; clipDraw(); clipClock(); }
@@ -4029,7 +3555,9 @@ $('#clipBurstBox').addEventListener('click', async (e) => {
 // ---- EDIT (2.3): the player's old SLOP button. Click: CLIP on the selected (else playing) song or video — as MP4 when
 // it has a video file, else MP3 (switchable in CLIP); a playing local file starts the preview where it's playing. Not
 // downloaded yet: a small menu (it's downloaded first). Click again while CLIP shows that file: CLIP closes.
-// Right-click: Clip MP3 / Clip video, Library → CLIPS. (2.3: SLOP is hidden — its code and packs stay; see "SLOP" above.)
+// Right-click: Clip MP3 / Clip video, Library → CLIPS.
+// EDIT is lit while CLIP is open
+function updateEditButton() { const b = $('#bEdit'); if (b) b.classList.toggle('on', !!clipVisible); }
 function editTarget() { return S.items.find(i => S.sel.has(i.id)) || curItem() || null; }
 async function editClick() {
   const it = editTarget();
@@ -4046,7 +3574,7 @@ async function editClick() {
   toast(it.live ? 'A live stream can\u2019t be clipped.' : 'That file isn\u2019t there any more.');
 }
 function editMenu() {
-  const b = $('#bSlop'), it = editTarget();
+  const b = $('#bEdit'), it = editTarget();
   openPop((add, hr) => {
     if (it) {
       add('dm-sec', 'EDIT');
@@ -4057,11 +3585,11 @@ function editMenu() {
       else if (it.type !== 'file' || it.hasVideo) add('dm-item off', '\u2702 Clip video\u2026');
       hr();
     } else add('dm-item', 'Open CLIP', () => clipShow(true));
-    add('dm-item', 'Library \u2192 CLIPS', () => openDownloadsManager('clips'));   // (SLOP is hidden in 2.3)
+    add('dm-item', 'Library \u2192 CLIPS', () => openDownloadsManager('clips'));
   }, b);
 }
-$('#bSlop').onclick = () => editClick();
-$('#bSlop').addEventListener('contextmenu', (e) => { e.preventDefault(); editMenu(); });
+$('#bEdit').onclick = () => editClick();
+$('#bEdit').addEventListener('contextmenu', (e) => { e.preventDefault(); editMenu(); });
 
 // ------------------------------------------------------------------ Library → CLIPS (2.3)
 // The CLIPS button: every file in mp3clips / mp4clips, with All / MP3 clips / MP4 clips. Clip rows are part
@@ -4294,21 +3822,20 @@ function sklRender() {
   const dlg = $('#dlmDlg');
   dlg.classList.toggle('skinmode', skinMode());
   if (!skinMode()) return;
-  dlg.classList.remove('slopmode');
   const { mine, built } = sklRows(), on = WM.skins.saved, all = WM.skins.user;
   const total = all.reduce((a, s) => a + (s.size || 0), 0);
   $('#dlmCount').textContent = `${all.length} SKIN${all.length === 1 ? '' : 'S'} OF YOURS · ${total ? fmtSize(total).toUpperCase() : '0 KB'}`;
   $('#dlmMiss').textContent = '';
   $('#dlmSearch').placeholder = 'Search skins…';
   $('#dlmSearchX').classList.toggle('hidden', !($('#dlmSearch').value || '').trim());
-  const sw = (s) => `<span class="skl-sw">${(s.sw && s.sw.length === 6 ? s.sw : WM.skins.list[0].sw).map(c => `<i style="background:${slopEsc(c)}"></i>`).join('')}</span>`;
-  const row = (s, user) => `<div class="skl-row${SKL.sel.has(s.id) ? ' on' : ''}" data-id="${slopEsc(s.id)}">`
+  const sw = (s) => `<span class="skl-sw">${(s.sw && s.sw.length === 6 ? s.sw : WM.skins.list[0].sw).map(c => `<i style="background:${htmlEsc(c)}"></i>`).join('')}</span>`;
+  const row = (s, user) => `<div class="skl-row${SKL.sel.has(s.id) ? ' on' : ''}" data-id="${htmlEsc(s.id)}">`
     + (user ? `<span class="dlm-cb${SKL.sel.has(s.id) ? ' on' : ''}"></span>` : '<span class="dlm-cb" style="visibility:hidden"></span>')
     + sw(s)
-    + (SKL.renaming === s.id ? `<span class="skl-n"><input type="text" id="sklRenIn" maxlength="60" value="${slopEsc(s.name)}" spellcheck="false"></span>`
-      : `<span class="skl-n">${slopEsc(s.name)}${user ? (s.baseName ? `<small>from ${slopEsc(s.baseName)}</small>` : '') : `<small>built-in · ${slopEsc(s.group)}</small>`}</span>`)
+    + (SKL.renaming === s.id ? `<span class="skl-n"><input type="text" id="sklRenIn" maxlength="60" value="${htmlEsc(s.name)}" spellcheck="false"></span>`
+      : `<span class="skl-n">${htmlEsc(s.name)}${user ? (s.baseName ? `<small>from ${htmlEsc(s.baseName)}</small>` : '') : `<small>built-in · ${htmlEsc(s.group)}</small>`}</span>`)
     + (s.id === on ? '<span class="skl-act">ON</span>' : '')
-    + `<span class="skl-f">${user ? `${slopEsc(s.slug)}.css` : ''}</span>`
+    + `<span class="skl-f">${user ? `${htmlEsc(s.slug)}.css` : ''}</span>`
     + `<span class="skl-sz">${user ? fmtSize(s.size) : ''}</span><span class="skl-dt">${user ? fmtDate(s.mtime) : ''}</span></div>`;
   $('#sklList').innerHTML = '<div class="skl-sec">Mine</div>'
     + (mine.length ? mine.map(s => row(s, true)).join('') : `<div class="skl-empty">${WM.skins.user.length ? 'None of your skins match.' : 'No skins of your own yet. <b>+ New skin</b> opens the Skin Editor on the skin you have on; <b>Import…</b> adds a .css someone shared.'}</div>`)
@@ -4397,134 +3924,12 @@ $('#sklDel').onclick = async () => {
   await sklRefresh();
   toast(failed ? `${failed} skin${failed > 1 ? 's' : ''} couldn’t be deleted.` : `${ids.length} skin${ids.length > 1 ? 's' : ''} moved to the Recycle Bin.`, 2500);
 };
-// ------------------------------------------------------------------ Library → SLOP
-// Every pack in Downloads\SlopAMP\Slop (main.js listPacks): search, filter by what's in a pack, preview,
-// rename, open in SLOP / slop.cc, zip, show in Explorer, delete (Recycle Bin). The Library resizes.
-const SLIB = { rows: [], sel: new Set(), cur: null, kinds: new Set(), flags: new Set(), anchor: -1, renaming: false };
-const SL_KINDS = ['person', 'look', 'prop', 'place'];
-const SL_FLAGS = [['song', 'has song', (r) => r.files.song], ['motion', 'motion', (r) => r.files.motion], ['lyrics', 'lyrics', (r) => r.files.lyrics], ['zip', 'zipped', (r) => !!r.zip], ['new', 'not opened yet', (r) => !r.opened]];
-const slAudio = new Audio();
-let slAudioKey = '', slRefreshT = null;
-const slopMode = () => DLM.filter === 'slop';
-
-async function slopLibRefresh() {
-  SLIB.rows = await P.slopList();
-  for (const id of [...SLIB.sel]) if (!SLIB.rows.some(r => r.id === id)) SLIB.sel.delete(id);
-  if (SLIB.cur && !SLIB.rows.some(r => r.id === SLIB.cur)) SLIB.cur = null;
-  slopLibRender();
-}
-function slopLibChanged() {        // a pack changed in SLOP: refresh the Library if it shows packs
-  if (!$('#dlmDlg').open || !slopMode()) return;
-  clearTimeout(slRefreshT); slRefreshT = setTimeout(slopLibRefresh, 1200);
-}
-function slopLibVisible() {
-  const q = ($('#dlmSearch').value || '').trim().toLowerCase();
-  const v = SLIB.rows.filter(r => {
-    if (q) {
-      const hay = [r.title, r.video.title, r.video.channel, r.video.id, r.prompt, r.suggestion, r.lyricsText, ...r.refs.map(x => `${x.name} ${x.kind}`)].join('\n').toLowerCase();
-      if (!q.split(/\s+/).every(w => hay.includes(w))) return false;
-    }
-    for (const k of SLIB.kinds) if (!r.refs.some(x => x.kind === k)) return false;
-    for (const [k, , test] of SL_FLAGS) if (SLIB.flags.has(k) && !test(r)) return false;
-    return true;
-  });
-  const s = $('#slSort').value;
-  v.sort((a, b) => s === 'old' ? a.created - b.created : s === 'title' ? String(a.title).localeCompare(String(b.title)) : s === 'size' ? b.size - a.size : b.created - a.created);
-  return v;
-}
-function slFlags(r) {
-  const f = [`${r.refs.length} REF`];
-  f.push(r.files.song ? 'SONG' : r.files.audio ? 'CLIP' : 'NO AUDIO');
-  if (r.files.motion) f.push('MOTION'); if (r.files.lyrics) f.push('LYRICS'); if (r.zip) f.push('ZIP');
-  if (r.legacy) f.push('1.5');
-  return f;
-}
-function slopLibRender() {
-  const dlg = $('#dlmDlg');
-  dlg.classList.toggle('slopmode', slopMode());
-  if (!slopMode()) return;
-  const vis = slopLibVisible(), total = SLIB.rows.reduce((a, r) => a + r.size, 0);
-  $('#dlmCount').textContent = `${SLIB.rows.length} SLOP PACK${SLIB.rows.length === 1 ? '' : 'S'} · ${total ? fmtSize(total).toUpperCase() : '0 MB'}`;
-  $('#dlmMiss').textContent = '';
-  $('#dlmSearch').placeholder = 'Search titles, reference names, prompts, lyrics…';
-  $('#dlmSearchX').classList.toggle('hidden', !($('#dlmSearch').value || '').trim());
-  for (const b of $('#slView').children) b.classList.toggle('on', b.dataset.v === S.lib.view);
-  // tag chips with counts
-  const count = (fn) => SLIB.rows.filter(fn).length;
-  $('#slTags').innerHTML = '<span class="sl-lbl">SHOW</span>'
-    + SL_KINDS.map(k => `<button type="button" class="sl-chip${SLIB.kinds.has(k) ? ' on' : ''}" data-kind="${k}">${k} <i>${count(r => r.refs.some(x => x.kind === k))}</i></button>`).join('')
-    + SL_FLAGS.map(([k, label, test]) => `<button type="button" class="sl-chip${SLIB.flags.has(k) ? ' on' : ''}" data-flag="${k}">${label} <i>${count(test)}</i></button>`).join('')
-    + (SLIB.kinds.size || SLIB.flags.size ? '<button type="button" class="slop-link" id="slClearTags">clear</button>' : '');
-  // grid or list
-  const grid = $('#slGrid'), list = S.lib.view === 'list';
-  grid.classList.toggle('list', list);
-  if (!vis.length) {
-    const q = ($('#dlmSearch').value || '').trim();
-    grid.innerHTML = `<div class="sl-empty">${SLIB.rows.length ? (q ? `No pack matches "${slopEsc(q)}".` : 'No pack has all of these.') : 'No SLOP packs yet. Play a YouTube video, then right-click EDIT → SLOP this YouTube moment (or press G) to make one.'}</div>`;
-  } else {
-    grid.innerHTML = vis.map((r, i) => {
-      const on = SLIB.sel.has(r.id), names = r.refs.map(x => x.name).filter(Boolean).join(' · ') || '—';
-      const thumb = r.thumb ? `<img src="${slopEsc(r.thumb)}" alt="" loading="lazy">` : '<span class="sl-noimg">no frame</span>';
-      if (list) return `<div class="sl-row${on ? ' on' : ''}${SLIB.cur === r.id ? ' cur' : ''}" data-i="${i}"><span class="sl-cb${on ? ' on' : ''}"></span>${thumb}<span class="sl-ti" title="${slopEsc(r.title)}">${slopEsc(r.title)}</span><span class="sl-names">${slopEsc(names)}</span><span class="sl-fl">${slFlags(r).map(f => `<b>${f}</b>`).join('')}</span><span class="sl-sz">${fmtSize(r.size)}</span><span class="sl-dt">${fmtDate(r.created)}</span></div>`;
-      return `<div class="sl-card${on ? ' on' : ''}${SLIB.cur === r.id ? ' cur' : ''}" data-i="${i}"><div class="sl-th">${thumb}<span class="sl-cb${on ? ' on' : ''}"></span><span class="sl-t">@${slopTime(r.at || 0)}</span><span class="sl-fl">${slFlags(r).map(f => `<b>${f}</b>`).join('')}</span></div>`
-        + `<div class="sl-b"><div class="sl-ti" title="${slopEsc(r.title)}">${slopEsc(r.title)}</div><div class="sl-meta"><span>${fmtDate(r.created)}</span><span class="sl-names">${slopEsc(names)}</span><span class="sl-sz">${fmtSize(r.size)}</span></div></div></div>`;
-    }).join('');
-  }
-  slopLibPreview();
-  const n = vis.filter(r => SLIB.sel.has(r.id)).length;
-  $('#slDel').disabled = !n; $('#slDel').innerHTML = `&#x1F5D1; Delete selected${n ? ` (${n})` : ''}`;
-  $('#slZip').disabled = !n; $('#slZip').innerHTML = `&#x1F5DC; Zip selected${n ? ` (${n})` : ''}`;
-  $('#slDelAll').disabled = !vis.length;
-  $('#slDelAll').textContent = ($('#dlmSearch').value || '').trim() || SLIB.kinds.size || SLIB.flags.size ? `Delete all ${vis.length} shown…` : 'Delete all packs…';
-}
-function slopLibPreview() {
-  const pv = $('#slPv'), r = SLIB.rows.find(x => x.id === SLIB.cur) || SLIB.rows.find(x => SLIB.sel.has(x.id));
-  if (!r) { pv.innerHTML = '<div class="sl-empty">Click a pack to see it here.</div>'; return; }
-  const lead = r.refs.find(x => x.lead) || r.refs[0];
-  const aud = (k, name) => r.urls && r.urls[k] ? `<button type="button" class="sl-aud${slAudioKey === r.id + k && !slAudio.paused ? ' on' : ''}" data-k="${k}">${slAudioKey === r.id + k && !slAudio.paused ? '&#9632;' : '&#9654;'} ${name}</button>` : '';
-  pv.innerHTML = (lead ? `<img class="sl-big" src="${slopEsc(lead.url)}" alt="">` : '<div class="sl-big sl-noimg">no frame</div>')
-    + (SLIB.renaming ? `<div class="sl-ren"><input type="text" id="slRenIn" maxlength="200" value="${slopEsc(r.title)}" spellcheck="false"><button type="button" class="slop-link" id="slRenOk">save</button></div>`
-      : `<h3><span>${slopEsc(r.title)}</span> <button type="button" class="slop-link" id="slRename">&#x270E; rename</button></h3>`)
-    + `<div class="sl-src">YouTube ${slopEsc(r.video.id || '')}${r.at ? ` @${slopTime(r.at)}` : ''} · made ${fmtDate(r.created)} · ${r.opened ? 'opened in slop.cc' : 'not opened in slop.cc yet'}${r.legacy ? ' · from SlopAMP 1.5' : ''}</div>`
-    + (r.refs.length ? `<div class="sl-strip">${r.refs.map(x => `<button type="button" class="sl-ref" data-file="${slopEsc(x.file)}" title="Show ${slopEsc(x.file)} in Explorer"><img src="${slopEsc(x.url)}" alt=""><span>${x.lead ? '&#9733; ' : ''}${slopEsc(x.name || x.file.replace(/\.png$/, ''))}${x.kind ? ` <i>${x.kind}</i>` : ''}</span></button>`).join('')}</div>` : '')
-    + `<div class="sl-auds">${aud('audio', 'audio.mp3')}${aud('audio2', 'audio-2.mp3')}${aud('song', 'song.mp3')}</div>`
-    + (r.prompt ? `<div class="sl-prompt">${slopEsc(r.prompt)}</div>` : '<div class="sl-prompt dim">No prompt yet.</div>')
-    + (r.lyricsText ? `<details class="sl-lyr"><summary>lyrics.txt</summary><pre>${slopEsc(r.lyricsText)}</pre></details>` : '')
-    + `<div class="sl-acts"><button type="button" class="sb go" data-a="slop">Open in SLOP</button><button type="button" class="sb dim" data-a="web">Open in Slop.cc &#9656;</button><button type="button" class="sb dim" data-a="show">&#x1F4C1; Show in Explorer</button><button type="button" class="sb dim" data-a="zip">&#x1F5DC; Zip</button>${r.prompt ? '<button type="button" class="sb dim" data-a="copy">&#x2398; Copy prompt</button>' : ''}<button type="button" class="sb red" data-a="del">&#x1F5D1; Delete</button></div>`;
-  const ri = $('#slRenIn'); if (ri) { ri.focus(); ri.select(); }
-}
-async function slopLibDelete(ids, all) {
-  const rows = SLIB.rows.filter(r => ids.includes(r.id)); if (!rows.length) return;
-  const size = rows.reduce((a, r) => a + r.size, 0);
-  const ok = await confirmBox(all ? `Delete all ${rows.length} pack${rows.length > 1 ? 's' : ''}?` : `Delete ${rows.length} pack${rows.length > 1 ? 's' : ''}?`,
-    `${rows.length} SLOP pack${rows.length > 1 ? 's' : ''} (${fmtSize(size)}) will go to the Recycle Bin, with ${rows.length > 1 ? 'their' : 'its'} zip if there is one.`, 'Delete');
-  if (!ok) return;
-  slAudio.pause();
-  const res = await P.slopTrash(rows.map(r => r.id));
-  const failed = res.filter(x => !x.ok).length;
-  SLIB.sel.clear();
-  await slopLibRefresh();
-  toast(failed ? `${failed} pack${failed > 1 ? 's' : ''} couldn’t be deleted (a file may be open in another program).` : `${rows.length} pack${rows.length > 1 ? 's' : ''} moved to the Recycle Bin.`, 3000);
-}
-async function slopLibZip(ids) {
-  if (!ids.length) return;
-  toast(`Zipping ${ids.length} pack${ids.length > 1 ? 's' : ''}…`, 10000);
-  const res = await P.slopZip(ids);
-  const ok = res.filter(x => x.file);
-  await slopLibRefresh();
-  if (ok.length === 1) showDlBar({ text: `✓ Zipped: ${ok[0].file.split(/[\\/]/).pop()} (${fmtSize(ok[0].size)})`, pct: 100, buttons: [['Show in folder', () => P.showInFolder(ok[0].file)]], hideAfter: 8000 });
-  else toast(`${ok.length} zip${ok.length === 1 ? '' : 's'} made next to the pack folders${res.length > ok.length ? `; ${res.length - ok.length} failed` : ''}.`, 3500);
-}
-async function slopLibOpen(id, web) {
-  $('#dlmDlg').close();
-  await slopOpenPack(id);
-  if (web && SL.pack) $('#slopGo').click();
-}
+// ------------------------------------------------------------------ Library: size, download info, re-checks
 // size: drag the grip (the dialog stays centred, so the width changes twice as fast as the cursor)
 function dlmApplySize() {
   const d = $('#dlmDlg'), scr = d.ownerDocument.defaultView.screen;
-  const big = slopMode(), mid = skinMode() || clipMode();
-  const w = S.lib.w || (big ? 1000 : mid ? 880 : 0), h = S.lib.h || (big ? 660 : 0);
+  const mid = skinMode() || clipMode();
+  const w = S.lib.w || (mid ? 880 : 0), h = S.lib.h || 0;
   d.style.width = w ? `${Math.min(w, scr.availWidth - 20)}px` : '';
   d.style.height = h ? `${Math.min(h, scr.availHeight - 20)}px` : '';
   d.classList.toggle('sized', !!h);
@@ -4538,77 +3943,6 @@ $('#dlmGrip').addEventListener('pointerdown', (e) => {
   const up = () => { g.removeEventListener('pointermove', move); g.removeEventListener('pointerup', up); saveSoon(); };
   g.addEventListener('pointermove', move); g.addEventListener('pointerup', up);
 });
-$('#slSort').onchange = () => slopLibRender();
-$('#slView').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.lib.view = b.dataset.v; saveSoon(); slopLibRender(); } });
-$('#slTags').addEventListener('click', (e) => {
-  const b = e.target.closest('button');
-  if (!b) return;
-  if (b.id === 'slClearTags') { SLIB.kinds.clear(); SLIB.flags.clear(); }
-  else if (b.dataset.kind) { if (SLIB.kinds.has(b.dataset.kind)) SLIB.kinds.delete(b.dataset.kind); else SLIB.kinds.add(b.dataset.kind); }
-  else if (b.dataset.flag) { if (SLIB.flags.has(b.dataset.flag)) SLIB.flags.delete(b.dataset.flag); else SLIB.flags.add(b.dataset.flag); }
-  slopLibRender();
-});
-$('#slGrid').addEventListener('click', (e) => {
-  const el = e.target.closest('.sl-card, .sl-row'); if (!el) return;
-  const vis = slopLibVisible(), i = +el.dataset.i, r = vis[i]; if (!r) return;
-  if (e.detail >= 2) return;
-  if (e.shiftKey && SLIB.anchor >= 0) {
-    const [a, b] = [Math.min(SLIB.anchor, i), Math.max(SLIB.anchor, i)];
-    if (!e.ctrlKey) SLIB.sel.clear();
-    for (let j = a; j <= b; j++) SLIB.sel.add(vis[j].id);
-  } else if (e.ctrlKey || e.target.closest('.sl-cb')) { if (SLIB.sel.has(r.id)) SLIB.sel.delete(r.id); else SLIB.sel.add(r.id); SLIB.anchor = i; }
-  else { SLIB.sel.clear(); SLIB.sel.add(r.id); SLIB.anchor = i; }
-  SLIB.cur = r.id; SLIB.renaming = false;
-  slopLibRender();
-});
-$('#slGrid').addEventListener('mousedown', (e) => {
-  if (e.button !== 0 || e.detail !== 2 || e.shiftKey || e.ctrlKey || e.target.closest('.sl-cb')) return;
-  const el = e.target.closest('.sl-card, .sl-row'); if (!el) return;
-  const r = slopLibVisible()[+el.dataset.i]; if (!r) return;
-  e.preventDefault(); slopLibOpen(r.id);
-});
-$('#slPv').addEventListener('click', async (e) => {
-  const r = SLIB.rows.find(x => x.id === SLIB.cur) || SLIB.rows.find(x => SLIB.sel.has(x.id)); if (!r) return;
-  const a = e.target.closest('[data-a]'), ref = e.target.closest('.sl-ref'), au = e.target.closest('.sl-aud');
-  if (ref) { P.slopReveal(`${r.id}/${ref.dataset.file}`); return; }
-  if (au) {
-    const key = r.id + au.dataset.k;
-    if (slAudioKey === key && !slAudio.paused) slAudio.pause();
-    else { if (status === 'playing') pause(); slAudio.src = r.urls[au.dataset.k]; slAudioKey = key; slAudio.play().catch(() => {}); }
-    slopLibPreview(); return;
-  }
-  if (e.target.closest('#slRename')) { SLIB.renaming = true; slopLibPreview(); return; }
-  if (e.target.closest('#slRenOk')) { slopLibRename(r); return; }
-  if (!a) return;
-  if (a.dataset.a === 'slop') slopLibOpen(r.id);
-  else if (a.dataset.a === 'web') slopLibOpen(r.id, true);
-  else if (a.dataset.a === 'show') P.slopFolder(r.id);
-  else if (a.dataset.a === 'zip') slopLibZip([r.id]);
-  else if (a.dataset.a === 'copy') { P.slopCopy(r.prompt); toast('Prompt copied.'); }
-  else if (a.dataset.a === 'del') slopLibDelete([r.id]);
-});
-async function slopLibRename(r) {
-  const v = ($('#slRenIn').value || '').trim();
-  SLIB.renaming = false;
-  if (!v || v === r.title) { slopLibPreview(); return; }
-  const res = await P.slopRename({ id: r.id, title: v });
-  if (res && res.id) { SLIB.cur = res.id; if (SLIB.sel.delete(r.id)) SLIB.sel.add(res.id); }
-  else toast((res && res.error) || 'Rename failed.');
-  await slopLibRefresh();
-}
-$('#slPv').addEventListener('keydown', (e) => {
-  if (e.target.id !== 'slRenIn') return;
-  e.stopPropagation();
-  if (e.key === 'Enter') { const r = SLIB.rows.find(x => x.id === SLIB.cur); if (r) slopLibRename(r); }
-  else if (e.key === 'Escape') { e.preventDefault(); SLIB.renaming = false; slopLibPreview(); }
-});
-slAudio.addEventListener('ended', () => { if (slopMode() && $('#dlmDlg').open) slopLibPreview(); });
-$('#dlmDlg').addEventListener('close', () => { slAudio.pause(); SLIB.renaming = false; });
-$('#slDel').onclick = () => slopLibDelete(slopLibVisible().filter(r => SLIB.sel.has(r.id)).map(r => r.id));
-$('#slDelAll').onclick = () => slopLibDelete(slopLibVisible().map(r => r.id), true);
-$('#slZip').onclick = () => slopLibZip(slopLibVisible().filter(r => SLIB.sel.has(r.id)).map(r => r.id));
-$('#slOpenDir').onclick = () => P.slopFolder();
-
 async function updateDlInfo() {
   const rows = (await P.dlmList()).filter(r => !r.missing);
   const total = rows.reduce((a, r) => a + r.size, 0);
@@ -4698,7 +4032,7 @@ setInterval(() => { blink = !blink; }, 500);
     S.plHeight = st.plHeight || 230; visMode = st.visMode || 0;
     if (st.eq && Array.isArray(st.eq.gains) && st.eq.gains.length === 10) S.eq = { ...S.eq, ...st.eq };
     // the equalizer always shows at launch (minimized stays minimized), except with Layout → Classic (stacked, No EQ)
-    if (S.eq.panel === 'hidden' && WM.info.preset !== 'classic-noeq') S.eq.panel = 'open';
+    if (S.eq.panel === 'hidden' && (WM.info.lastPreset || WM.info.preset) !== 'classic-noeq') S.eq.panel = 'open';
     if (st.resume && typeof st.resume === 'object') S.resume = st.resume;
     S.subsOn = !!st.subsOn;
     if (st.lib && typeof st.lib === 'object') S.lib = { w: Number(st.lib.w) || 0, h: Number(st.lib.h) || 0, view: st.lib.view === 'list' ? 'list' : 'grid' };

@@ -34,6 +34,11 @@ WINDOWS
     and SlopAMP remembers it next time. EQ (or E) puts the equalizer back
     under the player and the layout becomes Classic (stacked) again;
     picking Classic (stacked) also shows it.
+  * The lightning bolt on the player puts the windows back in Classic
+    (stacked), docked under the player (and brings back a closed video or
+    playlist). If Classic (stacked, No EQ) was the last layout you picked
+    in the Layout menu, it gives you that instead, EQ still hidden. Hover
+    it to see which one you'll get.
   * Reset layout (Ctrl+Alt+R) puts every window back, stacked in the middle
     of your main screen. Use it if a window ever ends up off screen
     (SlopAMP also does this by itself when a monitor is unplugged).
@@ -286,10 +291,11 @@ DOWNLOADING YOUTUBE AND X VIDEOS
     playlists all live in one place (Downloads\SlopAMP).
   * SlopAMP keeps its downloader (yt-dlp) up to date automatically.
 
-SLOP (hidden in 2.3)
-  * SLOP isn't in SlopAMP for now: CLIP trims songs and videos better, and
-    its reference frames (burst, full-size grabs) are SHOTS in CLIP. Packs
-    you made are still in Downloads\SlopAMP\Slop (nothing was deleted).
+SLOP (removed in 2.3.1)
+  * SLOP was hidden in 2.3.0 and removed in 2.3.1: CLIP trims songs and
+    videos better, and its reference frames (burst, full-size grabs) are
+    SHOTS in CLIP. Packs you made are still in Downloads\SlopAMP\Slop;
+    SlopAMP never deletes that folder (open it in Explorer).
 
 UPDATES
   * SlopAMP checks GitHub once a day for a new version (open "?" to change

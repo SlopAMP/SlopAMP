@@ -312,7 +312,7 @@ body.fs #subs { bottom: 9%; }
 .actrow { display: flex; gap: 4px; }
 .actrow .tog.wide { flex: 1; min-width: 0; padding: 0 4px; letter-spacing: .6px; display: inline-flex; align-items: center; justify-content: center; }
 .actrow .tog-ico { margin-right: 3px; }
-.actrow .tog.wide.slop { flex: none; }   /* DOWNLOAD · SLOP · FULLSCREEN fit the 420 px player */
+.actrow .tog.wide.edit { flex: none; }   /* DOWNLOAD · EDIT · FULLSCREEN fit the 420 px player */
 #plbar2 { flex: none; display: flex; align-items: center; gap: 5px; padding: 3px 5px 4px; background: var(--plbar2-bg); border-top: 1px solid var(--vctl-line); }
 #plbar2 .pb.wide { height: 19px; padding: 0 9px; display: inline-flex; align-items: center; }
 #plbar2 .tog-ico { width: 9px; height: 9px; }
@@ -508,173 +508,171 @@ select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink);
 #skinMenu .sk-name b { color: var(--menu-accent); font-weight: normal; width: 10px; flex: none; }
 #skinMenu .sk-foot { margin: 7px 2px 0; color: var(--ink-dim); font-size: var(--fs-s2); }
 
-/* ---- SLOP window (1.6): a pack of a YouTube moment for slop.cc. Colours only from skin tokens. ---- */
-#slopPanel, #clipPanel, #ytwPanel { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--dialog-bg); color: var(--ink-menu); font: var(--fs-base)/1.35 var(--font-ui); }
-#slopPanel .hidden, #clipPanel .hidden, #ytwPanel .hidden { display: none !important; }
-#slopPanel .dim, #clipPanel .dim, #ytwPanel .dim { color: var(--ink-dim); } #slopPanel .ok { color: var(--green); } #slopPanel .warn { color: var(--warn-ink); }
-#slopPanel kbd, #clipPanel kbd { font: bold var(--fs-s) var(--font-lcd); color: var(--menu-accent); margin-left: 4px; border: 1px solid var(--line-green); padding: 0 3px; }
+#clipPanel, #ytwPanel { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--dialog-bg); color: var(--ink-menu); font: var(--fs-base)/1.35 var(--font-ui); }
+#clipPanel .hidden, #ytwPanel .hidden { display: none !important; }
+#clipPanel .dim, #ytwPanel .dim { color: var(--ink-dim); }  
+#clipPanel kbd { font: bold var(--fs-s) var(--font-lcd); color: var(--menu-accent); margin-left: 4px; border: 1px solid var(--line-green); padding: 0 3px; }
 .sb { background: var(--btn-green); border: 1px solid var(--line-green); color: var(--ink-green); padding: 3px 9px; font-size: var(--fs-m); white-space: nowrap; cursor: pointer; }
 .sb:hover:not(:disabled) { background: var(--btn-green-hover); }
 .sb.dim { background: var(--menu-bg); border-color: var(--vctl-line); color: var(--ink-menu); } .sb.dim:hover:not(:disabled) { background: var(--base-21); }
 .sb.go { color: var(--menu-accent); font-weight: bold; }
 .sb:disabled { opacity: .45; cursor: default; }
-.slop-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px 30px; gap: 4px; }
-.slop-empty-t { font: bold 28px var(--font-lcd); color: var(--menu-accent); letter-spacing: 4px; margin-bottom: 6px; }
-.slop-empty p { margin: 4px 0; max-width: 460px; }
-.slop-empty-btns { display: flex; gap: 8px; margin-top: 10px; }
-.slop-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.slop-sum .dlm-lcd { white-space: nowrap; flex: none; }
-.slop-sum { flex: none; display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--base-18); }
-.slop-src { min-width: 0; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .slop-src b { color: var(--ink); font-weight: 600; }
-.slop-sp { flex: 1; }
-.slop-scroll { flex: 1; min-height: 0; overflow-y: auto; }
-.slop-sec { padding: 8px 10px 10px; border-bottom: 1px solid var(--base-18); }
-.slop-h { display: flex; align-items: center; gap: 7px; color: var(--menu-accent); font-weight: bold; letter-spacing: 1.5px; font-size: var(--fs-m); margin-bottom: 7px; min-height: 20px; }
-.slop-h .n { flex: none; width: 16px; height: 16px; display: grid; place-items: center; border: 1px solid var(--line-green); color: var(--menu-accent); font: bold var(--fs-s) var(--font-lcd); }
-.slop-h .r { margin-left: auto; display: flex; gap: 6px; align-items: center; letter-spacing: 0; font-weight: normal; min-width: 0; }
-.slop-h .r > .dim { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 380px; }
-.slop-pill { flex: none; position: relative; width: 190px; height: 18px; border: 1px solid var(--line-green); background: var(--black); border-radius: 9px; overflow: hidden; }
-.slop-pill i { position: absolute; inset: 0; background: repeating-linear-gradient(-45deg, var(--line-green) 0 6px, transparent 6px 12px); opacity: .45; animation: slopStripes 1s linear infinite; }
-.slop-pill.pct i { right: auto; background: var(--line-green); opacity: .6; animation: none; }
-.slop-pill.done i, .slop-pill.stop i, .slop-pill.err i { display: none; }
-.slop-pill em { position: relative; display: block; text-align: center; font: bold var(--fs-s)/16px var(--font-lcd); color: var(--green); text-shadow: 0 0 4px var(--green-a50); font-style: normal; letter-spacing: 1px; }
-.slop-pill.err { border-color: var(--danger-36); } .slop-pill.err em { color: var(--danger-77); text-shadow: none; }
-@keyframes slopStripes { from { background-position: 0 0; } to { background-position: 17px 0; } }
-.slop-wave { position: relative; height: 84px; background: var(--black); border: 1px solid var(--base-20b); cursor: crosshair; }
-.slop-wave canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-.slop-wave-msg { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; color: var(--ink-dim); font-size: var(--fs-s); }
-.slop-ruler { display: flex; justify-content: space-between; font: var(--fs-s) var(--font-lcd); color: var(--ink-dim); padding: 2px 1px 0; }
-.slop-row { display: flex; align-items: center; gap: 8px 12px; color: var(--ink-dim); margin-top: 7px; flex-wrap: wrap; }
-.slop-row label { display: flex; align-items: center; gap: 5px; }
-.slop-row b { color: var(--ink); font-weight: 600; }
-.slop-hint { font-size: var(--fs-s); }
-.slop-step { display: inline-flex; }
-.slop-step button { width: 20px; height: 20px; padding: 0; background: var(--base-21); border: 1px solid var(--btn-top); color: var(--ink); cursor: pointer; }
-.slop-step input { width: 40px; height: 18px; padding: 0; text-align: center; background: var(--field-bg); color: var(--field-ink); border: 1px solid var(--base-20b); border-left: 0; border-right: 0; font: bold var(--fs-base) var(--font-lcd); }
-.slop-lcd { background: var(--black); border: 1px solid var(--base-20b); padding: 2px 7px; color: var(--green); font: bold var(--fs-base) var(--font-lcd); text-shadow: 0 0 4px var(--green-a50); white-space: nowrap; }
-.slop-lcd small { color: var(--green); font-weight: normal; text-shadow: none; margin-left: 4px; }
-.slop-cb { width: 13px; height: 13px; border: 1px solid var(--line-green); background: var(--black); display: inline-grid; place-items: center; color: var(--green); font-size: 10px; }
-.slop-ck { color: var(--ink); cursor: pointer; } .slop-ck input { accent-color: var(--green); margin: 0; }
-.slop-look { display: flex; gap: 12px; align-items: flex-start; }
-.slop-big { position: relative; flex: none; width: min(48%, 520px); aspect-ratio: 16 / 9; border: 1px solid var(--base-20b); background: var(--black); }
-.slop-big img { width: 100%; height: 100%; object-fit: contain; display: block; }
-.slop-big img:not([src]) { visibility: hidden; }
-.slop-big-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--green); font: bold var(--fs-s) var(--font-lcd); letter-spacing: 1px; pointer-events: none; }
-.slop-bdg { position: absolute; white-space: nowrap; padding: 1px 5px; background: var(--black); font: bold var(--fs-s) var(--font-lcd); color: var(--green); }
-.slop-bdg.lead { left: 4px; top: 4px; color: var(--green); } .slop-bdg.res { right: 4px; bottom: 4px; } .slop-bdg.res.warn { text-decoration: underline wavy; }
-.slop-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; color: var(--ink); }
-.slop-side.off { opacity: .5; }
-.slop-side b { font-weight: 600; word-break: break-all; }
-.slop-lbl { margin-top: 2px; font-size: var(--fs-s); }
-#slopRefName { background: var(--field-bg); color: var(--ink); border: 1px solid var(--base-20b); padding: 4px 7px; font: var(--fs-base) var(--font-ui); }
-#slopRefName::placeholder, #slopText::placeholder { color: var(--hint-ink); }
-.slop-chips { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
-.slop-chips > button:not(.sb) { border-radius: 10px; padding: 2px 11px; background: var(--menu-bg); border: 1px solid var(--vctl-line); color: var(--ink-muted); font-size: var(--fs-m); cursor: pointer; }
-.slop-chips > button.on:not(.sb) { background: var(--btn-green); border-color: var(--line-green); color: var(--menu-accent); }
-.slop-chips > button:disabled { opacity: .45; cursor: default; }
-.slop-link { background: none; border: 0; padding: 0; color: var(--menu-accent); text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; font: inherit; }
-.slop-strip { display: flex; gap: 8px; margin-top: 9px; align-items: flex-start; overflow-x: auto; padding-bottom: 3px; }
-.slop-th { position: relative; width: 116px; flex: none; cursor: pointer; }
-.slop-th img, .slop-th .slop-th-wait { width: 116px; height: 65px; object-fit: cover; display: block; border: 1px solid var(--base-20b); background: var(--black); }
-.slop-th .slop-th-wait { display: grid; place-items: center; color: var(--green); font: bold var(--fs-s) var(--font-lcd); }
-.slop-th.sel img, .slop-th.sel .slop-th-wait { outline: 2px solid var(--green); outline-offset: 1px; }
-.slop-th.busy img { opacity: .5; }
-.slop-th-lead { position: absolute; left: 3px; top: 3px; background: var(--black); color: var(--green); font: bold 9px var(--font-lcd); padding: 0 4px; }
-.slop-th-t { position: absolute; right: 3px; top: 49px; background: var(--black); color: var(--green); font: bold 9px var(--font-lcd); padding: 0 3px; }
-.slop-th-busy { position: absolute; left: 3px; top: 26px; background: var(--black); color: var(--green); font: bold 9px var(--font-lcd); padding: 0 3px; } .slop-th-busy.err { color: var(--green); }
-.slop-th-cap { font-size: var(--fs-s); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-.slop-th-cap span { color: var(--ink-dim); }
-.slop-add { flex: none; width: 116px; height: 67px; border: 1px dashed var(--line-green); background: none; display: grid; place-content: center; text-align: center; color: var(--menu-accent); font-size: var(--fs-s); cursor: pointer; line-height: 1.5; }
-.slop-add:hover:not(:disabled) { background: var(--btn-green); } .slop-add:disabled { opacity: .45; cursor: default; }
-.slop-burst { margin-top: 9px; border: 1px solid var(--line-green); background: var(--base-05-a96); padding: 7px 8px; }
-.slop-burst-h { margin-bottom: 6px; color: var(--ink); } .slop-burst-h b { color: var(--menu-accent); letter-spacing: 1px; }
-.slop-burst-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 3px; }
-.slop-bi { position: relative; flex: none; width: 140px; }
-.slop-bi img, .slop-bi .slop-th-wait { width: 140px; height: 79px; object-fit: cover; display: grid; place-items: center; border: 1px solid var(--base-20b); background: var(--black); color: var(--green); font: bold var(--fs-s) var(--font-lcd); }
-.slop-bi.lead img { outline: 2px solid var(--warn-ink); outline-offset: 1px; } .slop-bi.ref img { outline: 2px solid var(--green); outline-offset: 1px; }
-.slop-bi .slop-th-t { top: 63px; }
-.slop-bi-btns { display: flex; gap: 4px; margin-top: 4px; font-size: var(--fs-s); }
-.slop-bi-btns button { flex: 1; background: var(--menu-bg); border: 1px solid var(--vctl-line); color: var(--ink-muted); font-size: var(--fs-s); padding: 2px 0; cursor: pointer; }
-.slop-bi-btns button.on { background: var(--btn-green); border-color: var(--line-green); color: var(--menu-accent); }
-.slop-sug { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; color: var(--ink-dim); }
-.slop-sug q { flex: 1; min-width: 0; color: var(--ink); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.slop-lyrics { margin: 0 0 6px; max-height: 120px; overflow: auto; background: var(--field-bg); color: var(--ink); border: 1px solid var(--base-20b); padding: 5px 7px; font: var(--fs-s)/1.45 var(--font-lcd); white-space: pre-wrap; }
-#slopText { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; min-height: 56px; resize: vertical; background: var(--field-bg); color: var(--ink); border: 1px solid var(--base-20b); padding: 5px 7px; font: var(--fs-base)/1.4 var(--font-ui); }
-.slop-leave { flex: none; padding: 7px 10px; background: var(--base-05-a96); border-top: 1px solid var(--base-18); max-height: 34%; overflow-y: auto; }
-.slop-lh { color: var(--ink-dim); font-size: var(--fs-s); letter-spacing: 1px; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.slop-files { display: flex; flex-wrap: wrap; gap: 5px; }
-.slop-file { border: 1px solid var(--line-green); background: var(--btn-green); color: var(--ink-green); padding: 2px 7px; font-size: var(--fs-s); }
-.slop-file b { color: var(--menu-accent); font-weight: 600; }
-.slop-file.wait { background: none; border-style: dashed; }
-.slop-rights, .slop-where { margin-top: 6px; color: var(--ink-dim); font-size: var(--fs-s); }
-.slop-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.slop-done { color: var(--menu-accent); font-weight: bold; margin-bottom: 4px; }
-.slop-steps { margin: 2px 0 0; padding-left: 18px; color: var(--ink); line-height: 1.6; }
-.slop-steps b { color: var(--menu-accent); }
-.slop-bar { flex: none; display: flex; gap: 6px; padding: 7px 10px; align-items: center; border-top: 1px solid var(--base-18); flex-wrap: wrap; }
+.ed-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px 30px; gap: 4px; }
+.ed-empty-t { font: bold 28px var(--font-lcd); color: var(--menu-accent); letter-spacing: 4px; margin-bottom: 6px; }
+.ed-empty p { margin: 4px 0; max-width: 460px; }
+.ed-empty-btns { display: flex; gap: 8px; margin-top: 10px; }
+.ed-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ed-sum .dlm-lcd { white-space: nowrap; flex: none; }
+.ed-sum { flex: none; display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--base-18); }
+.ed-src { min-width: 0; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ed-src b { color: var(--ink); font-weight: 600; }
+.ed-sp { flex: 1; }
+.ed-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.ed-sec { padding: 8px 10px 10px; border-bottom: 1px solid var(--base-18); }
+.ed-h { display: flex; align-items: center; gap: 7px; color: var(--menu-accent); font-weight: bold; letter-spacing: 1.5px; font-size: var(--fs-m); margin-bottom: 7px; min-height: 20px; }
+.ed-h .n { flex: none; width: 16px; height: 16px; display: grid; place-items: center; border: 1px solid var(--line-green); color: var(--menu-accent); font: bold var(--fs-s) var(--font-lcd); }
+.ed-h .r { margin-left: auto; display: flex; gap: 6px; align-items: center; letter-spacing: 0; font-weight: normal; min-width: 0; }
+.ed-h .r > .dim { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 380px; }
+
+
+
+
+
+ 
+.ed-wave { position: relative; height: 84px; background: var(--black); border: 1px solid var(--base-20b); cursor: crosshair; }
+.ed-wave canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.ed-wave-msg { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; color: var(--ink-dim); font-size: var(--fs-s); }
+.ed-ruler { display: flex; justify-content: space-between; font: var(--fs-s) var(--font-lcd); color: var(--ink-dim); padding: 2px 1px 0; }
+.ed-row { display: flex; align-items: center; gap: 8px 12px; color: var(--ink-dim); margin-top: 7px; flex-wrap: wrap; }
+.ed-row label { display: flex; align-items: center; gap: 5px; }
+.ed-row b { color: var(--ink); font-weight: 600; }
+
+.ed-step { display: inline-flex; }
+.ed-step button { width: 20px; height: 20px; padding: 0; background: var(--base-21); border: 1px solid var(--btn-top); color: var(--ink); cursor: pointer; }
+.ed-step input { width: 40px; height: 18px; padding: 0; text-align: center; background: var(--field-bg); color: var(--field-ink); border: 1px solid var(--base-20b); border-left: 0; border-right: 0; font: bold var(--fs-base) var(--font-lcd); }
+.ed-lcd { background: var(--black); border: 1px solid var(--base-20b); padding: 2px 7px; color: var(--green); font: bold var(--fs-base) var(--font-lcd); text-shadow: 0 0 4px var(--green-a50); white-space: nowrap; }
+.ed-lcd small { color: var(--green); font-weight: normal; text-shadow: none; margin-left: 4px; }
+
+.ed-ck { color: var(--ink); cursor: pointer; } .ed-ck input { accent-color: var(--green); margin: 0; }
+
+
+
+
+
+
+  
+
+
+
+
+
+
+.ed-chips { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.ed-chips > button:not(.sb) { border-radius: 10px; padding: 2px 11px; background: var(--menu-bg); border: 1px solid var(--vctl-line); color: var(--ink-muted); font-size: var(--fs-m); cursor: pointer; }
+.ed-chips > button.on:not(.sb) { background: var(--btn-green); border-color: var(--line-green); color: var(--menu-accent); }
+.ed-chips > button:disabled { opacity: .45; cursor: default; }
+.ed-link { background: none; border: 0; padding: 0; color: var(--menu-accent); text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; font: inherit; }
+.ed-strip { display: flex; gap: 8px; margin-top: 9px; align-items: flex-start; overflow-x: auto; padding-bottom: 3px; }
+.ed-th { position: relative; width: 116px; flex: none; cursor: pointer; }
+.ed-th img{ width: 116px; height: 65px; object-fit: cover; display: block; border: 1px solid var(--base-20b); background: var(--black); }
+
+.ed-th.sel img{ outline: 2px solid var(--green); outline-offset: 1px; }
+.ed-th.busy img { opacity: .5; }
+.ed-th-lead { position: absolute; left: 3px; top: 3px; background: var(--black); color: var(--green); font: bold 9px var(--font-lcd); padding: 0 4px; }
+.ed-th-t { position: absolute; right: 3px; top: 49px; background: var(--black); color: var(--green); font: bold 9px var(--font-lcd); padding: 0 3px; }
+ 
+.ed-th-cap { font-size: var(--fs-s); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.ed-th-cap span { color: var(--ink-dim); }
+
+ 
+.ed-burst { margin-top: 9px; border: 1px solid var(--line-green); background: var(--base-05-a96); padding: 7px 8px; }
+.ed-burst-h { margin-bottom: 6px; color: var(--ink); } .ed-burst-h b { color: var(--menu-accent); letter-spacing: 1px; }
+
+
+
+ 
+
+
+
+
+
+
+
+
+.ed-leave { flex: none; padding: 7px 10px; background: var(--base-05-a96); border-top: 1px solid var(--base-18); max-height: 34%; overflow-y: auto; }
+.ed-lh { color: var(--ink-dim); font-size: var(--fs-s); letter-spacing: 1px; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ed-files { display: flex; flex-wrap: wrap; gap: 5px; }
+.ed-file { border: 1px solid var(--line-green); background: var(--btn-green); color: var(--ink-green); padding: 2px 7px; font-size: var(--fs-s); }
+.ed-file b { color: var(--menu-accent); font-weight: 600; }
+.ed-file.wait { background: none; border-style: dashed; }
+
+
+
+
+
+.ed-bar { flex: none; display: flex; gap: 6px; padding: 7px 10px; align-items: center; border-top: 1px solid var(--base-18); flex-wrap: wrap; }
 /* 2.3: EDIT (was SLOP) lights like the other toggles (.tog.on) */
 
-/* ---- Library → SLOP (1.6) and the resizable Library ---- */
+/* ---- the resizable Library ---- */
 #dlmDlg { position: relative; }
-#dlmDlg.sized[open], #dlmDlg.slopmode[open] { display: flex; flex-direction: column; }
+#dlmDlg.sized[open]{ display: flex; flex-direction: column; }
 #dlmDlg.sized .dlm-scroll { flex: 1; max-height: none; min-height: 0; }
 .dlm-grip { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; z-index: 3; touch-action: none;
   background: linear-gradient(135deg, transparent 50%, var(--grip) 50% 58%, transparent 58% 68%, var(--grip) 68% 76%, transparent 76% 86%, var(--grip) 86%); }
-#dlmDlg:not(.slopmode) .dlm-slop, #dlmDlg:not(.slopmode) .sl-bar, #dlmDlg:not(.slopmode) .sl-note { display: none; }
-#dlmDlg.slopmode .dlm-scroll, #dlmDlg.slopmode .dlm-bar:not(.sl-bar), #dlmDlg.slopmode .dlm-note:not(.sl-note), #dlmDlg.slopmode #dlmClean { display: none; }
-.dlm-slop { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.sl-tools { display: flex; gap: 8px; align-items: center; padding: 6px 10px 0; color: var(--ink-dim); }
-.sl-tools select { background: var(--field-bg); color: var(--field-ink); border: 1px solid var(--field-line); padding: 3px 6px; color-scheme: var(--color-scheme); }
-.sl-sp { flex: 1; }
-.sl-tags { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--base-18); }
-.sl-lbl { color: var(--ink-dim); font-size: var(--fs-s); letter-spacing: 1px; margin-right: 3px; }
-.sl-chip { border-radius: 10px; padding: 2px 10px; background: var(--menu-bg); border: 1px solid var(--vctl-line); color: var(--ink-muted); font-size: var(--fs-m); cursor: pointer; }
-.sl-chip.on { background: var(--btn-green); border-color: var(--line-green); color: var(--menu-accent); }
-.sl-chip i { font-style: normal; color: var(--ink-dim); margin-left: 3px; }
-.sl-main { flex: 1; min-height: 0; display: flex; }
-.sl-grid { flex: 1; min-width: 0; overflow-y: auto; padding: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; align-content: start; border-right: 1px solid var(--base-18); }
-.sl-grid.list { display: flex; flex-direction: column; gap: 0; padding: 4px 6px; }
-.sl-empty { grid-column: 1 / -1; padding: 30px 10px; text-align: center; color: var(--ink-dim); }
-.sl-card { border: 1px solid var(--base-20b); background: var(--menu-bg); cursor: default; }
-.sl-card.on { border-color: var(--line-green); } .sl-card.cur { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
-.sl-th { position: relative; aspect-ratio: 16 / 9; background: var(--black); }
-.sl-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.sl-noimg { display: grid; place-items: center; width: 100%; height: 100%; color: var(--ink-dim); font-size: var(--fs-s); background: var(--black); }
-.sl-cb { width: 13px; height: 13px; border: 1px solid var(--line-green); background: var(--black); display: inline-grid; place-items: center; flex: none; cursor: pointer; }
-.sl-cb.on::after { content: '\2713'; color: var(--green); font-size: 10px; line-height: 1; }
-.sl-th .sl-cb { position: absolute; left: 5px; top: 5px; }
-.sl-th .sl-t { position: absolute; right: 5px; top: 5px; background: var(--black); color: var(--green); font: bold 10px var(--font-lcd); padding: 1px 4px; }
-.sl-th .sl-fl { position: absolute; left: 5px; bottom: 5px; right: 5px; display: flex; gap: 3px; flex-wrap: wrap; }
-.sl-fl b { background: var(--black); color: var(--green); font: bold 9px var(--font-lcd); padding: 1px 4px; white-space: nowrap; }
-.sl-b { padding: 5px 7px 6px; }
-.sl-ti { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sl-meta { display: flex; gap: 8px; color: var(--ink-dim); font-size: var(--fs-s); margin-top: 2px; }
-.sl-names { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sl-sz { flex: none; }
-.sl-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-bottom: 1px solid var(--base-14b); color: var(--ink-dim); font-size: var(--fs-s); }
-.sl-row.on { background: var(--pl-sel); color: var(--list-sel-ink); } .sl-row.cur { box-shadow: inset 3px 0 0 var(--green); }
-.sl-row img, .sl-row .sl-noimg { width: 64px; height: 36px; object-fit: cover; flex: none; border: 1px solid var(--base-20b); }
-.sl-row .sl-ti { width: 30%; font-size: var(--fs-base); }
-.sl-row.on .sl-ti, .sl-row.on .sl-names, .sl-row.on .sl-sz, .sl-row.on .sl-dt { color: var(--list-sel-ink); }
-.sl-row .sl-fl { display: flex; gap: 3px; flex: none; } .sl-row .sl-dt { width: 56px; text-align: right; flex: none; } .sl-row .sl-sz { width: 60px; text-align: right; }
-.sl-pv > * { flex: none; }
-.sl-pv { width: 340px; flex: none; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 7px; }
-.sl-pv .sl-big { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--base-20b); display: block; }
-.sl-pv h3 { margin: 0; font-size: var(--fs-base); color: var(--ink); font-weight: 600; }
-.sl-ren { display: flex; gap: 6px; } .sl-ren input { flex: 1; min-width: 0; background: var(--field-bg); color: var(--ink); border: 1px solid var(--line-green); padding: 3px 6px; font: var(--fs-base) var(--font-ui); }
-.sl-src { color: var(--ink-dim); font-size: var(--fs-s); }
-.sl-strip { display: flex; gap: 5px; flex-wrap: wrap; }
-.sl-ref { width: 74px; padding: 0; background: none; border: 0; cursor: pointer; text-align: left; }
-.sl-ref img { width: 74px; height: 42px; object-fit: cover; border: 1px solid var(--base-20b); display: block; }
-.sl-ref span { font-size: 10px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; } .sl-ref i { color: var(--ink-dim); font-style: normal; }
-.sl-auds { display: flex; gap: 5px; flex-wrap: wrap; }
-.sl-aud { background: var(--black); border: 1px solid var(--base-20b); color: var(--green); font: bold var(--fs-s) var(--font-lcd); padding: 3px 8px; cursor: pointer; }
-.sl-aud.on { border-color: var(--green); }
-.sl-prompt { background: var(--field-bg); border: 1px solid var(--base-20b); padding: 5px 7px; color: var(--ink); font-size: var(--fs-s); line-height: 1.4; white-space: pre-wrap; max-height: 110px; overflow-y: auto; }
-.sl-prompt.dim { color: var(--ink-dim); }
-.sl-lyr summary { cursor: pointer; color: var(--menu-accent); font-size: var(--fs-s); }
-.sl-lyr pre { margin: 4px 0 0; max-height: 120px; overflow: auto; background: var(--field-bg); color: var(--ink); border: 1px solid var(--base-20b); padding: 5px 7px; font: var(--fs-s)/1.45 var(--font-lcd); white-space: pre-wrap; }
-.sl-acts { display: flex; flex-wrap: wrap; gap: 5px; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+  
+
+
+
+
+ 
+
+
+
+
+ 
+
+
+
+
+
+
+
+
 .sb.red { background: var(--danger-15); border-color: var(--danger-36); color: var(--danger-85); }
 /* ---- 1.7 Skin Editor window (skins.js) */
 #skinEdPanel { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--dialog-bg); color: var(--ink-menu); font: var(--fs-base)/1.35 var(--font-ui); }
@@ -716,7 +714,7 @@ select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink);
 #skinMenu .sk-foot button:hover { border-color: var(--line-green); color: var(--menu-accent); }
 /* Library → SKINS */
 #dlmDlg:not(.skinmode) .dlm-skins, #dlmDlg:not(.skinmode) .skl-bar, #dlmDlg:not(.skinmode) .skl-note { display: none; }
-#dlmDlg.skinmode .dlm-scroll, #dlmDlg.skinmode .dlm-slop, #dlmDlg.skinmode .sl-bar, #dlmDlg.skinmode .sl-note, #dlmDlg.skinmode .dlm-bar:not(.skl-bar), #dlmDlg.skinmode .dlm-note:not(.skl-note) { display: none; }
+#dlmDlg.skinmode .dlm-scroll, #dlmDlg.skinmode .dlm-bar:not(.skl-bar), #dlmDlg.skinmode .dlm-note:not(.skl-note) { display: none; }
 .dlm-skins { max-height: min(420px, 56vh); overflow-y: auto; }
 #dlmDlg.sized .dlm-skins { flex: 1; max-height: none; min-height: 0; }
 .skl-sec { color: var(--ink-dim); font-size: var(--fs-s); letter-spacing: 1.5px; text-transform: uppercase; padding: 8px 10px 3px; }
@@ -732,9 +730,7 @@ select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink);
 .skl-act { font: bold var(--fs-xs) var(--font-label); padding: 1px 4px; border: 1px solid var(--line-green); color: var(--menu-accent); flex: none; }
 .skl-row.on .skl-act { color: var(--list-sel-ink); border-color: var(--list-sel-ink); }
 .skl-empty { padding: 14px 10px; color: var(--ink-dim); }
-/* Library segment bar: ALL / VIDEO / MP3 / PLAYLISTS are one group (ALL = those three); SLOP and SKINS stand apart */
-.dlm-seg button[data-f="slop"] { margin-left: 15px; position: relative; }
-.dlm-seg button[data-f="slop"]::before { content: ''; position: absolute; left: -9px; top: 2px; bottom: 2px; width: 1px; background: var(--vctl-line); pointer-events: none; }
+/* Library segment bar: ALL / VIDEO / MP3 / PLAYLISTS / CLIPS are one group; SKINS stands apart */
 
 /* ---- 2.2 YouTube History */
 .ptab.hist .clk { display: inline-flex; width: 11px; height: 11px; margin-right: 4px; flex: none; }
@@ -773,9 +769,9 @@ select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink);
 .clip-col { display: flex; flex-direction: column; gap: 4px; }
 .clip-col label { display: flex; align-items: center; gap: 6px; }
 .clip-col input[type=radio]:disabled + span, .clip-col input[type=radio]:disabled + span b, .clip-col input[type=radio]:disabled + span .dim { color: var(--ink-dim); font-weight: normal; }
-.slop-file.clip-file { cursor: pointer; }
+.ed-file.clip-file { cursor: pointer; }
 #clipSave.busy { min-width: 150px; }
-body.win-clip.dropping .clip-wave, body.win-clip.dropping .slop-empty { outline: 2px dashed var(--line-green); outline-offset: -4px; }
+body.win-clip.dropping .clip-wave, body.win-clip.dropping .ed-empty { outline: 2px dashed var(--line-green); outline-offset: -4px; }
 
 /* ---------------------------------------------------------------- YOUTUBE window (2.3) */
 .ytw-bar { flex: none; display: flex; gap: 5px; align-items: center; padding: 5px 7px; border-bottom: 1px solid var(--base-18); background: var(--menu-bg); }
@@ -808,9 +804,9 @@ body.win-clip.dropping .clip-wave, body.win-clip.dropping .slop-empty { outline:
 
 /* CLIP → SHOTS (2.3: SLOP's LOOK, moved into CLIP; collapsed it's one line) */
 .clip-shots .clip-opt { color: var(--ink-dim); font-weight: normal; letter-spacing: 0; font-size: var(--fs-s); }
-.clip-shots .slop-h { margin-bottom: 0; }
+.clip-shots .ed-h { margin-bottom: 0; }
 .clip-shot-body { margin-top: 6px; }
-.clip-shots .slop-strip { margin-top: 0; }
+.clip-shots .ed-strip { margin-top: 0; }
 .clip-shot-ed { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .clip-shot-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .clip-shot-meta b { color: var(--ink); font-weight: 600; }
@@ -821,10 +817,9 @@ body.win-clip.dropping .clip-wave, body.win-clip.dropping .slop-empty { outline:
 .clip-burst-th { position: relative; width: 116px; flex: none; cursor: pointer; }
 .clip-burst-th img { width: 116px; height: 65px; object-fit: cover; display: block; border: 1px solid var(--base-20b); opacity: .55; }
 .clip-burst-th.on img { opacity: 1; outline: 2px solid var(--green); outline-offset: 1px; }
-.clip-burst-th .slop-th-t { top: 49px; }
+.clip-burst-th .ed-th-t { top: 49px; }
 .clip-burst-th .chk { position: absolute; left: 3px; top: 3px; background: var(--black); color: var(--green); font: bold 10px var(--font-lcd); padding: 0 4px; }
 .clip-burst-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 3px; }
-/* 2.3: SLOP is hidden (the code and the packs on disk stay): the Library's SLOP button */
-.dlm-seg button[data-f="slop"] { display: none; }
+/* the separator before SKINS (was before SLOP, gone in 2.3.1) */
 .dlm-seg button[data-f="skins"] { margin-left: 15px; position: relative; }
 .dlm-seg button[data-f="skins"]::before { content: ''; position: absolute; left: -9px; top: 2px; bottom: 2px; width: 1px; background: var(--vctl-line); pointer-events: none; }

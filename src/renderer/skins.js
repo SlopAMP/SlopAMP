@@ -70,7 +70,7 @@
   }
   function redraw() {
     WM.clearTokens();
-    for (const fn of ['drawEqCurve', 'drawStateIcon', 'slopDrawWave']) if (typeof window[fn] === 'function') { try { window[fn](); } catch (_) {} }
+    for (const fn of ['drawEqCurve', 'drawStateIcon', 'clipDraw']) if (typeof window[fn] === 'function') { try { window[fn](); } catch (_) {} }
   }
   async function refresh() {
     try { USER = await P.skinList(); } catch (_) { USER = []; }
@@ -269,7 +269,7 @@
         return `<label class="sked-var" title="${esc(n)}: ${esc(v)}"><input type="color" value="${hexOf(v)}" data-var="${esc(n)}"><span>${esc(n.slice(2))}</span>${ED.per[n] ? '<i>changed</i>' : ''}</label>`;
       }).join('');
       return `<div class="sked-g${identity(p) && !mem.some(n => ED.per[n]) ? '' : ' on'}" data-g="${g.key}">`
-        + `<div class="sked-gh"><input type="color" class="sked-lead" value="${hexOf(leadVal)}" data-g="${g.key}" data-lead="${esc(lead)}" title="Pick this family's main colour (${esc(lead)}); the others follow"><b>${esc(g.name)}</b><span class="dim">${mem.length} colour${mem.length > 1 ? 's' : ''}</span><button type="button" class="slop-link sked-greset" data-g="${g.key}">reset</button></div>`
+        + `<div class="sked-gh"><input type="color" class="sked-lead" value="${hexOf(leadVal)}" data-g="${g.key}" data-lead="${esc(lead)}" title="Pick this family's main colour (${esc(lead)}); the others follow"><b>${esc(g.name)}</b><span class="dim">${mem.length} colour${mem.length > 1 ? 's' : ''}</span><button type="button" class="ed-link sked-greset" data-g="${g.key}">reset</button></div>`
         + `<div class="sked-hint dim">${esc(g.hint)}</div>`
         + row('h', 'Hue', -180, 180, '°') + row('s', 'Saturation', 0, 200, '%') + row('l', 'Brightness', -100, 100, '%')
         + `<details class="sked-each"${ED.openEach === g.key ? ' open' : ''} data-g="${g.key}"><summary>Each colour</summary><div class="sked-vars">${each}</div></details></div>`;

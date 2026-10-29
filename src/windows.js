@@ -2,14 +2,14 @@
 // SlopAMP's movable windows, main-process side.
 //
 // The renderer (src/renderer/winmgr.js) opens one real window per panel with window.open(): the player
-// ("main"), the equalizer, the video/visualizer, the playlist and SLOP (1.6), plus two hidden helper windows that
+// ("main"), the equalizer, the video/visualizer, the playlist, the Skin Editor (1.7), CLIP and YOUTUBE (2.3), plus two hidden helper windows that
 // host popup menus and dialogs. All of them share one renderer process, so the player code drives every
 // window directly. This file owns the geometry: where each window is, snapping, docked groups, layout
 // presets, "Reset layout" and saving the layout between launches.
 //
 // Saved layout (state.layout):
 //   { version: 1, skin: 'default', preset: 'classic', snap: true, onTop: false,
-//     windows: { main: {x,y,w,h}, eq: {...}, video: {...}, playlist: {...}, slop: {...}, skined: {...}, clip: {...}, ytweb: {...} },
+//     windows: { main: {x,y,w,h}, eq: {...}, video: {...}, playlist: {...}, skined: {...}, clip: {...}, ytweb: {...} },
 //     ytFree: true,                      // the user moved/resized the YOUTUBE window: it opens where they left it (2.3)
 //     heights: { main: 171, ... },       // on-screen heights (a rolled-up window is just its title bar)
 //     panels: { skins: {x,y} } }          // where the skin picker was dragged to
@@ -17,14 +17,15 @@
 
 const { BrowserWindow, screen } = require('electron');
 
-const PANELS = ['main', 'eq', 'video', 'playlist', 'slop', 'skined', 'clip', 'ytweb'];
+// (2.3.1: SLOP's window is gone; a 'slop' entry in an older saved layout is simply ignored)
+const PANELS = ['main', 'eq', 'video', 'playlist', 'skined', 'clip', 'ytweb'];
 const STACK = ['main', 'eq', 'video', 'playlist'];   // the column the layout presets arrange
-// SLOP (1.6), the Skin Editor (1.7), CLIP and YOUTUBE (2.3) float beside it
-const FLOAT = ['slop', 'skined', 'clip', 'ytweb'];
+// the Skin Editor (1.7), CLIP and YOUTUBE (2.3) float beside it
+const FLOAT = ['skined', 'clip', 'ytweb'];
 const HOSTS = ['popup', 'dialog'];
 const FIT = new Set(['main', 'eq']);            // height follows the content
-const MIN = { main: [420, 60], eq: [420, 40], video: [320, 180], playlist: [300, 150], slop: [600, 440], skined: [460, 420], clip: [600, 420], ytweb: [800, 400] };
-const DEF = { w: 420, main: 190, eq: 160, video: 240, playlist: 300, slop: 700, slopW: 820, skined: 680, skinedW: 540, clip: 640, clipW: 780, ytweb: 800, ytwebW: 1100 };
+const MIN = { main: [420, 60], eq: [420, 40], video: [320, 180], playlist: [300, 150], skined: [460, 420], clip: [600, 420], ytweb: [800, 400] };
+const DEF = { w: 420, main: 190, eq: 160, video: 240, playlist: 300, skined: 680, skinedW: 540, clip: 640, clipW: 780, ytweb: 800, ytwebW: 1100 };
 const YT_MIN_W = 800;     // the YOUTUBE window is never narrower: on a small screen it overlaps the stack instead
 const SNAP = 10;          // px: how close an edge must be to snap
 const TOUCH = 1;          // px: edges this close count as docked
@@ -40,7 +41,7 @@ class WindowManager {
     this.version = version || '';
     this.saveLayout = saveLayout;
     this.wins = new Map();          // id -> BrowserWindow (panels and hosts)
-    this.visible = { main: true, eq: false, video: false, playlist: false, slop: false, skined: false, clip: false, ytweb: false };
+    this.visible = { main: true, eq: false, video: false, playlist: false, skined: false, clip: false, ytweb: false };
     this.onPanel = null;            // (id, shown) for windows with their own content (the YOUTUBE window's web page)
     this.shade = {};
     this.fitH = {};
@@ -60,6 +61,8 @@ class WindowManager {
     if (l && typeof l === 'object') {
       if (typeof l.skin === 'string' && /^(user:)?[a-z0-9-]{1,60}$/.test(l.skin)) out.skin = l.skin;   // user:<slug> = a user skin (1.7)
       if (PRESETS.includes(l.preset) || l.preset === 'custom') out.preset = l.preset;
+      // the last layout picked (2.3.1): moving a window makes `preset` "custom", this stays (the lightning bolt reads it)
+      if (PRESETS.includes(l.lastPreset)) out.lastPreset = l.lastPreset; else if (PRESETS.includes(out.preset)) out.lastPreset = out.preset;
       out.snap = l.snap !== false; out.onTop = !!l.onTop; if (l.ytFree) out.ytFree = true;
       for (const id of PANELS) if (l.windows && ok(l.windows[id])) out.windows[id] = r4(l.windows[id]);
       // heights the windows really had (rolled-up windows are shorter than windows[id].h)
@@ -87,7 +90,7 @@ class WindowManager {
     for (const id of FLOAT) out.windows[id] = this.floatSpot(out.windows, id);
     return out;
   }
-  // Where SLOP opens: beside the player's windows (right or left, whichever covers less of them), on the
+  // Where a floating window (Skin Editor, CLIP, YOUTUBE when it isn't docked) opens: beside the player's windows (right or left, whichever covers less of them), on the
   // player's screen, top edge level with the player. W: the layout's windows.
   floatSpot(W, id) {
     const m = W.main, rs = STACK.map(k => W[k]).filter(Boolean);
@@ -313,7 +316,7 @@ class WindowManager {
       const vis = id === 'main' ? true : !!p.visible;
       if (!win) { this.visible[id] = vis; continue; }
       if (vis && !wasShown) {
-        // SLOP opens where it was, unless that's off screen now (monitor gone, layout moved): then beside the player
+        // a floating window opens where it was, unless that's off screen now (monitor gone, layout moved): then beside the player
         if (id === 'ytweb' && this.started) this.dockYt();
         else if (FLOAT.includes(id) && !this.onScreen(this.rect(id))) Object.assign(this.b(id), this.floatSpot(this.layout.windows, id));
         if (reflow && this.started && !FLOAT.includes(id)) {
@@ -582,6 +585,7 @@ class WindowManager {
       if (!this.onScreen(this.rect(id))) Object.assign(W[id], this.floatSpot(W, id));
     }
     this.layout.preset = name === 'reset' ? 'classic' : name;
+    this.layout.lastPreset = this.layout.preset;          // Reset layout counts as Classic (stacked): everything back, EQ too
     if (this.started) this.applyAll();
     this.persist();
     const info = this.info();
@@ -606,7 +610,7 @@ class WindowManager {
     const dlg = this.wins.get('dialog'); if (dlg && !dlg.isDestroyed() && dlg.isVisible()) this.dialogLevel();
     return this.mini;
   }
-  info() { return { preset: this.layout.preset, snap: this.layout.snap, onTop: this.layout.onTop, skin: this.layout.skin, version: this.version }; }
+  info() { return { preset: this.layout.preset, lastPreset: this.layout.lastPreset || 'classic', snap: this.layout.snap, onTop: this.layout.onTop, skin: this.layout.skin, version: this.version }; }
 
   // ---------- popup menus and dialogs ----------
   // x, y (and flipY: the anchor's top edge) are in the coordinates of window `from`.

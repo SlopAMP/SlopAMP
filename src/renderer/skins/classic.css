@@ -68,7 +68,7 @@
   --menu-accent: var(--green);                                                             /* highlighted text in menus and dialogs (titles, ticks) */
   --menu-hover-ink: var(--ink-menu);                                                       /* menu item text under the mouse */
   --hint-ink: var(--base-42);                                                              /* small hints in dialogs */
-  --warn-ink: #e8c24a;                                                                     /* warnings in dialogs (Slop box); readable on --dialog-bg */
+  --warn-ink: #e8c24a;                                                                     /* warnings in dialogs; readable on --dialog-bg */
   --ind-off: var(--base-34b);                                                               /* unlit indicators (mono / stereo) */
   --list-sel-ink: var(--pl-green);                                                         /* selected playlist rows */
   --list-cur-sel: var(--list-cur);

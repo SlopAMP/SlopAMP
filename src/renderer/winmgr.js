@@ -16,7 +16,7 @@
 'use strict';
 (() => {
   const P = window.phosphor;
-  const PANELS = ['main', 'eq', 'video', 'playlist', 'slop', 'skined', 'clip', 'ytweb'];
+  const PANELS = ['main', 'eq', 'video', 'playlist', 'skined', 'clip', 'ytweb'];
 
   // ---------------------------------------------------------------- frames
   // Each window's frame: title, extra title slot, buttons (ids are what app.js wires up) and content.
@@ -29,9 +29,6 @@
       buttons: [['visMinBtn', '&#x2013;', 'Minimize'], ['visCloseBtn', '&#x2715;', 'Close']] },
     playlist: { title: 'PLAYLIST', tbId: 'plTitle', sumId: 'plSum', grip: true, content: ['#plist'],
       buttons: [['plMinBtn', '&#x2013;', 'Minimize playlist'], ['plCloseBtn', '&#x2715;', 'Close playlist']] },
-    // SLOP (1.6): builds a pack of a YouTube moment for slop.cc while the video keeps playing (app.js "Slop")
-    slop: { title: 'SLOP', tbId: 'slopTitle', sumId: 'slopSum', grip: true, content: ['#slopPanel'],
-      buttons: [['slopMinBtn', '&#x2013;', 'Minimize SLOP'], ['slopCloseBtn', '&#x2715;', 'Close SLOP (the pack is kept)']] },
     // Skin Editor (1.7): skins.js "Skin Editor"
     skined: { title: 'SKIN EDITOR', tbId: 'skedTitle', sumId: 'skedSum', grip: true, content: ['#skinEdPanel'],
       buttons: [['skedMinBtn', '&#x2013;', 'Minimize the skin editor'], ['skedCloseBtn', '&#x2715;', 'Close the skin editor']] },
@@ -72,7 +69,7 @@
     wins: { main: window },        // id -> window object
     docs: [document],             // every document we own (panels + helper windows)
     activeDoc: document,          // where the user last clicked or typed
-    state: { main: { visible: true }, eq: {}, video: {}, playlist: {}, slop: {}, skined: {}, clip: {}, ytweb: {} },
+    state: { main: { visible: true }, eq: {}, video: {}, playlist: {}, skined: {}, clip: {}, ytweb: {} },
     info: { preset: 'classic', snap: true, onTop: false, skin: 'default' },
     onReset: null, onClose: null  // set by app.js
   };
@@ -223,7 +220,6 @@
     if (WM.xhistory) add(`dm-item${WM.xhistory.visible() ? ' cur' : ''}`, 'X History', () => WM.xhistory.open());   // X History (2.2)
     if (WM.clip) { m.appendChild(document.createElement('hr')); add(`dm-item${WM.isShown('clip') ? ' cur' : ''}`, 'CLIP', () => WM.clip.toggle()); }   // CLIP (2.3)
     if (WM.ytweb) add(`dm-item${WM.isShown('ytweb') ? ' cur' : ''}`, 'YOUTUBE', () => WM.ytweb.toggle());   // YOUTUBE window (2.3)
-    if (WM.slop) add(`dm-item${WM.isShown('slop') ? ' cur' : ''}`, 'SLOP', () => WM.slop.toggle());   // 2.3: SLOP is hidden (app.js doesn't set WM.slop), so this doesn't show
     m.classList.remove('hidden');
     WM.popup(m, pos);
   }
@@ -338,7 +334,7 @@
     for (const id of PANELS) frames[id] = buildFrame(id);
     document.body.prepend(frames.main);
     document.body.classList.add('win-main', 'fit');
-    const ids = ['eq', 'video', 'playlist', 'slop', 'skined', 'clip', 'ytweb', 'popup', 'dialog'];
+    const ids = ['eq', 'video', 'playlist', 'skined', 'clip', 'ytweb', 'popup', 'dialog'];
     const opened = await Promise.all(ids.map(openWindow));
     ids.forEach((id, i) => {
       const w = opened[i];
