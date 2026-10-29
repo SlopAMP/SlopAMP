@@ -4,8 +4,8 @@ SLOPAMP - retro media player
 Plays your video and music files (MP4, MKV, AVI, MOV, WMV, WebM, MP3, FLAC,
 WAV, OGG, M4A, WMA and more), plus YouTube videos through YouTube's
 official embedded player. YouTube videos stream unless you choose to
-download them.
-X (Twitter) links are not supported.
+download them. X (Twitter) posts with video can be added too: they play
+after you download them (X videos can't stream inside SlopAMP).
 
 FIRST LAUNCH
   Windows may show "Windows protected your PC" because SlopAMP isn't
@@ -40,10 +40,25 @@ SKINS
     its title to move it (it reopens there); x or Esc closes it.
   * Your skin is remembered. The lightning bolt and Reset layout only move
     the windows back; they never change your skin.
+  * Make your own: "+ New skin" in the picker (or "Skin editor..." in the
+    Layout menu) opens the Skin Editor on the skin you have on. Its colours
+    come in families (LCD & accent, player body, buttons, menus, text,
+    warnings, danger, selection): move a family with Hue / Saturation /
+    Brightness or pick its main colour, or open "Each colour" to change one.
+    Every window shows the change at once. Type a name and click Save as;
+    the skin is saved in Downloads\SlopAMP\skins as a .css file and
+    shows under "Mine" in the picker. Closing without saving puts your skin
+    back. A warning appears when text gets hard to read.
+  * Library -> SKINS lists your skins and the built-in ones: Apply, Edit,
+    Rename, Export (a .css to share), Show in Explorer, Delete (Recycle Bin),
+    Import (a .css someone shared) and Open skins folder. Built-in skins
+    can't be changed or deleted. Deleting the skin you have on goes back
+    to SlopAMP Classic.
 
 ADDING THINGS
   * Drag files or folders onto any SlopAMP window (or onto SlopAMP.exe).
-  * Paste a YouTube link anywhere with Ctrl+V, or use +URL.
+  * Paste a YouTube or X link anywhere with Ctrl+V, or use +URL. X links
+    from x.com, twitter.com, fxtwitter, vxtwitter, fixupx and t.co work.
   * Double-click an item to play it. Drag items to reorder them. Del removes them.
   * Your playlist is saved automatically.
   * SAVE / LOAD (bottom bar, or Ctrl+S / Ctrl+L) write and open .m3u8 playlist
@@ -55,6 +70,7 @@ KEYS
   F or F11    fullscreen video (Esc exits) - or the FULLSCREEN button
   M           mini player              E             equalizer
   Ctrl+Alt+R  reset the window layout
+  G / I / O   SLOP: grab a frame / clip starts here / clip ends here
   S / R       shuffle / repeat (off, all, one)
   [ / ]       slower / faster (1x, 1.5x, 2x, 3x)
   Media keys  Play/Pause, Next, Previous and Stop keys on your keyboard work
@@ -71,7 +87,7 @@ PLAYLIST TABS
     you browse others; Next/Previous stay in that tab.
   * Drag items onto a tab to move them there (hold Ctrl to copy), or
     right-click -> Move to "...". LOAD can open a playlist file in a new tab.
-  * DOWNLOAD ALL downloads the YouTube items in the tab you're looking at.
+  * DOWNLOAD ALL downloads the YouTube and X items in the tab you're looking at.
 
 VISUALIZER
   * Music files show the BUTTERCHURN visualizer (1,731 presets). It changes
@@ -114,9 +130,48 @@ EQUALIZER
   * Works on local files and downloaded copies. YouTube streams play inside
     YouTube's own player, so the EQ can't reach them.
 
-DOWNLOADING YOUTUBE VIDEOS
+YOUTUBE HISTORY
+  * The first tab, YT History (clock icon), fills itself: every YouTube
+    video you play is added, newest at the top, with when you watched it
+    (now, 12m, 3h, yday, Mon, Oct 19). Downloaded copies of YouTube videos
+    count too; your own files and X posts don't, and a video that couldn't
+    play isn't added. Hover a row for the date and the video's length.
+  * It's saved by itself, no pop-ups. It also keeps a synced copy in
+    Downloads\SlopAMP\Playlists\YouTube History.m3u8 (it shows in
+    Library -> Playlists).
+  * Settings: the gear on the strip at the top of the tab, or right-click
+    the tab. Record YouTube plays (on/off), Keep a synced copy in
+    Playlists, Order (newest or oldest at the top), When a video plays
+    again (move it up / leave it / add it again), Keep (last 50, 100, 250,
+    500, a number of your own, or no limit), Save a copy as playlist
+    file... (a normal playlist you can edit and combine), Clear history...
+    and Restore default options. Keeping fewer videos asks before it
+    removes older ones.
+  * History keeps its own order: you can play, download and remove rows,
+    but not add, move or sort them. Dragging rows to another tab copies
+    them. SAVE ALL skips History (it has its synced copy); QUICK SAVE on
+    History updates that copy now.
+  * Turn recording off and clear History, and the tab hides. Layout ->
+    YouTube History brings it back.
+
+X HISTORY
+  * The second tab, X History, keeps the X posts you've downloaded. A post
+    is added when its download finishes (video or Audio only MP3); Play on
+    X, Skip, or a download that failed or was canceled doesn't add it.
+    Rows show when you downloaded (or last played) it.
+  * Right-click a row -> Open in browser opens the post on X. The
+    downloaded files stay linked, so it plays here too.
+  * Same settings and rules as YT History (gear on the strip or right-click
+    the tab): Record X downloads, a synced copy in
+    Downloads\SlopAMP\Playlists\X History.m3u8, Order, When a post is
+    downloaded again (move it up / leave it / add it again), Keep, Save a
+    copy..., Clear history..., Restore default options.
+  * Turn recording off and clear it, and the tab hides. Layout -> X History
+    brings it back.
+
+DOWNLOADING YOUTUBE AND X VIDEOS
   * Click DOWNLOAD (on the player) to save the YouTube video you're watching,
-    or right-click any YouTube item in the playlist -> Download...
+    or right-click any YouTube or X item in the playlist -> Download...
   * Pick Best / 1080p / 720p / 480p video (MP4) or Audio only (MP3).
   * Files go to Downloads\SlopAMP\Video and Downloads\SlopAMP\Audio
     ("Change folders..." in the download menu to pick others).
@@ -125,9 +180,19 @@ DOWNLOADING YOUTUBE VIDEOS
     finishes, playback isn't interrupted.
   * Right-click -> Delete local copy moves the file to the Recycle Bin;
     the item stays in the playlist and streams from YouTube again.
-  * Only download videos you have the right to save. YouTube's terms
+  * Only download videos you have the right to save. YouTube's and X's terms
     restrict downloading.
-  * DOWNLOAD ALL: the ⇩ALL button at the bottom downloads every YouTube item
+  * X posts: SlopAMP can't stream X videos, so an X item doesn't play until
+    it's downloaded. When the playlist reaches one that isn't saved yet, you
+    get three choices: Play on X (opens the post in your browser), Download
+    (pick the quality; it starts playing when the download finishes) or Skip.
+    Skip counts down from 10 and moves on by itself at 0, so a playlist keeps
+    going; any button stops the count, and it waits while you pick a
+    download quality. YouTube videos that can't play here (blocked by their
+    owner, or YouTube unreachable) get the same countdown. A post with
+    several videos: add the link ending in /video/2 (and so on) for the
+    others. Posts X only shows to signed-in accounts can't be downloaded.
+  * DOWNLOAD ALL: the ⇩ALL button at the bottom downloads every YouTube and X item
     in the playlist (all MP3, or all video at one quality), one after
     another. Live streams and items already saved are skipped.
   * MANAGE LIBRARY (bottom bar, or "Manage library..." in the download menu)
@@ -147,6 +212,43 @@ DOWNLOADING YOUTUBE VIDEOS
     playlists all live in one place (Downloads\SlopAMP).
   * SlopAMP keeps its downloader (yt-dlp) up to date automatically.
 
+SLOP (packs of a YouTube moment for slop.cc)
+  * Click SLOP (next to FULLSCREEN) while a YouTube video plays. SLOP is its
+    own window: move it, snap it, resize it, keep watching. It makes a pack
+    in Downloads\SlopAMP\Slop\<date> <title> @<time>.
+  * While you watch, in any SlopAMP window: G grabs the frame on screen,
+    I and O set where the clip starts and ends (SLOP doesn't need to be open).
+  * AUDIO: the song is downloaded once; the wave appears when it's here
+    (Stop / Start control that download). The clip is the green part: drag
+    its edges or the whole clip, drag on the wave for a new one, or type the
+    seconds before / after the moment. A click on the wave jumps the player
+    there. Ticks: Whole song (song.mp3) and a Second clip (audio-2.mp3,
+    the dashed range). Long videos (over 20 min): only 3 minutes either
+    side of the moment are downloaded, so no whole song.
+  * LOOK: every frame comes from the video itself (up to 1080p, no player
+    buttons). Give each one a name (Singer, Stage...) and a kind (person,
+    look, prop, place): it goes into the file name, like slop.cc's reference
+    bank. The lead is always ref-01. < 1 s / 1 s > and Re-grab change a
+    frame. Burst x5 grabs 5 candidates across the clip: mark the best as
+    Lead or Ref and Keep them (slop.cc prefers a few clear references).
+    Motion reference: a silent 2-5 s motion.mp4 around the lead frame.
+    If a frame can't be had from the video you can choose the video
+    window's picture instead (smaller; slop.cc warns under 512 px).
+  * PROMPT: pick Roast / Remake / Music video / Custom or write your own.
+    "Suggested" is a scene line made from the title and description.
+    Copy puts the prompt on the clipboard; Save writes prompt.txt (with a
+    short rights note at the end). If YouTube has captions for the clip,
+    they're saved as lyrics.txt.
+  * Open in Slop.cc: opens the pack folder and slop.cc (a new video) in your
+    browser and copies the prompt. On slop.cc attach the song or clip and
+    the references, paste the prompt and confirm the rights there.
+    Zip pack makes one .zip next to the folder (for sharing or backup).
+  * Library -> SLOP lists every pack: search (titles, reference names,
+    prompts, lyrics), filter, preview and play, rename, zip, show in
+    Explorer, delete (Recycle Bin). Double-click a pack to keep working on it.
+  * SlopAMP uploads nothing itself. Only use songs, faces, logos and images
+    you have the rights or permission for.
+
 UPDATES
   * SlopAMP checks GitHub once a day for a new version (open "?" to change
     this or to check right away). Choose "Notify me" (the default),
@@ -162,7 +264,7 @@ UPDATES
     download page.
 
 GOOD TO KNOW
-  * Playlist tags: YT = YouTube, YTM = YouTube Music, YT LIVE = a stream
+  * Playlist tags: YT = YouTube, YTM = YouTube Music, X = an X post, YT LIVE = a stream
     that's live right now (download it after it ends), SAVED / MP3 = plays
     from your downloaded copy, WEB ONLY = owner blocks playback in other apps.
   * Some YouTube videos block playback in other apps. SlopAMP shows

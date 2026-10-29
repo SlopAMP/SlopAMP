@@ -102,6 +102,7 @@
   --fs-playlist: 14px;
   --hint-ink: #3fa85c;
   --ind-off: #1f5a2c;
+  --warn-ink: #c8ff5a;
 }
 
 /* faint scan lines over everything except the video */

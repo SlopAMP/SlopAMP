@@ -2,25 +2,27 @@
 // SlopAMP's movable windows, main-process side.
 //
 // The renderer (src/renderer/winmgr.js) opens one real window per panel with window.open(): the player
-// ("main"), the equalizer, the video/visualizer and the playlist, plus two hidden helper windows that
+// ("main"), the equalizer, the video/visualizer, the playlist and SLOP (1.6), plus two hidden helper windows that
 // host popup menus and dialogs. All of them share one renderer process, so the player code drives every
 // window directly. This file owns the geometry: where each window is, snapping, docked groups, layout
 // presets, "Reset layout" and saving the layout between launches.
 //
 // Saved layout (state.layout):
 //   { version: 1, skin: 'default', preset: 'classic', snap: true, onTop: false,
-//     windows: { main: {x,y,w,h}, eq: {...}, video: {...}, playlist: {...} },
+//     windows: { main: {x,y,w,h}, eq: {...}, video: {...}, playlist: {...}, slop: {...}, skined: {...} },
 //     heights: { main: 171, ... },       // on-screen heights (a rolled-up window is just its title bar)
 //     panels: { skins: {x,y} } }          // where the skin picker was dragged to
 // `skin` is the chosen skin's id (src/renderer/skins.js); "Reset layout" and the lightning bolt never change it.
 
 const { BrowserWindow, screen } = require('electron');
 
-const PANELS = ['main', 'eq', 'video', 'playlist'];
+const PANELS = ['main', 'eq', 'video', 'playlist', 'slop', 'skined'];
+const STACK = ['main', 'eq', 'video', 'playlist'];   // the column the layout presets arrange
+const FLOAT = ['slop', 'skined'];                    // SLOP (1.6) and the Skin Editor (1.7) float beside it
 const HOSTS = ['popup', 'dialog'];
 const FIT = new Set(['main', 'eq']);            // height follows the content
-const MIN = { main: [420, 60], eq: [420, 40], video: [320, 180], playlist: [300, 150] };
-const DEF = { w: 420, main: 190, eq: 160, video: 240, playlist: 300 };
+const MIN = { main: [420, 60], eq: [420, 40], video: [320, 180], playlist: [300, 150], slop: [600, 440], skined: [460, 420] };
+const DEF = { w: 420, main: 190, eq: 160, video: 240, playlist: 300, slop: 700, slopW: 820, skined: 680, skinedW: 540 };
 const SNAP = 10;          // px: how close an edge must be to snap
 const TOUCH = 1;          // px: edges this close count as docked
 const PRESETS = ['classic', 'side', 'bigvis'];
@@ -34,7 +36,7 @@ class WindowManager {
     this.version = version || '';
     this.saveLayout = saveLayout;
     this.wins = new Map();          // id -> BrowserWindow (panels and hosts)
-    this.visible = { main: true, eq: false, video: false, playlist: false };
+    this.visible = { main: true, eq: false, video: false, playlist: false, slop: false, skined: false };
     this.shade = {};
     this.fitH = {};
     this.applied = {};              // id -> last bounds we set (to tell our moves from the user's)
@@ -51,7 +53,7 @@ class WindowManager {
     const ok = (b) => b && [b.x, b.y, b.w, b.h].every(Number.isFinite);
     const out = { version: 1, skin: 'default', preset: 'classic', snap: true, onTop: false, windows: {}, heights: {}, panels: {} };
     if (l && typeof l === 'object') {
-      if (typeof l.skin === 'string' && /^[a-z0-9-]{1,40}$/.test(l.skin)) out.skin = l.skin;
+      if (typeof l.skin === 'string' && /^(user:)?[a-z0-9-]{1,60}$/.test(l.skin)) out.skin = l.skin;   // user:<slug> = a user skin (1.7)
       if (PRESETS.includes(l.preset) || l.preset === 'custom') out.preset = l.preset;
       out.snap = l.snap !== false; out.onTop = !!l.onTop;
       for (const id of PANELS) if (l.windows && ok(l.windows[id])) out.windows[id] = r4(l.windows[id]);
@@ -60,7 +62,8 @@ class WindowManager {
       // where movable popups (the skin picker) were left: { skins: {x, y} }
       if (l.panels && typeof l.panels === 'object') for (const [k, v] of Object.entries(l.panels)) if (/^[a-z]{1,20}$/.test(k) && v && Number.isFinite(v.x) && Number.isFinite(v.y)) out.panels[k] = { x: Math.round(v.x), y: Math.round(v.y) };
     }
-    if (PANELS.every(id => out.windows[id])) {
+    if (STACK.every(id => out.windows[id])) {
+      for (const id of FLOAT) if (!out.windows[id]) out.windows[id] = this.floatSpot(out.windows, id);   // layouts saved before 1.6 / 1.7
       for (const id of PANELS) { const b = out.windows[id]; b.w = Math.max(MIN[id][0], b.w); b.h = Math.max(MIN[id][1], b.h); }
       return out;
     }
@@ -72,11 +75,32 @@ class WindowManager {
     const plH = Math.max(150, Math.min(600, legacyPl || DEF.playlist));
     const vidH = legacy && Number.isFinite(legacy.height) ? Math.max(180, legacy.height - DEF.main - DEF.eq - plH) : DEF.video;
     let cy = y;
-    for (const id of PANELS) {
+    for (const id of STACK) {
       const h = id === 'video' ? vidH : id === 'playlist' ? plH : DEF[id];
       out.windows[id] = { x, y: cy, w, h }; cy += h;
     }
+    for (const id of FLOAT) out.windows[id] = this.floatSpot(out.windows, id);
     return out;
+  }
+  // Where SLOP opens: beside the player's windows (right or left, whichever covers less of them), on the
+  // player's screen, top edge level with the player. W: the layout's windows.
+  floatSpot(W, id) {
+    const m = W.main, rs = STACK.map(k => W[k]).filter(Boolean);
+    const x0 = Math.min(...rs.map(r => r.x)), x1 = Math.max(...rs.map(r => r.x + r.w));
+    const wa = screen.getDisplayMatching({ x: m.x, y: m.y, width: m.w, height: 40 }).workArea;
+    const w = Math.min(DEF[`${id}W`], wa.width), h = Math.min(DEF[id], wa.height);
+    const xr = Math.max(wa.x, Math.min(x1, wa.x + wa.width - w)), xl = Math.max(wa.x, Math.min(x0 - w, wa.x + wa.width - w));
+    let x = Math.max(0, x1 - xr) <= Math.max(0, xl + w - x0) ? xr : xl;
+    let y = Math.max(wa.y, Math.min(m.y, wa.y + wa.height - h));
+    // the other floating windows: try the other side of the player, else step down-right so both title bars show
+    const others = FLOAT.filter(k => k !== id && W[k]).map(k => W[k]);
+    const hits = (px, py) => others.some(o => px < o.x + o.w && o.x < px + w && py < o.y + o.h && o.y < py + h);
+    if (others.length && hits(x, y)) {
+      const alt = x === xr ? xl : xr;
+      if (!hits(alt, y)) x = alt;
+      else { x = Math.min(x + 40, wa.x + wa.width - w); y = Math.min(y + 40, wa.y + wa.height - h); }
+    }
+    return { x: Math.round(x), y: Math.round(y), w, h };
   }
   b(id) { return this.layout.windows[id]; }
   // Height the window really has: content height for fit windows and shaded windows.
@@ -119,7 +143,7 @@ class WindowManager {
   }
   attach(id, win) {
     this.wins.set(id, win);
-    if (id === 'main') { this.watch(id, win); if (this.layout.onTop) win.setAlwaysOnTop(true); return; }
+    if (id === 'main') { this.watch(id, win); win.on('focus', () => this.dialogUp()); if (this.layout.onTop) win.setAlwaysOnTop(true); return; }
     if (!PANELS.includes(id) && !HOSTS.includes(id)) return;
     win.setMenu(null);
     // Alt+F4 on a panel hides it like its ✕ button; the windows only really close when SlopAMP quits.
@@ -135,6 +159,7 @@ class WindowManager {
     }, 0));
     if (PANELS.includes(id)) {
       this.watch(id, win);
+      win.on('focus', () => this.dialogUp());
       if (this.layout.onTop) win.setAlwaysOnTop(true);
       if (id === 'video') {
         win.on('enter-full-screen', () => this.toRenderer('fullscreen', true));
@@ -249,7 +274,9 @@ class WindowManager {
       const vis = id === 'main' ? true : !!p.visible;
       if (!win) { this.visible[id] = vis; continue; }
       if (vis && !wasShown) {
-        if (reflow && this.started) {
+        // SLOP opens where it was, unless that's off screen now (monitor gone, layout moved): then beside the player
+        if (FLOAT.includes(id) && !this.onScreen(this.rect(id))) Object.assign(this.b(id), this.floatSpot(this.layout.windows, id));
+        if (reflow && this.started && !FLOAT.includes(id)) {
           // windows that moved up into this window's slot move back down
           const top = this.b(id).y, a = this.rect(id), seen = new Set([id]), chain = [];
           for (const o of PANELS) {
@@ -477,6 +504,7 @@ class WindowManager {
         x0 = Math.round(wa.x + (wa.width - w) / 2); y0 = Math.round(wa.y + Math.max(0, (wa.height - total) / 2));
       }
       stack(col, x0, y0, w);
+      if (name === 'reset') for (const id of FLOAT) Object.assign(W[id], this.floatSpot(W, id));
     } else if (name === 'side') {
       const col = ['main', 'eq', 'video'];
       fitColumn(col);
@@ -501,7 +529,11 @@ class WindowManager {
     if (bx.x0 + dx < wa.x) dx = wa.x - bx.x0;
     if (bx.y1 > wa.y + wa.height) dy = wa.y + wa.height - bx.y1;
     if (bx.y0 + dy < wa.y) dy = wa.y - bx.y0;
-    for (const id of PANELS) { W[id].x += dx; W[id].y += dy; }
+    for (const id of STACK) { W[id].x += dx; W[id].y += dy; }
+    for (const id of FLOAT) {
+      if (this.visible[id]) { W[id].x += dx; W[id].y += dy; }        // a floating window moves along only when it's showing
+      if (!this.onScreen(this.rect(id))) Object.assign(W[id], this.floatSpot(W, id));
+    }
     this.layout.preset = name === 'reset' ? 'classic' : name;
     if (this.started) this.applyAll();
     this.persist();
@@ -511,10 +543,11 @@ class WindowManager {
   }
   setOption(key, value) {
     if (key === 'snap') this.layout.snap = !!value;
-    else if (key === 'skin') { if (typeof value === 'string' && /^[a-z0-9-]{1,40}$/.test(value)) this.layout.skin = value; }
+    else if (key === 'skin') { if (typeof value === 'string' && /^(user:)?[a-z0-9-]{1,60}$/.test(value)) this.layout.skin = value; }
     else if (key === 'onTop') {
       this.layout.onTop = !!value;
       for (const id of PANELS) { const w = this.wins.get(id); if (w && !w.isDestroyed()) w.setAlwaysOnTop(this.layout.onTop || (id === 'main' && this.mini)); }
+      const dlg = this.wins.get('dialog'); if (dlg && !dlg.isDestroyed() && dlg.isVisible()) this.dialogLevel();
     }
     this.persist();
     return this.info();
@@ -523,6 +556,7 @@ class WindowManager {
     this.mini = !!on;
     const m = this.wins.get('main');
     if (m && !m.isDestroyed()) m.setAlwaysOnTop(this.mini || this.layout.onTop, this.mini ? 'floating' : 'normal');
+    const dlg = this.wins.get('dialog'); if (dlg && !dlg.isDestroyed() && dlg.isVisible()) this.dialogLevel();
     return this.mini;
   }
   info() { return { preset: this.layout.preset, snap: this.layout.snap, onTop: this.layout.onTop, skin: this.layout.skin, version: this.version }; }
@@ -593,6 +627,7 @@ class WindowManager {
   showDialog({ w, h, resize }) {
     const dlg = this.wins.get('dialog'); if (!dlg) return;
     w = Math.ceil(w); h = Math.ceil(h);
+    if (!(w >= 40 && h >= 40)) { this.log(`dialog: ignored a ${w}x${h} size`); return; }   // measured before layout: wait for the real size
     if (resize && dlg.isVisible()) {
       const b = dlg.getBounds();
       const a = screen.getDisplayMatching(b).workArea;
@@ -609,9 +644,33 @@ class WindowManager {
     x = Math.max(a.x + 4, Math.min(x, a.x + a.width - w - 4));
     y = Math.max(a.y + 4, Math.min(y, a.y + a.height - h - 4));
     dlg.setBounds({ x, y, width: w, height: h });
-    dlg.setAlwaysOnTop(true, 'modal-panel');      // above the player even with "Keep windows on top"
+    this.dialogLevel();
     if (!dlg.isVisible()) dlg.show();
     dlg.focus();
+    if (!this.dlgLogged) {      // once per session: what Windows really gave the dialog (for bug reports)
+      this.dlgLogged = true;
+      const d = screen.getDisplayMatching(dlg.getBounds());
+      this.log(`dialog: asked ${w}x${h} at ${x},${y}; got ${JSON.stringify(dlg.getBounds())} content ${JSON.stringify(dlg.getContentBounds())}; scale ${d.scaleFactor}; onTop ${!!this.layout.onTop}`);
+    }
+  }
+  // The dialog (Library, About, confirm boxes) follows Layout → Keep windows on top: on, it sits above the
+  // on-top player windows; off, it's an ordinary window that other apps can cover. Clicking one of SlopAMP's
+  // own windows while it's open lifts it back above them (dialogUp).
+  // No moveTop() here: on Windows, Electron's moveTop() re-sets the window's position and size behind
+  // Chromium's back, and the 1.7.0 build that used it showed the Library as a blank black window that
+  // couldn't be moved. Only setAlwaysOnTop is used (Chromium's own call, which never moves or resizes).
+  dialogLevel() {
+    const dlg = this.wins.get('dialog'); if (!dlg || dlg.isDestroyed()) return;
+    if (this.layout.onTop || this.mini) dlg.setAlwaysOnTop(true, 'modal-panel');   // the mini player floats: stay above it
+    else dlg.setAlwaysOnTop(false);
+  }
+  dialogUp() {
+    const dlg = this.wins.get('dialog');
+    if (!dlg || dlg.isDestroyed() || !dlg.isVisible() || this.layout.onTop || this.mini) return;
+    clearTimeout(this.dlgUpT);
+    // on and straight off again: Windows puts a window leaving "topmost" above every normal window,
+    // without moving, resizing or focusing it
+    this.dlgUpT = setTimeout(() => { if (dlg.isDestroyed() || !dlg.isVisible() || this.layout.onTop || this.mini) return; dlg.setAlwaysOnTop(true); dlg.setAlwaysOnTop(false); }, 0);
   }
   hideDialog() {
     const dlg = this.wins.get('dialog'); if (!dlg || !dlg.isVisible()) return;

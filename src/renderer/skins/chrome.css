@@ -144,7 +144,10 @@
   --menu-accent: #075a8a;
   --menu-hover-ink: #ffffff;
   --hint-ink: #596173;
+  --warn-ink: #8a5a00;
   --list-sel-ink: #ffffff;
+  --ov-title: #075a8a;
+  --ov-text: #1f2633;
   --field-bg: #ffffff;
   --field-ink: #1f2633;
   --field-line: #8a919e;

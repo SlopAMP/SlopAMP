@@ -21,6 +21,18 @@ cp -r "$TOOLS/electron-win/." "$STAGE/"
 mv "$STAGE/electron.exe" "$STAGE/SlopAMP.exe"
 rm -f "$STAGE/resources/default_app.asar" "$STAGE/version" "$STAGE/LICENSE"
 
+# English-only Chromium UI strings (about 46 MB less): keep en-US.pak (Chromium's fallback) and en-GB.pak.
+# The dropped names go to dropped-locales.nsh: the installer deletes exactly those on an upgrade over an
+# older SlopAMP (which shipped all of them), and the uninstaller too. LICENSES.chromium.html stays as it is.
+: > "$OUT/dropped-locales.nsh"
+for f in "$STAGE"/locales/*.pak; do
+  n="$(basename "$f")"
+  case "$n" in en-US.pak|en-GB.pak) ;; *) rm -f "$f"; printf '  Delete "$INSTDIR\\locales\\%s"\n' "$n" >> "$OUT/dropped-locales.nsh" ;; esac
+done
+[ -f "$STAGE/locales/en-US.pak" ] || { echo "en-US.pak missing from the Electron locales"; exit 1; }
+[ -f "$STAGE/LICENSES.chromium.html" ] || { echo "LICENSES.chromium.html missing"; exit 1; }
+echo "locales: kept $(ls "$STAGE/locales" | tr '\n' ' '); dropped $(grep -c Delete "$OUT/dropped-locales.nsh")"
+
 # app code
 mkdir -p "$STAGE/resources/app" "$STAGE/resources/ffmpeg"
 cp "$ROOT/package.json" "$STAGE/resources/app/"
@@ -58,7 +70,7 @@ export NSISDIR="$TOOLS/nsis"
 MAKENSIS="$TOOLS/nsis/linux/makensis"
 # The uninstaller removes exactly these files (never the whole folder: it may hold other things).
 python3 "$BUILD/make_uninstall_list.py" "$STAGE" "$OUT/uninstall-files.nsh"
-COMMON=(-V2 "-DVERSION=$VER" "-DSTAGE=$STAGE" "-DOUTDIR=$OUT" "-DBUILDDIR=$BUILD" "-DBUILDID=$BUILDID" "-DUNINSTALL_LIST=$OUT/uninstall-files.nsh")
+COMMON=(-V2 "-DVERSION=$VER" "-DSTAGE=$STAGE" "-DOUTDIR=$OUT" "-DBUILDDIR=$BUILD" "-DBUILDID=$BUILDID" "-DUNINSTALL_LIST=$OUT/uninstall-files.nsh" "-DDROPPED_LOCALES=$OUT/dropped-locales.nsh")
 "$MAKENSIS" "${COMMON[@]}" "$BUILD/installer.nsi"
 "$MAKENSIS" "${COMMON[@]}" "$BUILD/portable.nsi"
 

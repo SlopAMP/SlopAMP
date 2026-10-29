@@ -16,7 +16,7 @@
 'use strict';
 (() => {
   const P = window.phosphor;
-  const PANELS = ['main', 'eq', 'video', 'playlist'];
+  const PANELS = ['main', 'eq', 'video', 'playlist', 'slop', 'skined'];
 
   // ---------------------------------------------------------------- frames
   // Each window's frame: title, extra title slot, buttons (ids are what app.js wires up) and content.
@@ -28,7 +28,13 @@
     video: { title: 'VIDEO', tbId: 'visTitle', sumId: 'visSum', grip: true, content: ['#screen'],
       buttons: [['visMinBtn', '&#x2013;', 'Minimize'], ['visCloseBtn', '&#x2715;', 'Close']] },
     playlist: { title: 'PLAYLIST', tbId: 'plTitle', sumId: 'plSum', grip: true, content: ['#plist'],
-      buttons: [['plMinBtn', '&#x2013;', 'Minimize playlist'], ['plCloseBtn', '&#x2715;', 'Close playlist']] }
+      buttons: [['plMinBtn', '&#x2013;', 'Minimize playlist'], ['plCloseBtn', '&#x2715;', 'Close playlist']] },
+    // SLOP (1.6): builds a pack of a YouTube moment for slop.cc while the video keeps playing (app.js "Slop")
+    slop: { title: 'SLOP', tbId: 'slopTitle', sumId: 'slopSum', grip: true, content: ['#slopPanel'],
+      buttons: [['slopMinBtn', '&#x2013;', 'Minimize SLOP'], ['slopCloseBtn', '&#x2715;', 'Close SLOP (the pack is kept)']] },
+    // Skin Editor (1.7): skins.js "Skin Editor"
+    skined: { title: 'SKIN EDITOR', tbId: 'skedTitle', sumId: 'skedSum', grip: true, content: ['#skinEdPanel'],
+      buttons: [['skedMinBtn', '&#x2013;', 'Minimize the skin editor'], ['skedCloseBtn', '&#x2715;', 'Close the skin editor']] }
   };
   function buildFrame(id) {
     const f = FRAMES[id];
@@ -60,7 +66,7 @@
     wins: { main: window },        // id -> window object
     docs: [document],             // every document we own (panels + helper windows)
     activeDoc: document,          // where the user last clicked or typed
-    state: { main: { visible: true }, eq: {}, video: {}, playlist: {} },
+    state: { main: { visible: true }, eq: {}, video: {}, playlist: {}, slop: {}, skined: {} },
     info: { preset: 'classic', snap: true, onTop: false, skin: 'default' },
     onReset: null, onClose: null  // set by app.js
   };
@@ -205,6 +211,10 @@
     add('dm-item', 'Reset layout<small>Ctrl+Alt+R</small>', () => WM.reset());
     m.appendChild(document.createElement('hr'));
     add('dm-item', 'Skins\u2026', () => { if (WM.skins) WM.skins.openPicker(pos); });
+    add('dm-item', 'Skin editor\u2026', () => { if (WM.skins) WM.skins.openEditor(); });
+    // YouTube History (2.2): ticked while its tab is there; brings the tab back after it was turned off and cleared
+    if (WM.history) { m.appendChild(document.createElement('hr')); add(`dm-item${WM.history.visible() ? ' cur' : ''}`, 'YouTube History', () => WM.history.open()); }
+    if (WM.xhistory) add(`dm-item${WM.xhistory.visible() ? ' cur' : ''}`, 'X History', () => WM.xhistory.open());   // X History (2.2)
     m.classList.remove('hidden');
     WM.popup(m, pos);
   }
@@ -318,7 +328,7 @@
     for (const id of PANELS) frames[id] = buildFrame(id);
     document.body.prepend(frames.main);
     document.body.classList.add('win-main', 'fit');
-    const ids = ['eq', 'video', 'playlist', 'popup', 'dialog'];
+    const ids = ['eq', 'video', 'playlist', 'slop', 'skined', 'popup', 'dialog'];
     const opened = await Promise.all(ids.map(openWindow));
     ids.forEach((id, i) => {
       const w = opened[i];

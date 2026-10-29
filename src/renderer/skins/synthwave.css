@@ -138,6 +138,7 @@
   --lit-ink: #ff7ad9;
   --tab-count-on: #d05aa8;
   --hint-ink: #9d86c4;
+  --warn-ink: #ffb547;
 }
 
 .lcd-inset { color: #3df2ff; text-shadow: 0 0 5px rgba(61,242,255,.7); }

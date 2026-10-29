@@ -162,6 +162,13 @@ Section "SlopAMP (required)" SecMain
   ; Clear the old app code on upgrade, but only in a folder that already holds SlopAMP.
   IfFileExists "$INSTDIR\${EXE}" 0 +2
     RMDir /r "$INSTDIR\resources\app"
+  ; 2.0 ships English UI strings only: remove the other Chromium locale packs an older SlopAMP put here
+  ; (exact names, listed at build time; nothing else in locales\ is touched).
+  IfFileExists "$INSTDIR\${EXE}" 0 skipLocales
+!ifdef DROPPED_LOCALES
+  !include "${DROPPED_LOCALES}"
+!endif
+  skipLocales:
   File /r "${STAGE}\*.*"
   WriteUninstaller "$INSTDIR\Uninstall SlopAMP.exe"
   WriteRegStr HKCU "Software\SlopAMP" "InstallDir" "$INSTDIR"
@@ -260,6 +267,9 @@ Section "Uninstall"
   DeleteRegKey HKCU "Software\SlopAMP"
   ; Only SlopAMP's own files (listed at build time from the staged app), then each folder only if it's
   ; now empty. Never RMDir /r: the install folder may be shared with other files (e.g. D:\Apps).
+!ifdef DROPPED_LOCALES
+  !include "${DROPPED_LOCALES}"   ; locale packs an older SlopAMP left (if the upgrade couldn't remove them)
+!endif
   !include "${UNINSTALL_LIST}"
   Delete "$INSTDIR\Uninstall SlopAMP.exe"
   Delete "$INSTDIR\debug.log"

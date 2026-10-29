@@ -1,5 +1,70 @@
 # Changelog
 
+## 2.2.0 — 2026-10-28
+
+- **YouTube History** (idea #7): a built-in first tab, **YT History**, that fills itself with every YouTube video you play (also downloaded copies of YouTube videos; not your files, not X posts; a video that couldn't play isn't added). Rows show when you watched (now, 12m, 3h, yday, Mon, Oct 19); the length is in the tooltip. A strip at the top says what it's doing: "Recording · newest first · keeps 100 · replays move up".
+- **Settings** (⚙ on the strip, or right-click the tab): Record YouTube plays; Keep a synced copy in Playlists (`Downloads\SlopAMP\Playlists\YouTube History.m3u8`, on by default); Order: newest / oldest at the top; When a video plays again: move it up to newest / leave it where it is / add it again; Keep: last 50 / 100 / 250 / 500 / Custom… / No limit (keeping fewer asks first); Save a copy as playlist file…; Clear history…; Restore default options.
+- Saved silently with your session, no pop-ups. Videos played from inside History only get a new time; History isn't reshuffled. SAVE ALL skips History; nothing can be pasted, dropped or moved into it; dragging rows out copies them. Recording off + Clear history hides the tab; Layout → YouTube History brings it back.
+- **X History** (idea #11): a second built-in tab, **X History**, right after YT History. An X post goes in only when its download finishes (video or Audio only MP3) — not on Play on X, Skip, or a download that failed or was canceled. Rows show when you downloaded it (or last played it); right-click → **Open in browser** opens the post on X, and the downloaded files stay linked so it plays here.
+- X History has the same settings as YT History: Record X downloads; synced copy `Downloads\SlopAMP\Playlists\X History.m3u8` (on by default); Order; When a post is downloaded again: move it up / leave it / add it again; Keep 50 / 100 / 250 / 500 / Custom… / No limit; Save a copy…; Clear history…; Restore default options. Same rules too (SAVE ALL skips it, nothing can be added by hand, dragging out copies). Recording off + Clear history hides the tab; Layout → X History brings it back.
+- Fix: greyed-out menu items were nearly invisible in some skins (Terminal); they're readable in all ten now.
+
+## 2.1.1 — 2026-10-26
+
+- **Skip counts down** on the X choice (Play on X / Download / Skip) and on YouTube videos that can't play here (Open in browser / Download / Skip, and "YouTube is unreachable", which now has Skip too): **Skip (10) … Skip (0)**, then it moves to the next item. Any button stops the count; it waits while the download menu is open; once a download of that item starts, the box waits for it (an X post plays when it's done). A failed download brings the choice back with the reason.
+- The playlist no longer passes over X posts that aren't downloaded without asking: it shows their choice, and Skip's countdown keeps it moving.
+- Skip with Repeat one on goes to the next item instead of trying the same one again. No countdown on the last item when there's nothing after it; after a whole round with nothing playable, the countdown stops.
+
+## 2.1.0 — not released on its own (shipped in 2.1.1, 2026-10-26)
+
+- **X video links in playlists.** Drag, paste or +URL x.com / twitter.com posts (also fxtwitter, vxtwitter, fixupx and t.co links); playlist files can hold them too. They get an **X** tag like YT / YTM.
+- X videos can't stream inside SlopAMP, so an X item plays after it's downloaded. Playing one that isn't saved shows **Play on X** (opens the post in your browser) / **Download** / **Skip**; a download started there plays as soon as it's done. When a track ends, X posts that aren't saved are skipped.
+- **DOWNLOAD** and **DOWNLOAD ALL** work for X posts with the same choices as YouTube (Best / 1080p / 720p / 480p, Audio only MP3), into the same Video and Audio folders; the Library lists them. Right-click an X item: Download…, Open in browser. A post with several videos: the link ending in /video/2 etc. picks one.
+- Clear messages when an X post has no video, needs a signed-in account, or was deleted.
+- Fixes: messages over the video (YouTube errors, the X choice) were hard to read in the Chrome skin; playlist tags are easier to read in every skin, also on selected rows.
+
+## 2.0.0 — 2026-10-25
+
+The Skin Editor release (tested as 1.7.0). SlopAMP 1.4.4 stays available as the classic version without SLOP.
+
+- **Skin Editor** (its own window: "+ New skin" in the SKINS picker, or "Skin editor…" in the Layout menu). Start from any skin, built-in or yours, and move its colours in families: LCD & accent, player body & frames, buttons, menus & screens, text, warnings, danger, selection. Each family has Hue / Saturation / Brightness and a colour picker for its main colour; "Each colour" changes one at a time. Every window shows the change as you drag. **Reset all**, per-family **reset**, and a warning when text gets hard to read.
+- **Your own skins:** **Save as** writes `Downloads\SlopAMP\skins\<name>.css` (its own folder, next to Video, Audio, Playlists and Slop); **Save** updates a skin of yours. They show under **Mine** in the SKINS picker and are remembered like the built-ins. Closing the editor without saving puts your skin back. The lightning bolt and Reset layout still never change the skin.
+- **Library → SKINS:** your skins and the built-ins, with Apply, Edit, Rename, Export, Show in Explorer, Delete (Recycle Bin), Import and Open skins folder. Built-in skins can't be changed or deleted (Edit starts a new skin from one). Deleting the skin you have on goes back to SlopAMP Classic.
+- **Import / Export** share a skin as one .css file. Imported files are cleaned first: nothing in them can load anything from the internet or run code.
+- Skins made with the 1.7.0 test build (in `Downloads\SlopAMP\Slop\skins`) move to `Downloads\SlopAMP\skins` by themselves; the Slop folder is for packs only. Hovered cards in the SKINS picker stay readable in every skin.
+- Smaller download: the app now carries English Chromium UI strings only (about 46 MB less installed). Installing over an older SlopAMP removes the other language packs it left.
+- **Library:** follows Layout → Keep windows on top (the 1.7.0 test build that first did this showed the Library as a blank black window on Windows; fixed). With it off, the Library stays above SlopAMP's windows but no longer above other apps (Explorer, your browser). The tabs are grouped: ALL / VIDEO / MP3 / PLAYLISTS (ALL is those three), then SLOP and SKINS.
+
+## 1.6.0 — 2026-10-25
+
+- **SLOP is now its own window** (the 5th SlopAMP window: it moves, snaps and resizes like the others). The video keeps playing while you build a pack; the window's clock follows the player. **G** grabs the frame on screen, **I** / **O** set where the clip starts and ends, in any SlopAMP window, even with SLOP closed.
+- **Audio:** the song is downloaded once (with **Stop** / **Start**), then the clip, a **second clip** (audio-2.mp3) and the **whole song** (song.mp3) are cut on your PC, instantly and without asking YouTube again. A **waveform** shows the song: drag the clip's edges or the whole clip, drag on the wave for a new clip, or type the seconds before/after the moment (both stay in sync); a click jumps the player there. Videos over 20 minutes: only 3 minutes either side of the moment are downloaded.
+- **Look:** a bigger preview and **several frames** per pack. Each frame gets an optional **name** and a **kind** (person / look / prop / place), which go into its file name (`ref-01 Singer (person).png`), the way slop.cc's reference bank names references. **★ Lead** is always ref-01. **Burst ×5** grabs five candidates across the clip to pick from (Lead / Ref / skip). Optional **motion reference**: a silent 2–5 s `motion.mp4` around the lead frame, 1080p H.264.
+- **Prompt:** **Copy** and **Save prompt.txt** under the text (prompt.txt ends with a short rights note; the clipboard gets the prompt only). A **suggested scene line** from the video's title and description, also in source.txt (with the YouTube ID). YouTube **captions** for the clip are saved as `lyrics.txt` when the video has them.
+- **Pack:** **Open in Slop.cc** opens slop.cc's "new video" page and the folder and copies the prompt. **Sign up / sign in at slop.cc**, **Zip pack** (one .zip next to the folder, for sharing or backup) and **Discard pack**. Each pack has a `pack.json` describing what's in it.
+- **Library → SLOP:** a media manager for your packs, with grid and list views, search (titles, reference names, prompts, lyrics), filters (person / look / prop / place, song, motion, lyrics, zipped, not opened yet), a preview with every reference and the audio to play, rename, open in SLOP, open in slop.cc, zip, show in Explorer, delete and delete all (Recycle Bin), multi-select. Packs made by 1.5 show up too and are upgraded when opened. The Library window can be resized.
+- Windows: SLOP opens beside the player's windows; Reset layout and the layout presets keep it on screen. Layouts saved by earlier versions are kept as they were.
+
+## 1.5.1 — 2026-10-24
+
+- Slop: frame.png is now always the full-size frame from the video itself (up to 1080p). In 1.5.0 the video window's picture was saved first, and when the frame from the video didn't come it stayed, so a 1080p video could end up as a 640×360 frame with a warning.
+  - The video window's picture is only a preview now ("PREVIEW"); **Open in Slop.cc** waits for the frame from the video.
+  - The frame is fetched the same way as the audio clip (yt-dlp gets one second of the video from that moment, FFmpeg takes its first frame, no re-encoding), with the 1.5.0 way as a fallback.
+  - If it still can't be had, the box says so with the reason, and **Re-grab** tries again. Using the window picture instead is your choice, labelled as the window picture.
+  - "Low resolution" is only said when the video's own frame is under 512 px.
+- Skins: every skin file now names its warning colour (`--warn-ink`); six of them used Classic's without saying so.
+
+## 1.5.0 — 2026-10-24
+
+- **SLOP button** (next to FULLSCREEN, while a YouTube video plays) opens **Slop this moment**, one box that gets a moment ready for slop.cc. Playback pauses while it's open and continues where it was when you close it.
+  - **Audio clip:** an MP3 from 15 s before to 45 s after the moment (both numbers editable), made with the same downloader as DOWNLOAD. A pill shows its progress.
+  - **Look:** the frame you're watching, taken straight from the video (up to 1080p, without player buttons or overlays). It shows the video window's picture first and swaps in the sharp one a second later; if YouTube doesn't answer, the window picture is kept. **◀ 1 s**, **Re-grab** and **1 s ▶** pick the frame. Frames under 512 px get a warning, because slop.cc warns about them.
+  - **How do you want to slop this?** Roast, Remake, Music video or Custom, plus your own text.
+  - **Open in Slop.cc** says what leaves SlopAMP (this audio clip, this frame, your text), then opens the folder and slop.cc/chat in your browser and copies your text. You attach audio.mp3 and frame.png and paste the text on slop.cc yourself; SlopAMP uploads nothing.
+- Each moment is kept in `Downloads\SlopAMP\Slop\<date> <title> @<time>\` with `audio.mp3`, `frame.png`, `prompt.txt` and `source.txt` (the video link and time). Cancel removes a folder you never opened.
+- DOWNLOAD, SLOP and FULLSCREEN fit side by side in the 420 px player in every skin.
+- Skins: a new warning colour (`--warn-ink`) keeps warnings readable in dialogs, including in the Chrome and Pocket LCD skins.
+
 ## 1.4.4 — 2026-10-23
 
 - The update bar under the player now uses the same words as the About box button: **Install update…** when a new version is found, **Downloading… N%** while it downloads, **Verifying…** while the download is checked, and **Restart and install** when it's ready.
