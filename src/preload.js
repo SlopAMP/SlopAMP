@@ -99,6 +99,31 @@ contextBridge.exposeInMainWorld('phosphor', {
   skinImport: () => ipcRenderer.invoke('skin:import'),
   skinFolder: () => ipcRenderer.send('skin:folder'),
   skinReveal: (id) => ipcRenderer.send('skin:reveal', id),
+  // CLIP (2.3): clip.js
+  clipOpen: (f) => ipcRenderer.invoke('clip:open', f),
+  clipPeaks: (f) => ipcRenderer.invoke('clip:peaks', f),
+  clipFrames: (f, times, h) => ipcRenderer.invoke('clip:frames', f, times, h),
+  clipSave: (o) => ipcRenderer.invoke('clip:save', o),
+  clipCancel: (job) => ipcRenderer.send('clip:cancel', job),
+  clipList: () => ipcRenderer.invoke('clip:list'),
+  clipDelete: (paths) => ipcRenderer.invoke('clip:delete', paths),
+  clipRename: (p, name) => ipcRenderer.invoke('clip:rename', p, name),
+  clipPick: () => ipcRenderer.invoke('clip:pick'),
+  clipFolder: (kind) => ipcRenderer.send('clip:folder', kind),
+  onClip: (cb) => ipcRenderer.on('clip:event', (_e, ev) => cb(ev)),
+  clipShots: (o) => ipcRenderer.invoke('clip:shots', o),          // SHOTS (SLOP's LOOK, in CLIP)
+  clipShotAdd: (o) => ipcRenderer.invoke('clip:shot-add', o),
+  clipShotSet: (o) => ipcRenderer.invoke('clip:shot-set', o),
+  clipShotDel: (o) => ipcRenderer.invoke('clip:shot-del', o),
+  clipShotBurst: (o) => ipcRenderer.invoke('clip:shot-burst', o),
+  clipShotKeep: (o) => ipcRenderer.invoke('clip:shot-keep', o),
+  clipShotFolder: (o) => ipcRenderer.send('clip:shot-folder', o),
+  // the YOUTUBE window (2.3): ytweb.js
+  ytwRect: (r) => ipcRenderer.send('ytweb:rect', r),
+  ytwNav: (cmd, arg) => ipcRenderer.invoke('ytweb:nav', cmd, arg),
+  ytwPause: () => ipcRenderer.send('ytweb:pause'),
+  ytwClear: () => ipcRenderer.invoke('ytweb:clear'),
+  onYtw: (cb) => ipcRenderer.on('ytweb:event', (_e, ev) => cb(ev)),
   onFullscreen: (cb) => ipcRenderer.on('fullscreen', (_e, v) => cb(v)),
   onOpenFiles: (cb) => ipcRenderer.on('open-files', (_e, v) => cb(v))
 });

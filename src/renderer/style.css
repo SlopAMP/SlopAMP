@@ -234,6 +234,7 @@ input[type=range]:focus { outline: none; }
 #ctx { position: fixed; z-index: 70; background: var(--menu-bg); border: 1px solid var(--base-39); padding: 3px 0; min-width: 170px; box-shadow: 0 4px 16px var(--shadow); }
 #ctx div { padding: 4px 14px; color: var(--ink-menu); cursor: pointer; }
 #ctx div:hover { background: var(--pl-sel); color: var(--menu-hover-ink); }
+#ctx div.off { color: var(--ink-dim); cursor: default; } #ctx div.off:hover { background: none; color: var(--ink-dim); }
 #ctx hr { border: 0; border-top: 1px solid var(--vctl-line); margin: 3px 0; }
 dialog { background: var(--dialog-bg); color: var(--ink-menu); border: 1px solid var(--accent-36); padding: 14px; width: min(460px, 92vw); box-shadow: 0 0 30px var(--black-a70); }
 dialog::backdrop { background: var(--shadow); }
@@ -285,10 +286,12 @@ body.fs #subs { bottom: 9%; }
 .dlm-table th.r, .dlm-table td.r { text-align: right; }
 .dlm-table th.asc::after { content: ' \25B2'; color: var(--green); } .dlm-table th.desc::after { content: ' \25BC'; color: var(--green); }
 .dlm-table td { padding: 5px 6px; border-bottom: 1px solid var(--base-14b); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
-.dlm-table td.t { color: var(--green); }
+.dlm-table td.t { color: var(--menu-accent); }   /* 2.3: was the LCD green, too light on the Chrome skin's light Library */
 .dlm-table tbody tr { cursor: default; }
 .dlm-table tbody tr:hover td { background: var(--base-13c); }
-.dlm-table tr.sel td { background: var(--info-27) !important; } .dlm-table tr.sel td.t { color: var(--white); }
+/* 2.3: the selected row uses the menus' highlight in every skin (the old one was unreadable in Chrome) */
+.dlm-table tr.sel td { background: var(--pl-sel) !important; color: var(--menu-hover-ink); } .dlm-table tr.sel td.t, .dlm-table tr.sel td.from { color: var(--menu-hover-ink); }
+.dlm-table tr.sel .dlm-tag { color: var(--menu-hover-ink); border-color: currentColor; }
 .dlm-table tr.miss td { color: var(--base-47); } .dlm-table tr.miss td.t { color: var(--base-47); text-decoration: line-through; }
 .dlm-cb { width: 12px; height: 12px; border: 1px solid var(--btn-top); background: var(--edge); display: inline-block; vertical-align: middle; cursor: pointer; }
 .dlm-cb.on { background: var(--green); box-shadow: inset 0 0 0 2px var(--edge); border-color: var(--green); }
@@ -506,10 +509,10 @@ select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink);
 #skinMenu .sk-foot { margin: 7px 2px 0; color: var(--ink-dim); font-size: var(--fs-s2); }
 
 /* ---- SLOP window (1.6): a pack of a YouTube moment for slop.cc. Colours only from skin tokens. ---- */
-#slopPanel { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--dialog-bg); color: var(--ink-menu); font: var(--fs-base)/1.35 var(--font-ui); }
-#slopPanel .hidden { display: none !important; }
-#slopPanel .dim { color: var(--ink-dim); } #slopPanel .ok { color: var(--green); } #slopPanel .warn { color: var(--warn-ink); }
-#slopPanel kbd { font: bold var(--fs-s) var(--font-lcd); color: var(--menu-accent); margin-left: 4px; border: 1px solid var(--line-green); padding: 0 3px; }
+#slopPanel, #clipPanel, #ytwPanel { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--dialog-bg); color: var(--ink-menu); font: var(--fs-base)/1.35 var(--font-ui); }
+#slopPanel .hidden, #clipPanel .hidden, #ytwPanel .hidden { display: none !important; }
+#slopPanel .dim, #clipPanel .dim, #ytwPanel .dim { color: var(--ink-dim); } #slopPanel .ok { color: var(--green); } #slopPanel .warn { color: var(--warn-ink); }
+#slopPanel kbd, #clipPanel kbd { font: bold var(--fs-s) var(--font-lcd); color: var(--menu-accent); margin-left: 4px; border: 1px solid var(--line-green); padding: 0 3px; }
 .sb { background: var(--btn-green); border: 1px solid var(--line-green); color: var(--ink-green); padding: 3px 9px; font-size: var(--fs-m); white-space: nowrap; cursor: pointer; }
 .sb:hover:not(:disabled) { background: var(--btn-green-hover); }
 .sb.dim { background: var(--menu-bg); border-color: var(--vctl-line); color: var(--ink-menu); } .sb.dim:hover:not(:disabled) { background: var(--base-21); }
@@ -609,7 +612,7 @@ select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink);
 .slop-steps { margin: 2px 0 0; padding-left: 18px; color: var(--ink); line-height: 1.6; }
 .slop-steps b { color: var(--menu-accent); }
 .slop-bar { flex: none; display: flex; gap: 6px; padding: 7px 10px; align-items: center; border-top: 1px solid var(--base-18); flex-wrap: wrap; }
-.tog.slop.on { color: var(--menu-accent); }
+/* 2.3: EDIT (was SLOP) lights like the other toggles (.tog.on) */
 
 /* ---- Library → SLOP (1.6) and the resizable Library ---- */
 #dlmDlg { position: relative; }
@@ -749,3 +752,79 @@ select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink);
 #list li .d.ago { min-width: 30px; text-align: right; }   /* when watched: same colour as a length, so it reads in every skin */
 #popMenu .dm-note.wrap { word-break: normal; }
 #histCapIn { display: block; width: 120px; margin: 8px 0 4px; background: var(--field-bg); color: var(--field-ink); border: 1px solid var(--field-line); padding: 4px 6px; font: var(--fs-base) var(--font-ui); color-scheme: var(--color-scheme); }
+
+/* ---------------------------------------------------------------- CLIP (2.3) */
+.clip-kind { margin-left: 0; }
+.clip-kind button { min-width: 44px; }
+.clip-kind button:disabled { opacity: .4; cursor: default; }
+.clip-prev { position: relative; height: 200px; background: #000; border: 1px solid var(--base-20b); margin-bottom: 6px; display: flex; justify-content: center; }
+.clip-prev video { height: 100%; max-width: 100%; display: block; }
+.clip-prev-t { position: absolute; right: 6px; bottom: 6px; background: rgba(0,0,0,.75); color: #7cff7c; font: var(--fs-s) var(--font-lcd); padding: 1px 5px; pointer-events: none; }
+.clip-prev-msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; color: #ccc; font-size: var(--fs-s); }
+.clip-film { display: flex; gap: 2px; height: 32px; margin-bottom: 3px; }
+.clip-film img, .clip-film span { flex: 1 1 0; min-width: 0; height: 32px; object-fit: cover; border: 1px solid var(--base-20b); opacity: .5; background: var(--black); }
+.clip-film .in { opacity: 1; border-color: var(--line-green); }
+.clip-wave { height: 92px; }
+.clip-wave.short { height: 64px; }
+.clip-tm input { width: 64px; }
+.clip-hint { font-size: var(--fs-s); margin-top: 5px; }
+.clip-name-row input { flex: 1; min-width: 160px; background: var(--field-bg); color: var(--ink); border: 1px solid var(--base-20b); padding: 4px 7px; font: var(--fs-base) var(--font-ui); }
+.clip-opts { align-items: flex-start; gap: 6px 26px; }
+.clip-col { display: flex; flex-direction: column; gap: 4px; }
+.clip-col label { display: flex; align-items: center; gap: 6px; }
+.clip-col input[type=radio]:disabled + span, .clip-col input[type=radio]:disabled + span b, .clip-col input[type=radio]:disabled + span .dim { color: var(--ink-dim); font-weight: normal; }
+.slop-file.clip-file { cursor: pointer; }
+#clipSave.busy { min-width: 150px; }
+body.win-clip.dropping .clip-wave, body.win-clip.dropping .slop-empty { outline: 2px dashed var(--line-green); outline-offset: -4px; }
+
+/* ---------------------------------------------------------------- YOUTUBE window (2.3) */
+.ytw-bar { flex: none; display: flex; gap: 5px; align-items: center; padding: 5px 7px; border-bottom: 1px solid var(--base-18); background: var(--menu-bg); }
+.ytw-bar > * { flex: none; }
+.ytw-bar .sb { min-width: 26px; }
+.ytw-addr { flex: 1 1 auto; min-width: 200px; display: flex; align-items: center; gap: 6px; border: 1px solid var(--line-green); background: var(--field-bg); padding: 2px 6px; }
+.ytw-grip { flex: none; cursor: grab; color: var(--menu-accent); border: 1px solid var(--line-green); padding: 0 6px; white-space: nowrap; font-size: var(--fs-s); user-select: none; }
+.ytw-grip.off { opacity: .45; cursor: default; }
+.ytw-addr input { flex: 1; min-width: 0; background: none; border: 0; color: var(--ink); font: var(--fs-base) var(--font-ui); outline: none; }
+.ytw-view { flex: 1; min-height: 0; position: relative; background: #0f0f0f; }
+.ytw-wait { position: absolute; inset: 0; display: grid; place-items: center; color: #aaa; font-size: var(--fs-m); }
+.ytw-stat { flex: none; display: flex; gap: 10px; padding: 3px 8px; border-top: 1px solid var(--base-18); background: var(--menu-bg); color: var(--ink-dim); font-size: var(--fs-s); white-space: nowrap; overflow: hidden; }
+.ytw-stat #ytwStatL { overflow: hidden; text-overflow: ellipsis; }
+.ytw-stat b { color: var(--ink-menu); font-weight: normal; }
+#pYt.on { box-shadow: inset 0 -2px 0 var(--green); }   /* lit while the YOUTUBE window is open (the text keeps its colour) */
+#plbar2 .pl2-info { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------------------------------------------------------------- Library -> CLIPS (2.3) */
+.dlm-tag.mp3clip { color: var(--amber); border-color: var(--warn-36); } .dlm-tag.mp4clip { color: var(--info-75b); border-color: var(--info-42); }   /* like MP3 / VIDEO */
+.clsub { display: flex; gap: 4px; padding: 0 10px 6px; }
+.clsub button { background: none; border: 0; border-bottom: 1px solid transparent; color: var(--ink-muted); font-size: var(--fs-s); padding: 1px 4px; cursor: pointer; }
+.clsub button.on { color: var(--ink-menu); border-bottom-color: var(--line-green); }
+.dlm-table td.from { color: var(--ink-dim); }
+#dlmDlg:not(.clipmode) .clsub, #dlmDlg:not(.clipmode) .cl-bar, #dlmDlg:not(.clipmode) .cl-note { display: none; }
+#dlmDlg.clipmode .dlm-bar:not(.cl-bar), #dlmDlg.clipmode .dlm-note:not(.cl-note) { display: none; }
+#dlmDlg.clipmode .dlm-table th:nth-child(4) { width: 62px; } #dlmDlg.clipmode .dlm-table th:nth-child(5) { width: 30%; } #dlmDlg.clipmode .dlm-table th:nth-child(6) { width: 66px; } #dlmDlg.clipmode .dlm-table th:nth-child(7) { width: 62px; } #dlmDlg.clipmode .dlm-table th:nth-child(8) { width: 26px; }
+/* 2.3: Library type tags keep their coloured border; the text uses the menus' ink so it reads in every skin
+   (amber / light blue were too light on the Chrome and Pocket skins' light Library) */
+.dlm-tag.video, .dlm-tag.audio, .dlm-tag.playlist, .dlm-tag.mp3clip, .dlm-tag.mp4clip { color: var(--ink-menu); }
+
+/* CLIP → SHOTS (2.3: SLOP's LOOK, moved into CLIP; collapsed it's one line) */
+.clip-shots .clip-opt { color: var(--ink-dim); font-weight: normal; letter-spacing: 0; font-size: var(--fs-s); }
+.clip-shots .slop-h { margin-bottom: 0; }
+.clip-shot-body { margin-top: 6px; }
+.clip-shots .slop-strip { margin-top: 0; }
+.clip-shot-ed { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.clip-shot-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clip-shot-meta b { color: var(--ink); font-weight: 600; }
+#clipShotName { width: 150px; background: var(--field-bg); color: var(--ink); border: 1px solid var(--base-20b); padding: 3px 7px; font: var(--fs-base) var(--font-ui); }
+#clipShotName::placeholder { color: var(--hint-ink); }
+.clip-shot-where { margin-top: 8px; font-size: var(--fs-s); }
+.clip-shot-where span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clip-burst-th { position: relative; width: 116px; flex: none; cursor: pointer; }
+.clip-burst-th img { width: 116px; height: 65px; object-fit: cover; display: block; border: 1px solid var(--base-20b); opacity: .55; }
+.clip-burst-th.on img { opacity: 1; outline: 2px solid var(--green); outline-offset: 1px; }
+.clip-burst-th .slop-th-t { top: 49px; }
+.clip-burst-th .chk { position: absolute; left: 3px; top: 3px; background: var(--black); color: var(--green); font: bold 10px var(--font-lcd); padding: 0 4px; }
+.clip-burst-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 3px; }
+/* 2.3: SLOP is hidden (the code and the packs on disk stay): the Library's SLOP button */
+.dlm-seg button[data-f="slop"] { display: none; }
+.dlm-seg button[data-f="skins"] { margin-left: 15px; position: relative; }
+.dlm-seg button[data-f="skins"]::before { content: ''; position: absolute; left: -9px; top: 2px; bottom: 2px; width: 1px; background: var(--vctl-line); pointer-events: none; }

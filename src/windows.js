@@ -9,23 +9,27 @@
 //
 // Saved layout (state.layout):
 //   { version: 1, skin: 'default', preset: 'classic', snap: true, onTop: false,
-//     windows: { main: {x,y,w,h}, eq: {...}, video: {...}, playlist: {...}, slop: {...}, skined: {...} },
+//     windows: { main: {x,y,w,h}, eq: {...}, video: {...}, playlist: {...}, slop: {...}, skined: {...}, clip: {...}, ytweb: {...} },
+//     ytFree: true,                      // the user moved/resized the YOUTUBE window: it opens where they left it (2.3)
 //     heights: { main: 171, ... },       // on-screen heights (a rolled-up window is just its title bar)
 //     panels: { skins: {x,y} } }          // where the skin picker was dragged to
 // `skin` is the chosen skin's id (src/renderer/skins.js); "Reset layout" and the lightning bolt never change it.
 
 const { BrowserWindow, screen } = require('electron');
 
-const PANELS = ['main', 'eq', 'video', 'playlist', 'slop', 'skined'];
+const PANELS = ['main', 'eq', 'video', 'playlist', 'slop', 'skined', 'clip', 'ytweb'];
 const STACK = ['main', 'eq', 'video', 'playlist'];   // the column the layout presets arrange
-const FLOAT = ['slop', 'skined'];                    // SLOP (1.6) and the Skin Editor (1.7) float beside it
+// SLOP (1.6), the Skin Editor (1.7), CLIP and YOUTUBE (2.3) float beside it
+const FLOAT = ['slop', 'skined', 'clip', 'ytweb'];
 const HOSTS = ['popup', 'dialog'];
 const FIT = new Set(['main', 'eq']);            // height follows the content
-const MIN = { main: [420, 60], eq: [420, 40], video: [320, 180], playlist: [300, 150], slop: [600, 440], skined: [460, 420] };
-const DEF = { w: 420, main: 190, eq: 160, video: 240, playlist: 300, slop: 700, slopW: 820, skined: 680, skinedW: 540 };
+const MIN = { main: [420, 60], eq: [420, 40], video: [320, 180], playlist: [300, 150], slop: [600, 440], skined: [460, 420], clip: [600, 420], ytweb: [800, 400] };
+const DEF = { w: 420, main: 190, eq: 160, video: 240, playlist: 300, slop: 700, slopW: 820, skined: 680, skinedW: 540, clip: 640, clipW: 780, ytweb: 800, ytwebW: 1100 };
+const YT_MIN_W = 800;     // the YOUTUBE window is never narrower: on a small screen it overlaps the stack instead
 const SNAP = 10;          // px: how close an edge must be to snap
 const TOUCH = 1;          // px: edges this close count as docked
-const PRESETS = ['classic', 'side', 'bigvis'];
+// classic-noeq (2.3): Classic (stacked) with the EQ window hidden (the renderer hides it first)
+const PRESETS = ['classic', 'classic-noeq', 'side', 'bigvis'];
 
 const r4 = (b) => ({ x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h) });
 const overlap = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0);
@@ -36,7 +40,8 @@ class WindowManager {
     this.version = version || '';
     this.saveLayout = saveLayout;
     this.wins = new Map();          // id -> BrowserWindow (panels and hosts)
-    this.visible = { main: true, eq: false, video: false, playlist: false, slop: false, skined: false };
+    this.visible = { main: true, eq: false, video: false, playlist: false, slop: false, skined: false, clip: false, ytweb: false };
+    this.onPanel = null;            // (id, shown) for windows with their own content (the YOUTUBE window's web page)
     this.shade = {};
     this.fitH = {};
     this.applied = {};              // id -> last bounds we set (to tell our moves from the user's)
@@ -55,7 +60,7 @@ class WindowManager {
     if (l && typeof l === 'object') {
       if (typeof l.skin === 'string' && /^(user:)?[a-z0-9-]{1,60}$/.test(l.skin)) out.skin = l.skin;   // user:<slug> = a user skin (1.7)
       if (PRESETS.includes(l.preset) || l.preset === 'custom') out.preset = l.preset;
-      out.snap = l.snap !== false; out.onTop = !!l.onTop;
+      out.snap = l.snap !== false; out.onTop = !!l.onTop; if (l.ytFree) out.ytFree = true;
       for (const id of PANELS) if (l.windows && ok(l.windows[id])) out.windows[id] = r4(l.windows[id]);
       // heights the windows really had (rolled-up windows are shorter than windows[id].h)
       if (l.heights && typeof l.heights === 'object') for (const id of PANELS) if (Number.isFinite(l.heights[id])) out.heights[id] = Math.round(l.heights[id]);
@@ -101,6 +106,38 @@ class WindowManager {
       else { x = Math.min(x + 40, wa.x + wa.width - w); y = Math.min(y + 40, wa.y + wa.height - h); }
     }
     return { x: Math.round(x), y: Math.round(y), w, h };
+  }
+  // ---------- the YOUTUBE window (2.3) ----------
+  // Opening it moves SlopAMP's windows (everything docked to the player) to the left edge of their screen and
+  // the YOUTUBE window fills the rest, full height. It's never narrower than YT_MIN_W: on a small screen it
+  // overlaps the stack instead of squeezing it. Once the user moves or resizes it (layout.ytFree), it opens
+  // where they left it and nothing else moves. Closing it moves the stack back across (docking only moves it
+  // sideways), unless the user dragged the stack meanwhile.
+  dockYt() {
+    const W = this.layout.windows;
+    if (this.layout.ytFree) {
+      if (!this.onScreen(this.rect('ytweb'))) Object.assign(W.ytweb, this.floatSpot(W, 'ytweb'));
+      this.ytPrev = null;
+      return;
+    }
+    const ids = this.group('main').filter(id => id !== 'ytweb' && !FLOAT.includes(id));
+    const rs = ids.map(id => this.rect(id));
+    const m = this.rect('main');
+    const wa = screen.getDisplayMatching({ x: m.x, y: m.y, width: m.w, height: Math.max(20, m.h) }).workArea;
+    const x0 = Math.min(...rs.map(r => r.x)), x1 = Math.max(...rs.map(r => r.x + r.w));
+    const dx = wa.x - x0;
+    this.ytPrev = { dx, ids, moved: false };
+    for (const id of ids) { W[id].x += dx; this.apply(id); }
+    const right = x1 + dx, room = wa.x + wa.width - right;
+    const w = Math.min(wa.width, Math.max(YT_MIN_W, room));
+    W.ytweb = { x: room >= YT_MIN_W ? right : wa.x + wa.width - w, y: wa.y, w, h: wa.height };
+  }
+  undockYt() {
+    const p = this.ytPrev; this.ytPrev = null;
+    if (!p || p.moved || !p.dx) return;     // the user moved the stack while YOUTUBE was open: leave it there
+    const W = this.layout.windows;
+    for (const id of p.ids) { if (!W[id]) continue; W[id].x -= p.dx; this.apply(id); }
+    this.persist();
   }
   b(id) { return this.layout.windows[id]; }
   // Height the window really has: content height for fit windows and shaded windows.
@@ -186,6 +223,8 @@ class WindowManager {
         if (!fixedH) b.h = nb.height;
         this.applied[id] = { x: nb.x, y: nb.y, w: nb.width, h: fixedH ? old.h : nb.height };
         if (chain.length) this.shift(chain, 0, nb.height - old.h);
+        if (id === 'ytweb') this.layout.ytFree = true;
+        else if (this.ytPrev && this.ytPrev.ids.includes(id)) this.ytPrev.moved = true;
         this.layout.preset = 'custom';
         this.persist();
       } finally { busy = false; }
@@ -275,7 +314,8 @@ class WindowManager {
       if (!win) { this.visible[id] = vis; continue; }
       if (vis && !wasShown) {
         // SLOP opens where it was, unless that's off screen now (monitor gone, layout moved): then beside the player
-        if (FLOAT.includes(id) && !this.onScreen(this.rect(id))) Object.assign(this.b(id), this.floatSpot(this.layout.windows, id));
+        if (id === 'ytweb' && this.started) this.dockYt();
+        else if (FLOAT.includes(id) && !this.onScreen(this.rect(id))) Object.assign(this.b(id), this.floatSpot(this.layout.windows, id));
         if (reflow && this.started && !FLOAT.includes(id)) {
           // windows that moved up into this window's slot move back down
           const top = this.b(id).y, a = this.rect(id), seen = new Set([id]), chain = [];
@@ -289,11 +329,14 @@ class WindowManager {
         this.visible[id] = true;
         this.apply(id);
         if (this.started) { win.showInactive(); this.apply(id); }   // again once visible (height check)
+        if (this.onPanel) this.onPanel(id, true);
       } else if (!vis && wasShown) {
         this.visible[id] = false;
         if (win.isFullScreen()) win.setFullScreen(false);
+        if (this.onPanel) this.onPanel(id, false);
         win.hide();
-        if (reflow) this.shift(oldChain, 0, -old.h);
+        if (id === 'ytweb') this.undockYt();
+        else if (reflow) this.shift(oldChain, 0, -old.h);
       } else if (vis) {
         const nh = this.hOf(id);
         if (nh !== old.h && this.started) this.shift(oldChain, 0, nh - old.h);
@@ -405,9 +448,13 @@ class WindowManager {
   dragEnd() {
     clearInterval(this.dragTimer); clearTimeout(this.dragKill);
     if (!this.drag) return;
+    this.drag0 = this.drag.id;
+    const dragMode = this.drag.mode;
     const moved = this.drag.ids.some(o => { const s = this.drag.start[o], r = this.rect(o); return s.x !== r.x || s.y !== r.y || s.w !== r.w || s.h !== r.h; });
     this.drag = null;
     this.mark([]);
+    if (moved && this.drag0 === 'ytweb') this.layout.ytFree = true;
+    else if (moved && this.ytPrev && dragMode === 'move' && this.ytPrev.ids.includes(this.drag0)) this.ytPrev.moved = true;   // the stack was dragged
     if (moved) { this.layout.preset = 'custom'; this.persist(); this.toRenderer('wm:layout', this.info()); }
   }
   // Snap targets: the other visible windows' edges and the screens' work-area edges.
@@ -496,7 +543,7 @@ class WindowManager {
     };
     const stack = (ids, x, y, width) => { let cy = y; for (const id of ids) { W[id].x = x; W[id].y = cy; W[id].w = width; cy += H(id); } return cy - y; };
     let x0 = mainR.x, y0 = mainR.y;
-    if (name === 'classic' || name === 'reset') {
+    if (name === 'classic' || name === 'classic-noeq' || name === 'reset') {
       const col = ['main', 'eq', 'video', 'playlist'];
       fitColumn(col);
       if (name === 'reset') {
@@ -504,7 +551,7 @@ class WindowManager {
         x0 = Math.round(wa.x + (wa.width - w) / 2); y0 = Math.round(wa.y + Math.max(0, (wa.height - total) / 2));
       }
       stack(col, x0, y0, w);
-      if (name === 'reset') for (const id of FLOAT) Object.assign(W[id], this.floatSpot(W, id));
+      if (name === 'reset') { for (const id of FLOAT) Object.assign(W[id], this.floatSpot(W, id)); delete this.layout.ytFree; this.ytPrev = null; }
     } else if (name === 'side') {
       const col = ['main', 'eq', 'video'];
       fitColumn(col);

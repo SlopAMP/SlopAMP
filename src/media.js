@@ -318,6 +318,7 @@ function summarize(j) {
     duration: parseFloat(fmt.duration) || (v && parseFloat(v.duration)) || (a && parseFloat(a.duration)) || 0,
     bitrate: parseInt(fmt.bit_rate, 10) || 0,
     title: title ? (artist ? `${artist} - ${title}` : title) : '',
+    artist,
     hasVideo: !!v,
     hasCover: !!cover,
     subs,
@@ -381,4 +382,4 @@ function isMediaFile(p) {
   return MEDIA_EXT.has(path.extname(p).slice(1).toLowerCase());
 }
 
-module.exports = { MediaServer, isMediaFile, MEDIA_EXT, SUB_EXT };
+module.exports = { MediaServer, isMediaFile, MEDIA_EXT, SUB_EXT, encoderArgs };

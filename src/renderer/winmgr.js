@@ -16,7 +16,7 @@
 'use strict';
 (() => {
   const P = window.phosphor;
-  const PANELS = ['main', 'eq', 'video', 'playlist', 'slop', 'skined'];
+  const PANELS = ['main', 'eq', 'video', 'playlist', 'slop', 'skined', 'clip', 'ytweb'];
 
   // ---------------------------------------------------------------- frames
   // Each window's frame: title, extra title slot, buttons (ids are what app.js wires up) and content.
@@ -34,7 +34,13 @@
       buttons: [['slopMinBtn', '&#x2013;', 'Minimize SLOP'], ['slopCloseBtn', '&#x2715;', 'Close SLOP (the pack is kept)']] },
     // Skin Editor (1.7): skins.js "Skin Editor"
     skined: { title: 'SKIN EDITOR', tbId: 'skedTitle', sumId: 'skedSum', grip: true, content: ['#skinEdPanel'],
-      buttons: [['skedMinBtn', '&#x2013;', 'Minimize the skin editor'], ['skedCloseBtn', '&#x2715;', 'Close the skin editor']] }
+      buttons: [['skedMinBtn', '&#x2013;', 'Minimize the skin editor'], ['skedCloseBtn', '&#x2715;', 'Close the skin editor']] },
+    // CLIP (2.3): cut a piece out of a song or video as a new MP3 / MP4 (app.js "CLIP")
+    clip: { title: 'CLIP', tbId: 'clipTitle', sumId: 'clipSum', grip: true, content: ['#clipPanel'],
+      buttons: [['clipMinBtn', '&#x2013;', 'Minimize CLIP'], ['clipCloseBtn', '&#x2715;', 'Close CLIP']] },
+    // YOUTUBE (2.3): youtube.com in a SlopAMP window (app.js "YOUTUBE window", main.js ytweb.js)
+    ytweb: { title: 'YOUTUBE', tbId: 'ytwTitle', sumId: 'ytwSum', grip: true, content: ['#ytwPanel'],
+      buttons: [['ytwMinBtn', '&#x2013;', 'Minimize YOUTUBE'], ['ytwCloseBtn', '&#x2715;', 'Close YOUTUBE']] }
   };
   function buildFrame(id) {
     const f = FRAMES[id];
@@ -66,7 +72,7 @@
     wins: { main: window },        // id -> window object
     docs: [document],             // every document we own (panels + helper windows)
     activeDoc: document,          // where the user last clicked or typed
-    state: { main: { visible: true }, eq: {}, video: {}, playlist: {}, slop: {}, skined: {} },
+    state: { main: { visible: true }, eq: {}, video: {}, playlist: {}, slop: {}, skined: {}, clip: {}, ytweb: {} },
     info: { preset: 'classic', snap: true, onTop: false, skin: 'default' },
     onReset: null, onClose: null  // set by app.js
   };
@@ -193,7 +199,7 @@
   });
 
   // ---------------------------------------------------------------- layout menu
-  const PRESET_NAMES = [['classic', 'Classic (stacked)'], ['side', 'Playlist beside player'], ['bigvis', 'Big visualizer']];
+  const PRESET_NAMES = [['classic', 'Classic (stacked)'], ['classic-noeq', 'Classic (stacked, No EQ)'], ['side', 'Playlist beside player'], ['bigvis', 'Big visualizer']];
   async function openLayoutMenu(pos) {
     WM.info = await P.wmInfo();
     const m = WM.$('#wmMenu'); m.innerHTML = '';
@@ -215,11 +221,15 @@
     // YouTube History (2.2): ticked while its tab is there; brings the tab back after it was turned off and cleared
     if (WM.history) { m.appendChild(document.createElement('hr')); add(`dm-item${WM.history.visible() ? ' cur' : ''}`, 'YouTube History', () => WM.history.open()); }
     if (WM.xhistory) add(`dm-item${WM.xhistory.visible() ? ' cur' : ''}`, 'X History', () => WM.xhistory.open());   // X History (2.2)
+    if (WM.clip) { m.appendChild(document.createElement('hr')); add(`dm-item${WM.isShown('clip') ? ' cur' : ''}`, 'CLIP', () => WM.clip.toggle()); }   // CLIP (2.3)
+    if (WM.ytweb) add(`dm-item${WM.isShown('ytweb') ? ' cur' : ''}`, 'YOUTUBE', () => WM.ytweb.toggle());   // YOUTUBE window (2.3)
+    if (WM.slop) add(`dm-item${WM.isShown('slop') ? ' cur' : ''}`, 'SLOP', () => WM.slop.toggle());   // 2.3: SLOP is hidden (app.js doesn't set WM.slop), so this doesn't show
     m.classList.remove('hidden');
     WM.popup(m, pos);
   }
   WM.openLayoutMenu = openLayoutMenu;
-  WM.preset = async (name) => { WM.info = await P.wmPreset(name); };
+  // app.js may show/hide windows first (Classic (stacked, No EQ) hides the EQ window, Classic shows it again)
+  WM.preset = async (name) => { if (WM.beforePreset) WM.beforePreset(name); WM.info = await P.wmPreset(name); };
   // Reset layout: every window back, unshaded, stacked on the main screen. Rescues off-screen windows.
   WM.reset = async () => {
     if (WM.onReset) await WM.onReset();
@@ -328,7 +338,7 @@
     for (const id of PANELS) frames[id] = buildFrame(id);
     document.body.prepend(frames.main);
     document.body.classList.add('win-main', 'fit');
-    const ids = ['eq', 'video', 'playlist', 'slop', 'skined', 'popup', 'dialog'];
+    const ids = ['eq', 'video', 'playlist', 'slop', 'skined', 'clip', 'ytweb', 'popup', 'dialog'];
     const opened = await Promise.all(ids.map(openWindow));
     ids.forEach((id, i) => {
       const w = opened[i];

@@ -4,7 +4,9 @@ const path = require('path');
 const fs = require('fs');
 const zlib = require('zlib');
 const { execFile } = require('child_process');
-const { MediaServer, isMediaFile } = require('./media');
+const { MediaServer, isMediaFile, encoderArgs } = require('./media');
+const { Clipper } = require('./clip');
+const { YtWeb } = require('./ytweb');
 const { Downloader } = require('./downloader');
 const { Updater } = require('./updater');
 const { WindowManager, PANELS, HOSTS } = require('./windows');
@@ -40,8 +42,10 @@ let server = null;
 let downloader = null;
 let updater = null;
 let wm = null;        // movable windows (see windows.js)
+let clipper = null;   // CLIP (2.3, clip.js)
+let ytweb = null;     // the YOUTUBE window's page (2.3, ytweb.js)
 // Keys owned by the main process; the renderer's state saves must not wipe them.
-const MAIN_KEYS = ['window', 'layout', 'playlistDir', 'dlVideoDir', 'dlAudioDir', 'ytdlpUpdatedAt', 'downloads', 'update'];
+const MAIN_KEYS = ['window', 'layout', 'playlistDir', 'dlVideoDir', 'dlAudioDir', 'ytdlpUpdatedAt', 'downloads', 'update', 'clips'];
 const ytdlpDir = [path.join(process.resourcesPath || '', 'ytdlp'), path.join(__dirname, '..', 'vendor', 'ytdlp', process.platform)]
   .find(d => fs.existsSync(path.join(d, process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'))) || path.join(process.resourcesPath || '', 'ytdlp');
 let closing = false;
@@ -137,7 +141,10 @@ function createWindow() {
   const base = { backgroundColor: '#1b1d24', title: APP_NAME, icon: path.join(__dirname, 'renderer', 'icon.png'), webPreferences: webPrefs() };
   win = new BrowserWindow(wm.mainOptions({ ...base, frame: false, show: false }));
   wm.attach('main', win);
-  if (isDev) global.__slopamp = { wm };   // for the test scripts
+  // The YOUTUBE window's page appears / goes with its panel (2.3)
+  ytweb = new YtWeb({ wm, log, send: (ch, v) => { if (win && !win.isDestroyed()) win.webContents.send(ch, v); } });
+  wm.onPanel = (id, shown) => { if (id === 'ytweb') { if (shown) ytweb.show(); else ytweb.hide(); } };
+  if (isDev) global.__slopamp = { wm, ytweb };   // for the test scripts
   Menu.setApplicationMenu(null);
 
   const panelUrl = `${server.base}/app/panel.html`;
@@ -888,7 +895,8 @@ function importSkin(src) {
 function downloadDirs() {
   const s = currentState || loadState();
   const base = path.join(app.getPath('downloads'), 'SlopAMP');
-  return { video: s.dlVideoDir || path.join(base, 'Video'), audio: s.dlAudioDir || path.join(base, 'Audio'), playlists: path.join(base, 'Playlists'), slop: path.join(base, 'Slop') };
+  return { video: s.dlVideoDir || path.join(base, 'Video'), audio: s.dlAudioDir || path.join(base, 'Audio'), playlists: path.join(base, 'Playlists'), slop: path.join(base, 'Slop'),
+    mp3clips: path.join(base, 'mp3clips'), mp4clips: path.join(base, 'mp4clips'), shots: path.join(base, 'Shots') };   // CLIP (2.3)
 }
 function playlistsDir() {
   const d = downloadDirs().playlists;
@@ -1228,6 +1236,31 @@ function registerIpc() {
   });
   ipcMain.on('slop:forget', (_e, id) => { const p = packs.get(String(id)); if (p && !['queued', 'downloading'].includes(p.rt.song.status)) packs.delete(p.id); });
   // ---- user skins (see "user skins (1.7)" above)
+  // ---- CLIP (2.3): clip.js
+  ipcMain.handle('clip:open', (_e, f) => clipper.open(f));
+  ipcMain.handle('clip:peaks', (_e, f) => (typeof f === 'string' && fs.existsSync(f) ? clipper.peaks(f) : null));
+  ipcMain.handle('clip:frames', (_e, f, times, h) => (typeof f === 'string' && fs.existsSync(f) ? clipper.frames(f, times, h) : []));
+  ipcMain.handle('clip:save', (_e, o) => clipper.save(o).catch((e) => { log('clip save failed', e); return { ok: false, error: 'Couldn’t save the clip.' }; }));
+  ipcMain.on('clip:cancel', (_e, job) => clipper.cancel(job));
+  ipcMain.handle('clip:list', () => clipper.list());
+  ipcMain.handle('clip:delete', (_e, paths) => clipper.remove(paths));
+  ipcMain.handle('clip:rename', (_e, p, name) => { try { return clipper.rename(p, name); } catch (e) { return { error: String(e.message || e) }; } });
+  ipcMain.handle('clip:pick', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Pick a song or video to clip', properties: ['openFile'],
+      filters: [{ name: 'Songs and videos', extensions: ['mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus', 'mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'wmv', 'flv', 'ts', 'mpg', 'mpeg'] }, { name: 'All files', extensions: ['*'] }] });
+    return r.canceled ? null : r.filePaths[0];
+  });
+  // shots (SLOP's LOOK, in CLIP since 2.3): o = { file, title, … }
+  for (const [ch, fn] of [['clip:shots', 'shots'], ['clip:shot-add', 'shotAdd'], ['clip:shot-set', 'shotSet'], ['clip:shot-del', 'shotDel'], ['clip:shot-burst', 'shotBurst'], ['clip:shot-keep', 'shotKeep']]) {
+    ipcMain.handle(ch, (_e, o) => (o && typeof o === 'object' && typeof o.file === 'string' ? clipper[fn](o).catch((e) => { log(`${ch} failed`, e); return { error: 'That didn’t work.' }; }) : { error: 'No file.' }));
+  }
+  ipcMain.on('clip:shot-folder', (_e, o) => { const d = clipper.shotDir(o || {}); try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} shell.openPath(d); });
+  ipcMain.on('clip:folder', (_e, kind) => { const d = downloadDirs()[kind === 'mp4' ? 'mp4clips' : 'mp3clips']; try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} shell.openPath(d); });
+  // ---- the YOUTUBE window (2.3): ytweb.js
+  ipcMain.on('ytweb:rect', (_e, r) => ytweb && ytweb.setRect(r));
+  ipcMain.handle('ytweb:nav', (_e, cmd, arg) => (ytweb ? ytweb.nav(String(cmd), arg) : null));
+  ipcMain.on('ytweb:pause', () => ytweb && ytweb.pause());
+  ipcMain.handle('ytweb:clear', () => (ytweb ? ytweb.clearData() : false));
   ipcMain.handle('skin:list', () => listSkins());
   ipcMain.handle('skin:css', (_e, id) => {          // the CSS of a built-in or user skin (user skins cleaned)
     const f = skinFile(id); if (!f) return null;
@@ -1482,6 +1515,15 @@ app.whenReady().then(async () => {
   migrateOldState();
   migrateSkinsFolder();
   server = new MediaServer({ uiDir: path.join(__dirname, 'renderer'), ffmpegDir, log });
+  clipper = new Clipper({
+    ffmpeg: ffmpegExe, server, encoderArgs, log, fileSafe,
+    dirs: () => { const d = downloadDirs(); return { mp3: d.mp3clips, mp4: d.mp4clips, shots: d.shots }; },
+    urlOf: (f) => fileUrl(f),
+    getIndex: () => { const c = (currentState || loadState()).clips; return c && typeof c === 'object' ? c : {}; },
+    setIndex: (idx) => setMainState({ clips: idx }),
+    trash: (p) => shell.trashItem(p),
+    send: (ev) => { if (win && !win.isDestroyed()) win.webContents.send('clip:event', ev); }
+  });
   await server.start();
   log(`${APP_NAME} ${app.getVersion()} started on ${server.base}; ffmpeg=${server.hasFfmpeg()}`);
   server.detectEncoder().catch(e => log('encoder detect failed', e));

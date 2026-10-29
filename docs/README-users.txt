@@ -25,8 +25,15 @@ WINDOWS
     the same); "x" closes it. EQ / VIS / VID / PL on the player bring them
     back. Windows docked underneath move up and down to stay attached.
   * Right-click any title bar (or the button next to "?" on the player)
-    for the Layout menu: Classic (stacked), Playlist beside player, Big
-    visualizer, snapping on/off, Keep windows on top and Reset layout.
+    for the Layout menu: Classic (stacked), Classic (stacked, No EQ),
+    Playlist beside player, Big visualizer, snapping on/off, Keep windows
+    on top and Reset layout.
+  * Classic (stacked, No EQ) is the classic stack without the equalizer
+    window: player, video and playlist with no gap. The EQ keeps working
+    (on/off, bands and preset stay as they are), it's just not on screen,
+    and SlopAMP remembers it next time. EQ (or E) puts the equalizer back
+    under the player and the layout becomes Classic (stacked) again;
+    picking Classic (stacked) also shows it.
   * Reset layout (Ctrl+Alt+R) puts every window back, stacked in the middle
     of your main screen. Use it if a window ever ends up off screen
     (SlopAMP also does this by itself when a monitor is unplugged).
@@ -70,7 +77,7 @@ KEYS
   F or F11    fullscreen video (Esc exits) - or the FULLSCREEN button
   M           mini player              E             equalizer
   Ctrl+Alt+R  reset the window layout
-  G / I / O   SLOP: grab a frame / clip starts here / clip ends here
+  G / I / O   in CLIP (while it's the active window): shot / In / Out
   S / R       shuffle / repeat (off, all, one)
   [ / ]       slower / faster (1x, 1.5x, 2x, 3x)
   Media keys  Play/Pause, Next, Previous and Stop keys on your keyboard work
@@ -169,6 +176,73 @@ X HISTORY
   * Turn recording off and clear it, and the tab hides. Layout -> X History
     brings it back.
 
+CLIP (CUT A PIECE OUT OF A SONG OR VIDEO)
+  * EDIT on the player opens CLIP on the selected song or video (or the
+    one playing): a video file opens as MP4, a song as MP3 (switch at the
+    top of CLIP). Right-click EDIT for Clip MP3 / Clip video and Library ->
+    CLIPS. (EDIT was the SLOP button; see SLOP below.)
+  * Right-click a song or video in the playlist (also in YT History and
+    X History) or in the Library -> Clip MP3... or Clip video... A YouTube
+    or X item that isn't downloaded yet is downloaded first (MP3 or best
+    video); CLIP opens when it's done. Layout -> CLIP opens it empty: Clip
+    what's playing, Pick a file..., or drop a file on the window.
+  * Set where the clip starts and ends: drag the green edges on the wave
+    (or the clip itself), drag on the wave for a new range, type a time
+    (1:26.4) or use - / + (0.1 s; Shift-click 1 s). Set In / Set Out use
+    where the preview is. Zoom (- / + / Fit, or the mouse wheel on the
+    wave) for long files. Videos show a preview and a strip of frames.
+  * Play clip, Loop, and short previews around each edge (|< In, Out >|).
+    The preview plays inside CLIP; SlopAMP's player pauses (no double
+    audio). While the CLIP window is the active one: Space plays the clip,
+    I / O set In / Out, Left / Right move the edge you touched last by
+    0.1 s (Shift: 1 s), G takes a shot. Other windows don't use them.
+  * Save as MP3: same quality as the file (an MP3, no re-encode, fast) or
+    MP3 320 kbps (re-encoded; needed for Fade in 0.5 s / Fade out 2 s).
+  * Save as MP4 (H.264 + AAC, same size as the video): Exact cut
+    re-encodes so it starts on the frame you picked; Fast cut copies the
+    video without re-encoding (H.264 .mp4 videos only) and may start up
+    to a few seconds early. "Also save the sound as MP3" makes both.
+  * MP3 clips go to Downloads\SlopAMP\mp3clips, MP4 clips to
+    Downloads\SlopAMP\mp4clips, named "Title (0m26s-1m26s)". The original
+    file is never changed; every clip is a new file. "Add to ... when it's
+    saved" puts it in the playlist.
+  * Library -> CLIPS lists every clip (All / MP3 clips / MP4 clips) with
+    its length and what it was cut from: play, add to a playlist, Clip
+    again... (reopens CLIP on the original with the same In / Out), rename,
+    show in folder, delete (Recycle Bin). Files you put in those folders
+    yourself show up too.
+  * SHOTS (videos only, optional; one line until you use it): + Shot (or G
+    while CLIP is the active window) saves the frame the preview shows, full
+    size. Burst x5 grabs 5 frames across the clip: click the good ones and
+    Keep. Pick a shot to give it a name and a kind (person, look, prop,
+    place) or make it the Lead (always ref-01); < 1 s / Re-grab / 1 s > grab
+    it again. Files: Downloads\SlopAMP\Shots\<video title>\ref-01 Name
+    (kind).png ...
+  * CLIP only trims: no joining pieces, volume, speed, crop or text.
+
+YOUTUBE WINDOW
+  * YOUTUBE (bottom right of the playlist, or Layout -> YOUTUBE) opens
+    youtube.com in a SlopAMP window. SlopAMP's windows move to the left edge
+    of the screen and YouTube fills the rest to their right. It's a normal
+    SlopAMP window: it snaps, moves and resizes. On a small screen it stays
+    at least 800 px wide and overlaps the player instead of squeezing it.
+  * Closing it puts SlopAMP back where it was (unless you moved it). If you
+    move or resize the YouTube window yourself, it opens where you left it
+    next time and nothing else moves (Reset layout undoes that).
+  * Add a video: drag the "drag to playlist" handle (or a video's thumbnail
+    on the page) onto a playlist tab or row, or click + Add to "Main" (the
+    arrow next to it picks the tab). Play in SlopAMP adds it and plays it.
+  * Back / forward / reload / YouTube home are on its bar; type a YouTube
+    link or words to search YouTube in the address box.
+  * No double audio: starting a video on the page pauses SlopAMP, and while
+    SlopAMP plays, a video that starts by itself on the page waits.
+  * Only YouTube opens in it (and Google's sign-in pages); other links open
+    in your normal browser. It keeps its own sign-in. If Google won't let
+    you sign in there, gear -> Open this page in your normal browser
+    (watching works signed out). Gear -> Clear YouTube data signs you out.
+  * SlopAMP doesn't change YouTube's pages (no ad blocking) and nothing is
+    downloaded from the page itself: use DOWNLOAD in SlopAMP.
+
 DOWNLOADING YOUTUBE AND X VIDEOS
   * Click DOWNLOAD (on the player) to save the YouTube video you're watching,
     or right-click any YouTube or X item in the playlist -> Download...
@@ -212,42 +286,10 @@ DOWNLOADING YOUTUBE AND X VIDEOS
     playlists all live in one place (Downloads\SlopAMP).
   * SlopAMP keeps its downloader (yt-dlp) up to date automatically.
 
-SLOP (packs of a YouTube moment for slop.cc)
-  * Click SLOP (next to FULLSCREEN) while a YouTube video plays. SLOP is its
-    own window: move it, snap it, resize it, keep watching. It makes a pack
-    in Downloads\SlopAMP\Slop\<date> <title> @<time>.
-  * While you watch, in any SlopAMP window: G grabs the frame on screen,
-    I and O set where the clip starts and ends (SLOP doesn't need to be open).
-  * AUDIO: the song is downloaded once; the wave appears when it's here
-    (Stop / Start control that download). The clip is the green part: drag
-    its edges or the whole clip, drag on the wave for a new one, or type the
-    seconds before / after the moment. A click on the wave jumps the player
-    there. Ticks: Whole song (song.mp3) and a Second clip (audio-2.mp3,
-    the dashed range). Long videos (over 20 min): only 3 minutes either
-    side of the moment are downloaded, so no whole song.
-  * LOOK: every frame comes from the video itself (up to 1080p, no player
-    buttons). Give each one a name (Singer, Stage...) and a kind (person,
-    look, prop, place): it goes into the file name, like slop.cc's reference
-    bank. The lead is always ref-01. < 1 s / 1 s > and Re-grab change a
-    frame. Burst x5 grabs 5 candidates across the clip: mark the best as
-    Lead or Ref and Keep them (slop.cc prefers a few clear references).
-    Motion reference: a silent 2-5 s motion.mp4 around the lead frame.
-    If a frame can't be had from the video you can choose the video
-    window's picture instead (smaller; slop.cc warns under 512 px).
-  * PROMPT: pick Roast / Remake / Music video / Custom or write your own.
-    "Suggested" is a scene line made from the title and description.
-    Copy puts the prompt on the clipboard; Save writes prompt.txt (with a
-    short rights note at the end). If YouTube has captions for the clip,
-    they're saved as lyrics.txt.
-  * Open in Slop.cc: opens the pack folder and slop.cc (a new video) in your
-    browser and copies the prompt. On slop.cc attach the song or clip and
-    the references, paste the prompt and confirm the rights there.
-    Zip pack makes one .zip next to the folder (for sharing or backup).
-  * Library -> SLOP lists every pack: search (titles, reference names,
-    prompts, lyrics), filter, preview and play, rename, zip, show in
-    Explorer, delete (Recycle Bin). Double-click a pack to keep working on it.
-  * SlopAMP uploads nothing itself. Only use songs, faces, logos and images
-    you have the rights or permission for.
+SLOP (hidden in 2.3)
+  * SLOP isn't in SlopAMP for now: CLIP trims songs and videos better, and
+    its reference frames (burst, full-size grabs) are SHOTS in CLIP. Packs
+    you made are still in Downloads\SlopAMP\Slop (nothing was deleted).
 
 UPDATES
   * SlopAMP checks GitHub once a day for a new version (open "?" to change

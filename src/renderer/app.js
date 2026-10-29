@@ -598,7 +598,12 @@ function setMuted(m) {
 function setStatus(st) {
   if (st === 'paused' && status === 'playing') { recordResume(); saveSoon(); }
   if (st === 'playing') { CD.chain = 0; CD.warned = false; }
+  if (st === 'playing' && status !== 'playing') {        // 2.3: no double audio with CLIP's preview or the YouTube page
+    if (typeof clipPausePreview === 'function') clipPausePreview();
+    if (ytwVisible) P.ytwPause();
+  }
   status = st;
+  if (ytwVisible && typeof ytwRenderStatus === 'function') setTimeout(ytwRenderStatus, 0);
   updateDlButton();
   $('#vPlayIcon').innerHTML = st === 'playing' ? '<path d="M4 3h3v10H4zM9 3h3v10H9z"/>' : '<path d="M4 2.5v11L13 8z"/>';
   drawStateIcon();
@@ -705,13 +710,17 @@ function syncWindows(opts = {}) {
     video: { visible: !mini && (fs || (S.showVideo && !(audvis && S.vis.panel === 'hidden'))), shade: vidShade, title: audvis ? 'VISUALIZER' : 'VIDEO' },
     playlist: { visible: !mini && S.showPlaylist, shade: S.plShade },
     slop: { visible: !mini && slopVisible, shade: slopShade },
-    skined: { visible: !mini && !!(WM.skins && WM.skins.editorOpen), shade: !!(WM.skins && WM.skins.editorShade) }
+    skined: { visible: !mini && !!(WM.skins && WM.skins.editorOpen), shade: !!(WM.skins && WM.skins.editorShade) },
+    clip: { visible: !mini && !!clipVisible, shade: !!clipShade },          // CLIP (2.3)
+    ytweb: { visible: !mini && !!ytwVisible, shade: !!ytwShade }            // YOUTUBE window (2.3)
   }, { reflow: opts.reflow !== false && !mini });
   const btn = (id, min, what) => { const b = $(id); if (!b) return; b.innerHTML = min ? '&#x25A1;' : '&#x2013;'; b.title = `${min ? 'Expand' : 'Minimize'} ${what}`; };
   btn('#visMinBtn', vidShade, audvis ? 'visualizer' : 'video');
   btn('#plMinBtn', S.plShade, 'playlist');
   btn('#slopMinBtn', slopShade, 'SLOP');
   btn('#skedMinBtn', !!(WM.skins && WM.skins.editorShade), 'the skin editor');
+  btn('#clipMinBtn', !!clipShade, 'CLIP');
+  btn('#ytwMinBtn', !!ytwShade, 'YOUTUBE');
   $('#visCloseBtn').title = audvis ? 'Close visualizer' : 'Close video';
 }
 function updateControlsEnabled() {
@@ -780,7 +789,15 @@ function buildEq() {
 }
 function setEqPanel(mode) {
   S.eq.panel = mode; renderEq(); saveSoon();
+  // 2.3: EQ (or E) under Classic (stacked, No EQ): the EQ goes back in its spot and the layout is Classic (stacked)
+  if (mode !== 'hidden' && WM.info.preset === 'classic-noeq') WM.preset('classic');
 }
+// Layout → Classic (stacked, No EQ) hides the EQ window (the EQ itself keeps working: on/off, bands and preset
+// don't change); Layout → Classic (stacked) shows it again. winmgr.js calls this before the layout is applied.
+WM.beforePreset = (name) => {
+  if (name === 'classic-noeq' && S.eq.panel !== 'hidden') { S.eq.panel = 'hidden'; renderEq(); saveSoon(); }
+  else if (name === 'classic' && S.eq.panel === 'hidden') { S.eq.panel = 'open'; renderEq(); saveSoon(); }
+};
 function renderEq() {
   const p = $('#eqPanel');
   p.classList.toggle('min', S.eq.panel === 'min');
@@ -1098,6 +1115,7 @@ list.addEventListener('contextmenu', (e) => {
       if (lp) { entries.push(['Show local copy in folder', () => P.showInFolder(lp)], ['Delete local copy', () => deleteLocalCopy(it)]); }
       entries.push(['Open in browser', () => P.openExternal(it.url)]);
     }
+    entries.push(...clipMenuEntries(it));                 // CLIP (2.3)
     const inHist = histOnScreen();
     const others = S.tabs.map((t, k) => [t, k]).filter(([t, k]) => k !== S.tab && !isHist(t));
     if (others.length) { entries.push(null); for (const [t, k] of others.slice(0, 8)) entries.push([`${inHist ? 'Copy' : 'Move'} to "${t.name}"`, () => sendSelectedToTab(k, inHist)]); }
@@ -1117,7 +1135,9 @@ function showCtxMenu(entries, x, y, doc) {
   ctx.innerHTML = '';
   for (const en of entries) {
     if (!en) { ctx.appendChild(document.createElement('hr')); continue; }
-    const d = document.createElement('div'); d.textContent = en[0]; d.onclick = () => { hideCtx(); en[1](); }; ctx.appendChild(d);
+    const d = document.createElement('div'); d.textContent = en[0];
+    if (en[2]) d.className = 'off'; else d.onclick = () => { hideCtx(); en[1](); };     // en[2]: greyed out
+    ctx.appendChild(d);
   }
   WM.popup(ctx, { doc, x, y });
 }
@@ -1128,8 +1148,11 @@ function sortList(fn) { const cur = S.items[S.current]; S.items.sort(fn); if (cu
 
 // ------------------------------------------------------------------ drag & drop / paste
 let dragDepth = 0;
-WM.onDocs('dragenter', (e) => { e.preventDefault(); if (!draggingInternal) { dragDepth++; WM.host($('#dropHint'), e.target.ownerDocument || document).classList.remove('hidden'); } });
-WM.onDocs('dragleave', (e) => { e.preventDefault(); if (!draggingInternal && --dragDepth <= 0) { dragDepth = 0; $('#dropHint').classList.add('hidden'); } });
+// CLIP and YOUTUBE windows (2.3): a file dropped on CLIP opens in CLIP; nothing is added from drops on YOUTUBE
+const dropDocOf = (e) => e.target.ownerDocument || e.target;
+const ownDropDoc = (d) => d === WM.doc('clip') || d === WM.doc('ytweb');
+WM.onDocs('dragenter', (e) => { e.preventDefault(); const d = dropDocOf(e); if (ownDropDoc(d)) { if (d === WM.doc('clip')) d.body.classList.add('dropping'); return; } if (!draggingInternal) { dragDepth++; WM.host($('#dropHint'), d || document).classList.remove('hidden'); } });
+WM.onDocs('dragleave', (e) => { e.preventDefault(); const d = dropDocOf(e); if (ownDropDoc(d)) { if (d === WM.doc('clip') && !e.relatedTarget) d.body.classList.remove('dropping'); return; } if (!draggingInternal && --dragDepth <= 0) { dragDepth = 0; $('#dropHint').classList.add('hidden'); } });
 WM.onDocs('dragover', (e) => {
   e.preventDefault();
   e.dataTransfer.dropEffect = draggingInternal ? 'move' : 'copy';
@@ -1137,7 +1160,16 @@ WM.onDocs('dragover', (e) => {
   const t = dropTarget(e); if (t.li) t.li.classList.add(t.after ? 'drop-after' : 'drop-before');
 });
 WM.onDocs('drop', async (e) => {
-  e.preventDefault(); dragDepth = 0; $('#dropHint').classList.add('hidden');
+  e.preventDefault();
+  const dd = dropDocOf(e);
+  if (dd === WM.doc('ytweb')) return;
+  if (dd === WM.doc('clip')) {
+    dd.body.classList.remove('dropping');
+    const f = [...(e.dataTransfer.files || [])].map(x => P.pathForFile(x)).filter(Boolean)[0];
+    if (f) clipOpen(f); else toast('Drop a song or video file here (or right-click a playlist item → Clip).', 3500);
+    return;
+  }
+  dragDepth = 0; $('#dropHint').classList.add('hidden');
   const t = dropTarget(e); clearDropMarks();
   const at = t.li ? t.index : undefined;
   if (draggingInternal) { draggingInternal = false; moveSelectedTo(t.index); return; }
@@ -1498,14 +1530,32 @@ function moveTab(i, d) {
 }
 // Drag playlist rows onto a tab: move (hold Ctrl to copy).
 $('#tabStrip').addEventListener('dragover', (e) => {
-  const el = e.target.closest('.ptab'); if (!el || !draggingInternal) return;
+  const el = e.target.closest('.ptab'); if (!el) return;
+  if (!draggingInternal) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; for (const x of $('#tabStrip').children) x.classList.toggle('drop', x === el); return; }
   e.preventDefault(); e.stopPropagation();
   e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move';
   for (const x of $('#tabStrip').children) x.classList.toggle('drop', x === el && +el.dataset.t !== S.tab);
 });
 $('#tabStrip').addEventListener('dragleave', (e) => { const el = e.target.closest('.ptab'); if (el) el.classList.remove('drop'); });
 $('#tabStrip').addEventListener('drop', (e) => {
-  const el = e.target.closest('.ptab'); if (!el || !draggingInternal) return;
+  const el = e.target.closest('.ptab'); if (!el) return;
+  if (!draggingInternal) {     // 2.3: a link (the YOUTUBE window's address, a browser link) dropped on a tab goes into that tab
+    e.preventDefault(); e.stopPropagation();
+    for (const x of $('#tabStrip').children) x.classList.remove('drop');
+    $('#dropHint').classList.add('hidden'); dragDepth = 0;
+    const t = +el.dataset.t, tab = S.tabs[t]; if (!tab) return;
+    const urls = extractUrls(e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || '');
+    if (!urls.length) return;
+    if (isHist(tab)) { toast(histNoAdd(histKind(tab)), 3500); return; }
+    if (t === S.tab) { addUrls(urls); return; }
+    expandShortLinks(urls).then((list) => {
+      const items = list.map(u => linkItem(u)).filter(Boolean);
+      if (!items.length) { toast(SKIP_MSG(list.length, true)); return; }
+      tab.items.push(...items); renderTabs(); saveSoon(); attachKnownCopies(items); items.forEach(fillWebMeta);
+      toast(`Added ${items.length} to "${tab.name}"`, 1800);
+    });
+    return;
+  }
   e.preventDefault(); e.stopPropagation();
   draggingInternal = false; clearDropMarks();
   for (const x of $('#tabStrip').children) x.classList.remove('drop');
@@ -2133,6 +2183,8 @@ $('#stage').addEventListener('dblclick', (e) => { if (e.target === $('#stage') |
 WM.onDocs('keydown', (e) => {
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' && e.target.type === 'text') return;
   if ($('dialog[open]')) return;
+  const kd = e.target.ownerDocument || e.target;
+  if (kd === WM.doc('clip') && clipKey(e)) return;      // CLIP (2.3): Space / arrows / I / O while CLIP is the active window
   const k = e.key;
   if (k === ' ' ) { e.preventDefault(); togglePlay(); }
   else if (k === 'ArrowRight' && !e.altKey) { e.preventDefault(); seekBy(e.shiftKey ? 30 : 5); }
@@ -2161,7 +2213,7 @@ WM.onDocs('keydown', (e) => {
   else if (k === ']') stepRate(1); else if (k === '[') stepRate(-1);
   else if (k === 'e') setEqPanel(S.eq.panel === 'hidden' ? 'open' : 'hidden');
   else if (k === 'm') toggleMini(); else if (k === 's') toggleShuffle(); else if (k === 'r') cycleRepeat(); else if (k === 'l') openFiles();
-  else if (k === 'g') slopKey('frame'); else if (k === 'i') slopKey('in'); else if (k === 'o') slopKey('out');   // SLOP while watching
+  // 2.3: G / I / O no longer feed SLOP (hidden: it would make packs nobody can see); they work in CLIP while it's active
 });
 function selectRel(d) {
   if (!S.items.length) return;
@@ -2191,7 +2243,9 @@ const slopTime = (t) => fmt(t).replace(/^0(\d)/, '$1');
 const slopEsc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function slopTarget() { const it = curItem(); return it && it.type === 'youtube' && it.vid && !it.live ? it : null; }
-function updateSlopButton() { const b = $('#bSlop'); if (b) b.classList.toggle('on', slopVisible); const e = $('#slopEmptyStart'); if (e) e.disabled = !slopTarget(); }
+// 2.3: the old SLOP button is EDIT now (lit while CLIP is open). SLOP is hidden for now: no button, menu item or Library tab,
+// and G / I / O don't feed it; its code and the packs in Downloads\SlopAMP\Slop stay so it can come back.
+function updateSlopButton() { const b = $('#bSlop'); if (b) b.classList.toggle('on', !!clipVisible); const e = $('#slopEmptyStart'); if (e) e.disabled = !slopTarget(); }
 const slopIsPlaying = () => { const it = slopTarget(); return !!(it && SL.pack && SL.pack.d.video.id === it.vid); };
 function slopRect() {
   const el = engine === 'local' ? $('#video') : $('#ytWrap');
@@ -2252,7 +2306,7 @@ async function slopKey(k) {
   if (!pack) return;
   if (k === 'frame') {
     if (had) P.slopFrame({ id: pack.id, t, rect: slopRect() });     // a new pack already grabbed this moment
-    toast(`SLOP: frame at ${slopTime(t)} added${slopVisible ? '' : ' (click SLOP to see the pack)'}`);
+    toast(`SLOP: frame at ${slopTime(t)} added${slopVisible ? '' : ' (Layout → SLOP shows the pack)'}`);
   } else {
     const c = { ...pack.d.audio.clip };
     if (k === 'in') { c.in = t; if (c.out <= t + 1) c.out = t + 30; } else { c.out = t; if (c.in >= t - 1) c.in = Math.max(0, t - 30); }
@@ -2529,7 +2583,7 @@ slopAudio.addEventListener('ended', () => { if (SL.pack) slopRenderAudio(); });
 slopAudio.addEventListener('pause', () => { if (SL.pack) slopRenderAudio(); });
 
 // ---- wiring
-$('#bSlop').onclick = () => slopToggle();
+// WM.slop = { toggle: () => slopToggle() };   // Layout → SLOP: hidden with SLOP in 2.3 (un-comment to bring SLOP back)
 $('#slopCloseBtn').onclick = () => slopShow(false);
 $('#slopMinBtn').onclick = () => { slopShade = !slopShade; syncWindows(); };
 $('#slopEmptyStart').onclick = () => slopEnsure();
@@ -2739,9 +2793,11 @@ function linkDownload(item, ev) {
   }
   saveSoon();
   if (item && item.type === 'x') histXDownloaded(item);   // X History: a finished X download
+  clipDownloaded(item, ev);                               // CLIP (2.3): "Clip …" on an item that wasn't downloaded
   if (item && item.type === 'x' && xSheetFor === item.id && curItem() === item && !engine && $('#overlay').classList.contains('show')) { xSheetFor = null; replayCurrent(); }
 }
 P.onDl((ev) => {
+  clipDlFailed(ev);
   const prev = DL.get(ev.id) || {};
   const d = { ...prev, ...ev };
   DL.set(ev.id, d);
@@ -3220,6 +3276,8 @@ function finishDlBatch() {
 
 // ------------------------------------------------------------------ Downloads manager
 const DLM = { rows: [], sel: new Set(), filter: 'all', sort: 'mtime', dir: -1, anchor: -1 };
+const DLM_HEAD = '<th class="c"><span class="dlm-cb" id="dlmAll" title="Select all"></span></th><th data-sort="title">Title</th><th data-sort="kind">Type</th><th data-sort="size" class="r">Size</th><th data-sort="mtime" class="r">Date</th><th></th>';
+const DLM_HEAD_CLIPS = '<th class="c"><span class="dlm-cb" id="dlmAll" title="Select all"></span></th><th data-sort="title">Title</th><th data-sort="kind">Type</th><th data-sort="dur" class="r">Length</th><th data-sort="from">From</th><th data-sort="size" class="r">Size</th><th data-sort="mtime" class="r">Date</th><th></th>';
 const dlmKey = (r) => `${r.kind}|${r.path}`;
 function fmtSize(b) {
   if (!b) return '—';
@@ -3235,6 +3293,7 @@ function fmtDate(ms) {
 async function openDownloadsManager(filter) {
   hideDlMenu(); hidePop();
   if (typeof filter === 'string') DLM.filter = filter;     // 'slop' from the SLOP window
+  if (DLM.filter === 'slop') DLM.filter = 'all';          // 2.3: Library → SLOP is hidden
   DLM.sel.clear(); DLM.anchor = -1;
   await dlmRefresh();
   if (slopMode()) await slopLibRefresh();
@@ -3243,8 +3302,8 @@ async function openDownloadsManager(filter) {
   if (!$('#dlmDlg').open) $('#dlmDlg').showModal();
 }
 async function dlmRefresh() {
-  const [dl, pls] = await Promise.all([P.dlmList(), P.plList()]);
-  const rows = dl.concat(pls);
+  const [dl, pls, clips] = await Promise.all([P.dlmList(), P.plList(), P.clipList().catch(() => [])]);
+  const rows = dl.concat(pls, clips || []);
   for (const r of rows) {   // the playlist usually has the nicest title
     const it = allItems().find(i => isWeb(i) && i.vid === r.vid && !placeholderTitle(i));
     if (it && (!r.title || /\[([\w-]{11}|x\d+(-\d+)?)\]/.test(r.title) || r.title === r.path)) r.title = it.title;
@@ -3257,12 +3316,14 @@ async function dlmRefresh() {
 function dlmVisible() {
   const f = DLM.filter;
   const q = ($('#dlmSearch').value || '').trim().toLowerCase();
-  const v = DLM.rows.filter(r => (f === 'all' || r.kind === f) && (!q || String(r.title).toLowerCase().includes(q) || String(r.path).toLowerCase().split(/[\\/]/).pop().includes(q)));
+  const kindOk = (r) => f === 'all' || r.kind === f || (f === 'clips' && isClipRow(r) && (CLS.sub === 'all' || r.kind === CLS.sub));
+  const v = DLM.rows.filter(r => kindOk(r) && (!q || String(r.title).toLowerCase().includes(q) || String(r.path).toLowerCase().split(/[\\/]/).pop().includes(q) || (r.from && String(r.from).toLowerCase().includes(q))));
   const k = DLM.sort, dir = DLM.dir;
   v.sort((a, b) => {
     let x = a[k], y = b[k];
     if (k === 'title') { x = String(x).toLowerCase(); y = String(y).toLowerCase(); }
     if (k === 'kind') { x = a.missing ? 'z' : a.kind; y = b.missing ? 'z' : b.kind; }
+    if (k === 'from') { x = String(a.from || '').toLowerCase(); y = String(b.from || '').toLowerCase(); }
     return (x < y ? -1 : x > y ? 1 : 0) * dir || (b.mtime - a.mtime);
   });
   return v;
@@ -3272,13 +3333,18 @@ function dlmRender() {
   if (slopMode()) { $('#dlmDlg').classList.remove('skinmode'); slopLibRender(); return; }       // Library → SLOP (see below)
   if (skinMode()) { sklRender(); return; }           // Library → SKINS
   $('#dlmDlg').classList.remove('slopmode', 'skinmode');
-  $('#dlmSearch').placeholder = 'Search your library\u2026';
+  const cm = clipMode();                             // Library → CLIPS (2.3): own columns, bar and note
+  $('#dlmDlg').classList.toggle('clipmode', cm);
+  $('#dlmDlg thead tr').innerHTML = cm ? DLM_HEAD_CLIPS : DLM_HEAD;
+  $('#dlmSearch').placeholder = cm ? 'Search your clips\u2026' : 'Search your library\u2026';
   const vis = dlmVisible();
   const present = DLM.rows.filter(r => !r.missing && r.kind !== 'playlist');
   const pls = DLM.rows.filter(r => r.kind === 'playlist').length;
   const total = present.reduce((a, r) => a + r.size, 0);
   const miss = DLM.rows.filter(r => r.missing).length;
   $('#dlmCount').textContent = `${present.length} FILE${present.length === 1 ? '' : 'S'} · ${total ? fmtSize(total).toUpperCase() : '0 MB'} · ${pls} PLAYLIST${pls === 1 ? '' : 'S'}`;
+  if (cm) { const c = DLM.rows.filter(isClipRow), cs = c.reduce((a, r) => a + r.size, 0); $('#dlmCount').textContent = `${c.length} CLIP${c.length === 1 ? '' : 'S'} · ${cs ? fmtSize(cs).toUpperCase() : '0 MB'}`;
+    for (const b of $('#clsub').children) { const n = b.dataset.c === 'all' ? c.length : c.filter(r => r.kind === b.dataset.c).length; b.classList.toggle('on', b.dataset.c === CLS.sub); b.textContent = `${{ all: 'All clips', mp3clip: 'MP3 clips', mp4clip: 'MP4 clips' }[b.dataset.c]} (${n})`; } }
   $('#dlmMiss').textContent = miss ? `${miss} missing` : '';
   $('#dlmClean').disabled = !miss;
   $('#dlmDelAll').disabled = !vis.some(r => !r.missing);
@@ -3290,7 +3356,10 @@ function dlmRender() {
     const on = DLM.sel.has(dlmKey(r));
     tr.className = (on ? 'sel' : '') + (r.missing ? ' miss' : '');
     tr.dataset.i = i;
-    tr.innerHTML = `<td class="c"><span class="dlm-cb${on ? ' on' : ''}"></span></td><td class="t"></td><td><span class="dlm-tag ${r.missing ? 'missing' : r.kind}">${r.missing ? 'MISSING' : r.kind === 'audio' ? 'MP3' : r.kind === 'playlist' ? 'PLAYLIST' : 'VIDEO'}</span></td><td class="r">${r.missing ? '—' : fmtSize(r.size)}</td><td class="r">${fmtDate(r.mtime)}</td><td class="c">${r.missing ? '' : '<button class="dlm-show" title="Show in folder">📁</button>'}</td>`;
+    const tag = r.missing ? 'MISSING' : { audio: 'MP3', playlist: 'PLAYLIST', mp3clip: 'MP3 CLIP', mp4clip: 'MP4 CLIP' }[r.kind] || 'VIDEO';
+    tr.innerHTML = cm ? `<td class="c"><span class="dlm-cb${on ? ' on' : ''}"></span></td><td class="t"></td><td><span class="dlm-tag ${r.kind}">${tag}</span></td><td class="r">${r.dur ? fmtShort(r.dur) || '0:00' : '—'}</td><td class="from"></td><td class="r">${fmtSize(r.size)}</td><td class="r">${fmtDate(r.mtime)}</td><td class="c"><button class="dlm-show" title="Show in folder">📁</button></td>`
+      : `<td class="c"><span class="dlm-cb${on ? ' on' : ''}"></span></td><td class="t"></td><td><span class="dlm-tag ${r.missing ? 'missing' : r.kind}">${tag}</span></td><td class="r">${r.missing ? '—' : fmtSize(r.size)}</td><td class="r">${fmtDate(r.mtime)}</td><td class="c">${r.missing ? '' : '<button class="dlm-show" title="Show in folder">📁</button>'}</td>`;
+    if (cm) { const fr = tr.querySelector('.from'); fr.textContent = r.from || '—'; fr.title = r.src ? `${r.from || ''}\n${r.src}${r.srcExists ? '' : ' (not there any more)'}` : 'Not made with CLIP (or its original isn\u2019t known)'; }
     tr.querySelector('.t').textContent = r.title; tr.querySelector('.t').title = `${r.title}\n${r.path}`;
     if (r.kind === 'playlist') { const c = document.createElement('span'); c.className = 'dlm-count'; c.textContent = ` \u00b7 ${r.count} item${r.count === 1 ? '' : 's'}`; tr.querySelector('.t').appendChild(c); }
     body.appendChild(tr);
@@ -3298,6 +3367,7 @@ function dlmRender() {
   $('#dlmEmpty').classList.toggle('hidden', vis.length > 0);
   const q = ($('#dlmSearch').value || '').trim();
   $('#dlmEmpty').textContent = q ? `Nothing matches "${q}".`
+    : cm ? 'No clips yet. Right-click a song or video in the playlist or here \u2192 Clip MP3\u2026 / Clip video\u2026, or open CLIP from the Layout menu.'
     : DLM.filter === 'playlist' ? 'No saved playlists yet. Use SAVE under the playlist to save one here.'
     : DLM.rows.length ? 'Nothing here for this filter.' : 'Nothing in your library yet. Use DOWNLOAD or DOWNLOAD ALL to save YouTube videos, and SAVE to keep playlists.';
   $('#dlmSearchX').classList.toggle('hidden', !q);
@@ -3310,6 +3380,7 @@ function dlmRender() {
   $('#dlmOpenTab').classList.toggle('hidden', !selPl.length);
   $('#dlmOpenTab').textContent = selPl.length > 1 ? `\u25b6 Open ${selPl.length} in new tabs` : '\u25b6 Open in new tab';
   $('#dlmDel').textContent = `🗑 Delete selected${selCount ? ` (${selCount})` : ''}`;
+  if (cm) clipLibButtons();
 }
 $('#dlmBody').addEventListener('click', (e) => {
   const tr = e.target.closest('tr'); if (!tr) return;
@@ -3339,20 +3410,22 @@ $('#dlmBody').addEventListener('mousedown', (e) => {
   const r = dlmVisible()[+tr.dataset.i]; if (!r || r.missing) return;
   e.preventDefault();
   DLM.sel = new Set([dlmKey(r)]); DLM.anchor = +tr.dataset.i; dlmRender();
-  if (r.kind === 'playlist') openPlaylistFiles([r]); else P.showInFolder(r.path);
+  if (r.kind === 'playlist') openPlaylistFiles([r]); else if (isClipRow(r)) libAdd([r], true); else P.showInFolder(r.path);
 });
-$('#dlmAll').onclick = () => {
-  const vis = dlmVisible();
-  const allOn = vis.length && vis.every(r => DLM.sel.has(dlmKey(r)));
-  for (const r of vis) { if (allOn) DLM.sel.delete(dlmKey(r)); else DLM.sel.add(dlmKey(r)); }
-  dlmRender();
-};
-for (const th of $$('#dlmDlg th[data-sort]')) {
-  th.onclick = () => { const k = th.dataset.sort; if (DLM.sort === k) DLM.dir = -DLM.dir; else { DLM.sort = k; DLM.dir = k === 'title' || k === 'kind' ? 1 : -1; } dlmRender(); };
-}
+// the header is rebuilt for Library → CLIPS (2.3), so its clicks are handled here
+$('#dlmDlg thead').addEventListener('click', (e) => {
+  if (e.target.closest('#dlmAll')) {
+    const vis = dlmVisible();
+    const allOn = vis.length && vis.every(r => DLM.sel.has(dlmKey(r)));
+    for (const r of vis) { if (allOn) DLM.sel.delete(dlmKey(r)); else DLM.sel.add(dlmKey(r)); }
+    dlmRender(); return;
+  }
+  const th = e.target.closest('th[data-sort]'); if (!th) return;
+  const k = th.dataset.sort; if (DLM.sort === k) DLM.dir = -DLM.dir; else { DLM.sort = k; DLM.dir = k === 'title' || k === 'kind' || k === 'from' ? 1 : -1; } dlmRender();
+});
 for (const b of $('#dlmSeg').children) b.onclick = async () => { DLM.filter = b.dataset.f; DLM.anchor = -1; if (slopMode()) await slopLibRefresh(); if (skinMode()) await sklRefresh(); dlmApplySize(); dlmRender(); };
 $('#dlmX').onclick = () => $('#dlmDlg').close();
-$('#dlmOpen').onclick = () => P.dlOpenDir(DLM.filter === 'audio' ? 'audio' : DLM.filter === 'playlist' ? 'playlists' : 'video');
+$('#dlmOpen').onclick = () => clipMode() ? P.clipFolder(CLS.sub === 'mp4clip' ? 'mp4' : 'mp3') : P.dlOpenDir(DLM.filter === 'audio' ? 'audio' : DLM.filter === 'playlist' ? 'playlists' : 'video');
 $('#dlmSearch').addEventListener('input', () => { DLM.anchor = -1; dlmRender(); });
 $('#dlmSearch').addEventListener('keydown', (e) => { if (e.key === 'Escape' && e.target.value) { e.preventDefault(); e.stopPropagation(); e.target.value = ''; dlmRender(); } });
 $('#dlmSearchX').onclick = () => { $('#dlmSearch').value = ''; dlmRender(); $('#dlmSearch').focus(); };
@@ -3391,14 +3464,16 @@ $('#dlmDlg').addEventListener('keydown', (e) => {
 });
 async function dlmDelete(allRows, all) {
   const plRows = allRows.filter(r => r.kind === 'playlist');
-  const rows = allRows.filter(r => r.kind !== 'playlist');
+  const clRows = allRows.filter(r => isClipRow(r));          // CLIP (2.3): clips go to the Recycle Bin too
+  const rows = allRows.filter(r => r.kind !== 'playlist' && !isClipRow(r));
   const files = rows.filter(r => !r.missing);
-  const size = files.reduce((a, r) => a + r.size, 0) + plRows.reduce((a, r) => a + r.size, 0);
+  const size = files.reduce((a, r) => a + r.size, 0) + plRows.reduce((a, r) => a + r.size, 0) + clRows.reduce((a, r) => a + r.size, 0);
   const q = ($('#dlmSearch').value || '').trim();
-  const what = DLM.filter === 'audio' ? 'MP3s' : DLM.filter === 'video' ? 'videos' : DLM.filter === 'playlist' ? 'saved playlists' : 'library items';
+  const what = DLM.filter === 'audio' ? 'MP3s' : DLM.filter === 'video' ? 'videos' : DLM.filter === 'playlist' ? 'saved playlists' : DLM.filter === 'clips' ? 'clips' : 'library items';
   const parts = [];
   if (files.length) parts.push(`${files.length} download${files.length === 1 ? '' : 's'}`);
   if (plRows.length) parts.push(`${plRows.length} saved playlist${plRows.length === 1 ? '' : 's'}`);
+  if (clRows.length) parts.push(`${clRows.length} clip${clRows.length === 1 ? '' : 's'}`);
   const lines = [`${parts.join(' and ') || 'Nothing'} (${fmtSize(size)}) will go to the Recycle Bin.`];
   if (rows.length - files.length) lines.push(`${rows.length - files.length} missing entr${rows.length - files.length === 1 ? 'y' : 'ies'} will be removed from the list.`);
   if (files.length) lines.push('Playlist items stay and stream from YouTube again.');
@@ -3407,9 +3482,15 @@ async function dlmDelete(allRows, all) {
   if (!ok) return;
   let plFailed = 0;
   if (plRows.length) { const pr = await P.plDelete(plRows.map(r => r.path)); plFailed = pr.filter(x => !x.ok).length; }
+  if (clRows.length) {
+    const cur0 = curItem();
+    if (cur0 && engine === 'local' && clRows.some(r => r.path === localPathOf(cur0))) { stopEngines(); setStatus('stopped'); await new Promise(r => setTimeout(r, 250)); }
+    const cr = await P.clipDelete(clRows.map(r => r.path)); plFailed += cr.filter(x => !x.ok).length;
+  }
   if (!rows.length) {
     DLM.sel.clear(); await dlmRefresh();
-    toast(plFailed ? `${plFailed} playlist file${plFailed === 1 ? '' : 's'} couldn\u2019t be deleted.` : `${plRows.length} playlist${plRows.length === 1 ? '' : 's'} moved to the Recycle Bin.`, 2500);
+    const n = plRows.length + clRows.length;
+    toast(plFailed ? `${plFailed} file${plFailed === 1 ? '' : 's'} couldn\u2019t be deleted.` : `${n} item${n === 1 ? '' : 's'} moved to the Recycle Bin.`, 2500);
     return;
   }
   const paths = new Set(rows.map(r => r.path));
@@ -3428,11 +3509,769 @@ async function dlmDelete(allRows, all) {
   renderList(); saveSoon(); updateDlButton();
   await dlmRefresh();
   failed += plFailed;
-  const done = res.length + plRows.length - failed;
+  const done = res.length + plRows.length + clRows.length - failed;
   if (failed) toast(`Deleted ${done}. ${failed} couldn’t be deleted — they may be open in another program.`, 4500);
   else toast(`${done} item${done === 1 ? '' : 's'} moved to the Recycle Bin.`, 2500);
 }
 $('#pDlm').onclick = () => openDownloadsManager();
+// ------------------------------------------------------------------ CLIP (2.3, ideas #12 / #13)
+// One window for both: cut one piece out of a song or video and save it as a NEW MP3 (Downloads\SlopAMP\
+// mp3clips) or MP4 (Downloads\SlopAMP\mp4clips). The original is never changed. Trim only (no splicing,
+// volume, crop, text…). The cutting is done by main.js / clip.js; this draws the window and the Library rows.
+// The preview plays inside CLIP (the main player pauses, so there's never double audio). I / O / Space /
+// arrows act on CLIP only while the CLIP window is the active one (SLOP keeps I / O everywhere else).
+var clipVisible = false, clipShade = false;   // var: syncWindows() reads them, and it can run before this line
+const CL = { file: null, info: null, item: null, srcTitle: '', kind: 'mp3', in: 0, out: 0, v0: 0, v1: 0, peaks: null, last: 'out', loop: false,
+  range: null, raf: 0, nameTouched: false, saved: [], job: null, pending: null, framesKey: '', framesT: 0, quality: '320', cut: 'exact',
+  shots: null, shotSel: null, shotsOpen: false, shotBusy: false, burstPick: null };
+const clipMedia = $('#clipVideo');
+const clipDoc = () => WM.doc('clip');
+function clipFmt(t, dec = true) {
+  t = Math.max(0, t || 0);
+  const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t - h * 3600 - m * 60;
+  const ss = dec ? s.toFixed(1).padStart(4, '0') : String(Math.floor(s)).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
+function clipParse(str) {      // "1:26.4", "86.4", "1:02:03.5"
+  const p = String(str).trim().split(':');
+  if (!p.length || p.length > 3 || p.some(x => x === '' || !/^\d+(\.\d+)?$/.test(x.trim()))) return NaN;
+  return p.map(Number).reduce((a, x) => a * 60 + x, 0);
+}
+const clipCut = (t) => { t = Math.round(t); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return `${h ? `${h}h` : ''}${h ? String(m).padStart(2, '0') : m}m${String(s).padStart(2, '0')}s`; };
+const clipDur = () => (CL.info ? CL.info.duration : 0);
+function clipShow(on) {
+  clipVisible = !!on;
+  if (on) clipShade = false; else clipStopPreview();
+  syncWindows();
+  updateSlopButton();
+  if (on) { clipRender(); setTimeout(() => { clipDraw(); clipRuler(); }, 60); }
+}
+WM.clip = { toggle: () => clipShow(!clipVisible), open: (f, o) => clipOpen(f, o) };
+$('#clipCloseBtn').onclick = () => clipShow(false);
+$('#clipMinBtn').onclick = () => { clipShade = !clipShade; syncWindows(); };
+
+// ---- what to open
+// the local file a playlist item has for a kind: 'mp3' takes the MP3, else the video's sound; 'mp4' needs a video
+function clipSource(it, kind) {
+  if (!it) return null;
+  if (it.type === 'file') return it.missing || (kind === 'mp4' && !it.hasVideo) ? null : it.path;
+  return kind === 'mp4' ? it.localVideo || null : it.localAudio || it.localVideo || null;
+}
+function clipMenuEntries(it) {
+  if (!it || it.live || it.missing) return [];
+  if (it.type === 'file') return [null, ['✂ Clip MP3…', () => clipItem(it, 'mp3')], ...(it.hasVideo ? [['✂ Clip video…', () => clipItem(it, 'mp4')]] : [])];
+  if (!isWeb(it)) return [];
+  return [null,
+    [`✂ Clip MP3…${it.localAudio || it.localVideo ? '' : '  (downloads the MP3 first)'}`, () => clipItem(it, 'mp3')],
+    [`✂ Clip video…${it.localVideo ? '' : '  (downloads the video first)'}`, () => clipItem(it, 'mp4')]];
+}
+async function clipItem(it, kind, range) {
+  const f = clipSource(it, kind);
+  if (f) return clipOpen(f, { kind, item: it, title: it.title, ...(range || {}) });
+  if (!isWeb(it) || it.live) return false;
+  // not downloaded yet: the normal download (MP3 or best video), then CLIP opens on it
+  CL.pending = { id: it.id, kind };
+  const res = await startDownload(it, kind === 'mp4' ? 'video' : 'audio', 'best', true);
+  if (res && (res.ok || res.reason === 'busy' || res.reason === 'queued')) { toast(`Downloading ${kind === 'mp4' ? 'the video' : 'the MP3'} first. CLIP opens when it’s done.`, 3500); return true; }
+  CL.pending = null;
+  toast(res && res.reason === 'missing' ? 'The downloader isn’t included in this copy of SlopAMP.' : 'Couldn’t start the download.');
+  return false;
+}
+function clipDownloaded(item, ev) {         // linkDownload: a download finished
+  const p = CL.pending; if (!p || !item || item.id !== p.id) return;
+  if ((p.kind === 'mp4') !== (ev.kind !== 'audio')) return;
+  CL.pending = null;
+  clipOpen(ev.file, { kind: p.kind, item, title: item.title });
+}
+function clipDlFailed(ev) { if (CL.pending && CL.pending.id === ev.id && (ev.status === 'error' || ev.status === 'canceled')) CL.pending = null; }
+async function clipOpen(file, o = {}) {
+  clipShow(true);
+  clipStopPreview();
+  const info = await P.clipOpen(file);
+  if (!info || !info.ok) { toast((info && info.error) || 'Couldn’t open that file in CLIP.'); return false; }
+  const same = CL.file === file;
+  CL.file = file; CL.info = info;
+  CL.item = o.item && isWeb(o.item) ? { type: o.item.type, vid: o.item.vid, url: o.item.url } : (same ? CL.item : null);
+  CL.srcTitle = String(o.title || (same && CL.srcTitle) || info.title).replace(/\s*\[(?:[\w-]{11}|x\d{1,25}(?:-\d{1,2})?)\]$/, '') || info.title;   // no " [video id]" from a download's file name
+  CL.kind = o.kind === 'mp4' && info.hasVideo ? 'mp4' : info.hasAudio ? 'mp3' : 'mp4';
+  const d = info.duration;
+  if (Number.isFinite(o.in) && Number.isFinite(o.out) && o.out > o.in) { CL.in = Math.max(0, Math.min(o.in, d - 0.1)); CL.out = Math.max(CL.in + 0.1, Math.min(o.out, d)); }
+  else { CL.in = 0; CL.out = d; }
+  CL.v0 = 0; CL.v1 = d;
+  if (o.in != null && CL.out - CL.in < d / 4) clipZoomTo(CL.in, CL.out);      // Clip again: zoomed in around it
+  CL.last = 'out'; CL.loop = false; CL.nameTouched = false; CL.peaks = null; CL.framesKey = '';
+  if (!same) { CL.saved = []; CL.shots = null; CL.shotSel = null; CL.shotsOpen = false; CL.burstPick = null; }
+  CL.quality = info.canCopyMp3 ? 'copy' : '320'; CL.cut = 'exact';
+  $('#clipFadeIn').checked = false; $('#clipFadeOut').checked = false; $('#clipAlsoMp3').checked = false; $('#clipAddTo').checked = true;
+  clipMedia.removeAttribute('src');
+  CL.seekTo = CL.in;          // the preview starts at In (applied once the file's loaded)
+  if (info.previewUrl) { clipMedia.src = info.previewUrl; clipMedia.load(); }
+  clipRender();
+  $('#clipWaveMsg').textContent = info.hasAudio ? 'Reading the sound…' : 'No sound in this file';
+  P.clipPeaks(file).then((pk) => { if (CL.file !== file) return; CL.peaks = pk; $('#clipWaveMsg').textContent = pk || !info.hasAudio ? '' : 'Couldn’t read the sound (the clip is still cut exactly)'; clipDraw(); });
+  setTimeout(() => { clipDraw(); clipRuler(); clipFrames(); }, 60);
+  clipShotsLoad();
+  return true;
+}
+
+// ---- drawing
+function clipRender() {
+  const has = !!CL.info;
+  $('#clipEmpty').classList.toggle('hidden', has);
+  $('#clipMain').classList.toggle('hidden', !has);
+  const cur = curItem();
+  $('#clipEmptyCur').disabled = !(cur && (clipSource(cur, 'mp3') || clipSource(cur, 'mp4')));
+  if (!has) { $('#clipSum').textContent = ''; return; }
+  const i = CL.info;
+  $('#clipSum').textContent = CL.srcTitle;
+  $('#clipSrc').innerHTML = `<b></b> · ${i.hasVideo ? `video · ${clipFmt(i.duration, false)}${i.height ? ` · ${i.height}p` : ''}` : `${(i.ext || '').replace('.', '').toUpperCase() || 'audio'} · ${clipFmt(i.duration, false)}`}`;
+  $('#clipSrc').querySelector('b').textContent = CL.srcTitle;
+  $('#clipSrc').title = CL.file;
+  for (const b of $('#clipKind').children) {
+    const k = b.dataset.k;
+    b.classList.toggle('on', k === CL.kind);
+    b.disabled = k === 'mp4' ? !i.hasVideo : !i.hasAudio;
+    b.title = b.disabled ? (k === 'mp4' ? 'This file has no video' : 'This file has no sound') : '';
+  }
+  const V = CL.kind === 'mp4';
+  $('#clipPrev').classList.toggle('hidden', !i.hasVideo);
+  $('#clipFilm').classList.toggle('hidden', !i.hasVideo);
+  $('#clipWave').classList.toggle('short', !!i.hasVideo);
+  $('#clipPrevMsg').classList.toggle('hidden', !!i.previewUrl);
+  $('#clipPrevMsg').textContent = 'No preview for this kind of file. The clip is still cut exactly where you set it.';
+  for (const id of ['#clipPlay', '#clipEdgeIn', '#clipEdgeOut', '#clipLoop', '#clipSetIn', '#clipSetOut']) $(id).disabled = !i.previewUrl;
+  $('#clipExt').textContent = V ? '.mp4' : '.mp3';
+  $('#clipOptsMp3').classList.toggle('hidden', V);
+  $('#clipOptsMp4').classList.toggle('hidden', !V);
+  const fades = $('#clipFadeIn').checked || $('#clipFadeOut').checked;
+  if (fades || !i.canCopyMp3) CL.quality = '320';
+  $('#clipQCopy').disabled = fades || !i.canCopyMp3;
+  $('#clipQCopyNote').textContent = !i.canCopyMp3 ? '· for MP3 files (this is re-encoded)' : '· no re-encode (off when a fade is on)';
+  $('#clipQCopy').checked = CL.quality === 'copy'; $('#clipQ320').checked = CL.quality !== 'copy';
+  if (!i.canFast) CL.cut = 'exact';
+  $('#clipCutFast').disabled = !i.canFast;
+  $('#clipFastNote').textContent = i.canFast ? '· no re-encode, may start up to a few seconds early (keyframes)' : '· for H.264 .mp4 videos only (this one is re-encoded)';
+  $('#clipCutExact').checked = CL.cut === 'exact'; $('#clipCutFast').checked = CL.cut === 'fast';
+  $('#clipAlsoMp3').disabled = !i.hasAudio;
+  $('#clipFmtInfo').textContent = V ? (CL.cut === 'fast' ? 'MP4 · copied as it is (no re-encode)' : `MP4 · H.264 + AAC${i.height ? ` · ${i.width}×${i.height}` : ''}`) : `MP3${CL.quality === 'copy' ? ' · same quality as the file' : ' · 320 kbps'}`;
+  const t = clipTargetTab();
+  $('#clipAddToLabel').textContent = `Add to "${t >= 0 ? S.tabs[t].name : 'Main'}" when it’s saved`;
+  $('#clipFolderBtn').innerHTML = `&#x1F4C1; Open ${V ? 'mp4clips' : 'mp3clips'} folder`;
+  $('#clipReset').textContent = `Reset to the whole ${i.hasVideo ? 'video' : 'song'}`;
+  clipRenderTimes();
+  clipRenderSaved();
+  clipRenderShots();
+}
+function clipRenderTimes() {
+  if (!CL.info) return;
+  const inEl = $('#clipIn'), outEl = $('#clipOut'), d = clipDoc();
+  if (!d || d.activeElement !== inEl) inEl.value = clipFmt(CL.in);
+  if (!d || d.activeElement !== outEl) outEl.value = clipFmt(CL.out);
+  $('#clipLen').textContent = `LENGTH ${clipFmt(CL.out - CL.in)}`;
+  $('#clipSave').innerHTML = CL.job ? $('#clipSave').innerHTML : `&#9986; Save clip ${clipFmt(CL.out - CL.in)} &#9656;`;
+  if (!CL.nameTouched) $('#clipName').value = `${CL.srcTitle} (${clipCut(CL.in)}-${clipCut(CL.out)})`;
+  const z = CL.v1 - CL.v0 < clipDur() - 0.05;
+  $('#clipZoomInfo').textContent = z ? `showing ${clipFmt(CL.v0, false)} – ${clipFmt(CL.v1, false)} of ${clipFmt(clipDur(), false)} ·` : '';
+  for (const el of $$('#clipFilm > *')) { const t = +el.dataset.t; el.classList.toggle('in', t >= CL.in && t <= CL.out); }
+}
+function clipRenderSaved() {
+  const box = $('#clipSaved');
+  box.classList.toggle('hidden', !CL.saved.length);
+  if (!CL.saved.length) return;
+  const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const dirs = [...new Set(CL.saved.map(f => f.kind === 'mp4' ? 'mp4clips' : 'mp3clips'))].map(d => `Downloads\\SlopAMP\\${d}`).join(' · ');
+  box.innerHTML = `<div class="slop-lh">SAVED FROM THIS ${CL.info && CL.info.hasVideo ? 'VIDEO' : 'FILE'} · ${esc(dirs)}</div><div class="slop-files">${CL.saved.map((f, i) => `<span class="slop-file clip-file" data-i="${i}" title="${esc(f.path)}\nClick: show in folder">${f.kind === 'mp4' ? '&#x1F39E;' : '&#9835;'} ${esc(f.path.split(/[\\/]/).pop())} ${clipFmt(f.duration, false)}</span>`).join('')}</div>`;
+}
+$('#clipSaved').addEventListener('click', (e) => { const el = e.target.closest('.clip-file'); if (el) { const f = CL.saved[+el.dataset.i]; if (f) P.showInFolder(f.path); } });
+function clipZoomTo(a, b) {
+  const d = clipDur(); if (!d) return;
+  const pad = Math.max(0.5, (b - a) * 0.6), len = Math.min(d, Math.max(2, b - a + pad * 2));
+  let v0 = (a + b) / 2 - len / 2; v0 = Math.max(0, Math.min(v0, d - len));
+  CL.v0 = v0; CL.v1 = v0 + len;
+}
+function clipView(f, around) {      // f < 1 zooms in, > 1 out, around: the time that stays put
+  const d = clipDur(); if (!d) return;
+  const len = Math.max(1, Math.min(d, (CL.v1 - CL.v0) * f));
+  const c = around != null ? around : (CL.in >= CL.v0 && CL.out <= CL.v1 ? (CL.in + CL.out) / 2 : (CL.v0 + CL.v1) / 2);
+  const k = around != null ? (around - CL.v0) / (CL.v1 - CL.v0) : 0.5;
+  let v0 = c - len * k; v0 = Math.max(0, Math.min(v0, d - len));
+  CL.v0 = v0; CL.v1 = v0 + len;
+  clipDraw(); clipRuler(); clipRenderTimes(); clipFrames();
+}
+$('#clipZoomIn').onclick = () => clipView(0.5);
+$('#clipZoomOut').onclick = () => clipView(2);
+$('#clipFit').onclick = () => { CL.v0 = 0; CL.v1 = clipDur(); clipDraw(); clipRuler(); clipRenderTimes(); clipFrames(); };
+function clipRuler() {
+  const el = $('#clipRuler'); if (!el || !CL.info) return;
+  const n = 8, span = CL.v1 - CL.v0;
+  el.innerHTML = Array.from({ length: n + 1 }, (_, i) => `<span>${clipFmt(CL.v0 + span * i / n, span < 20)}</span>`).join('');
+}
+function clipDraw() {
+  const c = $('#clipWaveC'); if (!c || !CL.info || !clipVisible) return;
+  const w = c.clientWidth, h = c.clientHeight, dpr = c.ownerDocument.defaultView.devicePixelRatio || 1;
+  if (!w || !h) return;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  const x = c.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, w, h);
+  const v0 = CL.v0, v1 = CL.v1, px = (t) => (t - v0) / (v1 - v0) * w;
+  const green = WM.token('--green'), line = WM.token('--line-green'), amber = WM.token('--amber');
+  x.globalAlpha = 0.16; x.fillStyle = green; x.fillRect(px(CL.in), 0, px(CL.out) - px(CL.in), h); x.globalAlpha = 1;
+  const pk = CL.peaks;
+  if (pk && pk.peaks && pk.peaks.length) {
+    const step = 2, rate = pk.rate, arr = pk.peaks;
+    for (let X = 0; X < w; X += step) {
+      const t0 = v0 + X / w * (v1 - v0), t1 = v0 + (X + step) / w * (v1 - v0);
+      const i0 = Math.max(0, Math.floor(t0 * rate)), i1 = Math.min(arr.length, Math.max(i0 + 1, Math.ceil(t1 * rate)));
+      let m = 0; for (let i = i0; i < i1; i++) if (arr[i] > m) m = arr[i];
+      const v = m / 100 * (h / 2 - 3), tm = (t0 + t1) / 2, on = tm >= CL.in && tm <= CL.out;
+      x.fillStyle = on ? green : line; x.globalAlpha = on ? 1 : 0.5;
+      x.fillRect(X, h / 2 - v, step - 0.6, Math.max(1, v * 2));
+    }
+    x.globalAlpha = 1;
+  } else { x.fillStyle = line; x.globalAlpha = 0.5; x.fillRect(0, h / 2, w, 1); x.globalAlpha = 1; }
+  const handle = (t) => { const X = px(t); x.fillStyle = green; x.fillRect(X - 1.5, 0, 3, h); x.fillRect(X - 5, 0, 10, 7); x.fillRect(X - 5, h - 7, 10, 7); };
+  handle(CL.in); handle(CL.out);
+  if (CL.info.previewUrl) { const t = clipMedia.currentTime || 0; if (t >= v0 && t <= v1) { x.fillStyle = amber; x.fillRect(px(t) - 1, 0, 2, h); } }
+}
+// frames across the part of the video on screen
+function clipFrames() {
+  if (!CL.info || !CL.info.hasVideo || !clipVisible) return;
+  clearTimeout(CL.framesT);
+  CL.framesT = setTimeout(async () => {
+    const film = $('#clipFilm'); if (!film) return;
+    const n = Math.max(6, Math.min(16, Math.round((film.clientWidth || 700) / 60)));
+    const key = `${CL.file}|${CL.v0.toFixed(1)}|${CL.v1.toFixed(1)}|${n}`;
+    if (key === CL.framesKey) return;
+    CL.framesKey = key;
+    const times = Array.from({ length: n }, (_, i) => CL.v0 + (CL.v1 - CL.v0) * (i + 0.5) / n);
+    film.innerHTML = times.map(t => `<span data-t="${t}"></span>`).join('');
+    clipRenderTimes();
+    const urls = await P.clipFrames(CL.file, times.map(t => Math.min(t, clipDur() - 0.05)), 54);
+    if (CL.framesKey !== key) return;
+    film.innerHTML = times.map((t, i) => (urls[i] ? `<img data-t="${t}" src="${urls[i]}" alt="" draggable="false">` : `<span data-t="${t}"></span>`)).join('');
+    clipRenderTimes();
+  }, 250);
+}
+WM.wins.clip && new ResizeObserver(() => { if (clipVisible && CL.info) { clipDraw(); clipFrames(); } }).observe($('#clipWave'));
+
+// ---- In / Out
+function clipSet(edge, t, opts = {}) {
+  const d = clipDur(); if (!d || !Number.isFinite(t)) return;
+  if (edge === 'in') CL.in = Math.max(0, Math.min(t, CL.out - 0.1));
+  else CL.out = Math.min(d, Math.max(t, CL.in + 0.1));
+  CL.last = edge;
+  if (!opts.quiet) { clipRenderTimes(); clipDraw(); }
+}
+for (const b of $$('#clipPanel .clip-tm button')) b.addEventListener('click', (e) => { const edge = b.dataset.e; clipSet(edge, CL[edge] + (+b.dataset.d) * (e.shiftKey ? 10 : 1)); });
+for (const [id, edge] of [['#clipIn', 'in'], ['#clipOut', 'out']]) {
+  const inp = $(id);
+  const commit = () => { const t = clipParse(inp.value); if (Number.isFinite(t)) clipSet(edge, t); clipRenderTimes(); };
+  inp.addEventListener('change', commit);
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); inp.blur(); }
+    else if (e.key === 'Escape') { inp.value = clipFmt(CL[edge]); inp.blur(); }
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); clipSet(edge, CL[edge] + (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 1 : 0.1)); inp.value = clipFmt(CL[edge]); }
+  });
+}
+$('#clipSetIn').onclick = () => clipSet('in', clipMedia.currentTime || 0);
+$('#clipSetOut').onclick = () => clipSet('out', clipMedia.currentTime || 0);
+$('#clipReset').onclick = () => { CL.in = 0; CL.out = clipDur(); CL.v0 = 0; CL.v1 = clipDur(); clipDraw(); clipRuler(); clipRenderTimes(); clipFrames(); };
+for (const b of $('#clipKind').children) b.onclick = () => { if (b.disabled) return; CL.kind = b.dataset.k; clipRender(); };
+$('#clipName').addEventListener('input', () => { CL.nameTouched = !!$('#clipName').value.trim(); });
+for (const id of ['#clipFadeIn', '#clipFadeOut']) $(id).addEventListener('change', () => { if ($(id).checked) CL.quality = '320'; clipRender(); });
+$('#clipQCopy').addEventListener('change', () => { if ($('#clipQCopy').checked) CL.quality = 'copy'; clipRender(); });
+$('#clipQ320').addEventListener('change', () => { if ($('#clipQ320').checked) CL.quality = '320'; clipRender(); });
+$('#clipCutExact').addEventListener('change', () => { if ($('#clipCutExact').checked) CL.cut = 'exact'; clipRender(); });
+$('#clipCutFast').addEventListener('change', () => { if ($('#clipCutFast').checked) CL.cut = 'fast'; clipRender(); });
+
+// ---- the wave: click = move the preview there; drag an edge / the clip; drag elsewhere = a new range
+$('#clipWaveC').addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || !CL.info) return;
+  const c = e.currentTarget, r = c.getBoundingClientRect();
+  const tAt = (cx) => CL.v0 + Math.max(0, Math.min(1, (cx - r.left) / r.width)) * (CL.v1 - CL.v0);
+  const pxOf = (t) => r.left + (t - CL.v0) / (CL.v1 - CL.v0) * r.width;
+  const x0 = e.clientX, t0 = tAt(x0);
+  let mode;
+  if (Math.abs(x0 - pxOf(CL.in)) <= 7) mode = 'in';
+  else if (Math.abs(x0 - pxOf(CL.out)) <= 7) mode = 'out';
+  else if (t0 > CL.in && t0 < CL.out) mode = 'move';
+  else mode = 'new';
+  const a0 = CL.in, b0 = CL.out;
+  let moved = false;
+  try { c.setPointerCapture(e.pointerId); } catch (_) {}
+  const move = (ev) => {
+    if (!moved && Math.abs(ev.clientX - x0) < 3) return;
+    moved = true;
+    const t = tAt(ev.clientX), d = clipDur();
+    if (mode === 'in' || mode === 'out') clipSet(mode, t, { quiet: true });
+    else if (mode === 'move') { const len = b0 - a0; let a = a0 + (t - t0); a = Math.max(0, Math.min(a, d - len)); CL.in = a; CL.out = a + len; }
+    else { CL.in = Math.max(0, Math.min(t0, t)); CL.out = Math.min(d, Math.max(t0, t)); if (CL.out - CL.in < 0.1) CL.out = Math.min(d, CL.in + 0.1); CL.last = t < t0 ? 'in' : 'out'; }
+    clipRenderTimes(); clipDraw();
+  };
+  const up = (ev) => {
+    c.removeEventListener('pointermove', move); c.removeEventListener('pointerup', up); c.removeEventListener('pointercancel', up);
+    if (!moved && CL.info.previewUrl) { const t = tAt(ev.clientX); if (clipMedia.readyState >= 1) clipMedia.currentTime = t; else CL.seekTo = t; clipDraw(); clipClock(); }
+  };
+  c.addEventListener('pointermove', move); c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
+});
+$('#clipWaveC').addEventListener('wheel', (e) => {
+  if (!CL.info) return;
+  e.preventDefault();
+  const r = e.currentTarget.getBoundingClientRect();
+  clipView(e.deltaY < 0 ? 0.8 : 1.25, CL.v0 + (e.clientX - r.left) / r.width * (CL.v1 - CL.v0));
+}, { passive: false });
+
+// ---- preview (plays inside CLIP; the main player and the YouTube page pause)
+function clipClock() { $('#clipClock').innerHTML = `${clipMedia.paused ? '&#10074;&#10074;' : '&#9654;'} ${clipFmt(clipMedia.currentTime || 0)}`; $('#clipPrevT').textContent = clipFmt(clipMedia.currentTime || 0); }
+function clipTick() {
+  CL.raf = 0;
+  if (clipMedia.paused) { clipClock(); clipDraw(); return; }
+  const t = clipMedia.currentTime;
+  if (CL.range && t >= CL.range[1]) {
+    if (CL.range[2]) clipMedia.currentTime = CL.range[0];
+    else { clipMedia.pause(); CL.range = null; }
+  }
+  clipClock(); clipDraw();
+  CL.raf = clipDoc().defaultView.requestAnimationFrame(clipTick);
+}
+function clipPlayRange(a, b, loop) {
+  if (!CL.info || !CL.info.previewUrl) return;
+  if (status === 'playing') pause();
+  if (YW.visible) P.ytwPause();
+  CL.range = [Math.max(0, a), Math.min(clipDur(), b), !!loop];
+  clipMedia.currentTime = CL.range[0];
+  clipMedia.play().catch(() => {});
+  if (!CL.raf) CL.raf = clipDoc().defaultView.requestAnimationFrame(clipTick);
+}
+function clipStopPreview() { try { clipMedia.pause(); } catch (_) {} CL.range = null; }
+function clipPausePreview() { if (!clipMedia.paused) clipMedia.pause(); }
+clipMedia.addEventListener('loadedmetadata', () => { if (CL.seekTo != null) { clipMedia.currentTime = CL.seekTo; CL.seekTo = null; } });
+for (const evn of ['seeked', 'timeupdate']) clipMedia.addEventListener(evn, () => { if (clipMedia.paused) { clipClock(); clipDraw(); } });
+clipMedia.addEventListener('play', () => { if (!CL.raf) CL.raf = clipDoc().defaultView.requestAnimationFrame(clipTick); clipPlayBtn(); });
+clipMedia.addEventListener('pause', () => { clipClock(); clipDraw(); clipPlayBtn(); });
+function clipPlayBtn() { $('#clipPlay').innerHTML = clipMedia.paused ? '&#9654; Play clip' : '&#10074;&#10074; Pause'; }
+const clipToggle = () => { if (!clipMedia.paused) clipMedia.pause(); else clipPlayRange(CL.in, CL.out, CL.loop); };
+$('#clipPlay').onclick = clipToggle;
+$('#clipLoop').onclick = () => { CL.loop = !CL.loop; $('#clipLoop').classList.toggle('dim', !CL.loop); if (CL.range) CL.range[2] = CL.loop; };
+$('#clipEdgeIn').onclick = () => clipPlayRange(CL.in - 1.5, CL.in + 1.5);
+$('#clipEdgeOut').onclick = () => clipPlayRange(CL.out - 1.5, CL.out + 1.5);
+// keys while the CLIP window is the active one (returns true when it used the key)
+function clipKey(e) {
+  if (!CL.info) return false;
+  const k = e.key;
+  if (k === ' ') { e.preventDefault(); clipToggle(); return true; }
+  if (k === 'ArrowLeft' || k === 'ArrowRight') { e.preventDefault(); clipSet(CL.last, CL[CL.last] + (k === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 1 : 0.1)); return true; }
+  if (!e.ctrlKey && !e.altKey && (k === 'i' || k === 'I')) { if (CL.info.previewUrl) clipSet('in', clipMedia.currentTime || 0); return true; }
+  if (!e.ctrlKey && !e.altKey && (k === 'o' || k === 'O')) { if (CL.info.previewUrl) clipSet('out', clipMedia.currentTime || 0); return true; }
+  if (!e.ctrlKey && !e.altKey && (k === 'g' || k === 'G')) { if (CL.info.hasVideo) clipShotAdd(); return true; }   // SLOP's G, now a CLIP shot
+  if (k === 'Escape') { clipStopPreview(); return true; }
+  return false;
+}
+
+// ---- saving
+function clipTargetTab() {
+  if (S.tabs[S.tab] && !isHist(S.tabs[S.tab])) return S.tab;
+  return S.tabs.findIndex(t => !isHist(t));
+}
+// add files (clips) to a tab, as playlist items; returns the new items
+async function addFilesToTab(paths, ti, autoplay = false) {
+  const tab = S.tabs[ti]; if (!tab || isHist(tab) || !paths.length) return [];
+  const res = await P.describeFiles(paths);
+  const items = res.filter(r => r.path).map(r => ({ id: nid(), type: 'file', path: r.path, title: r.title, duration: r.duration || 0, hasVideo: !!r.hasVideo, missing: !!r.missing }));
+  if (ti === S.tab) insertItems(items, undefined, autoplay);
+  else { tab.items.push(...items); renderTabs(); saveSoon(); }
+  return items;
+}
+async function clipSave() {
+  if (!CL.info || CL.job) return;
+  const job = `c${Date.now()}`;
+  CL.job = job;
+  clipStopPreview();
+  const btn = $('#clipSave');
+  btn.classList.add('busy'); btn.disabled = true; btn.textContent = 'Saving…';
+  $('#clipCancel').classList.remove('hidden');
+  let res;
+  try {
+    res = await P.clipSave({ job, file: CL.file, in: CL.in, out: CL.out, kind: CL.kind, name: $('#clipName').value,
+      fadeIn: $('#clipFadeIn').checked ? 0.5 : 0, fadeOut: $('#clipFadeOut').checked ? 2 : 0, quality: CL.quality, cut: CL.cut,
+      alsoMp3: CL.kind === 'mp4' && $('#clipAlsoMp3').checked, srcTitle: CL.srcTitle, item: CL.item });
+  } finally {
+    CL.job = null; btn.classList.remove('busy'); btn.disabled = false;
+    $('#clipCancel').classList.add('hidden');
+    clipRenderTimes();
+  }
+  for (const f of (res && res.files) || []) CL.saved.unshift(f);
+  clipRenderSaved();
+  if (!res || !res.ok) { toast(res && res.canceled ? 'Clip canceled.' : (res && res.error) || 'Couldn’t save the clip.', 3500); return res; }
+  if ($('#clipAddTo').checked) { const t = clipTargetTab(); if (t >= 0) await addFilesToTab(res.files.map(f => f.path), t); }
+  const names = res.files.map(f => f.path.split(/[\\/]/).pop());
+  toast(`✓ Saved ${names.join(' and ')}`, 3500);
+  if ($('#dlmDlg').open) dlmRefresh();
+  return res;
+}
+$('#clipSave').onclick = clipSave;
+$('#clipCancel').onclick = () => { if (CL.job) P.clipCancel(CL.job); };
+P.onClip((ev) => { if (ev && ev.type === 'progress' && ev.job === CL.job) $('#clipSave').textContent = `Saving ${Math.max(0, Math.min(100, ev.pct))}%…`; });
+$('#clipFolderBtn').onclick = () => P.clipFolder(CL.kind);
+$('#clipLibBtn').onclick = () => openDownloadsManager('clips');
+$('#clipEmptyLib').onclick = () => openDownloadsManager('clips');
+$('#clipEmptyPick').onclick = async () => { const f = await P.clipPick(); if (f) clipOpen(f); };
+$('#clipEmptyCur').onclick = () => {
+  const cur = curItem(); if (!cur) return;
+  const kind = clipSource(cur, 'mp4') ? 'mp4' : 'mp3';
+  const t = engine === 'local' ? currentTime() : 0;
+  const f = clipSource(cur, kind);
+  if (f) clipOpen(f, { kind, item: cur, title: cur.title, ...(t > 0 ? { in: t, out: t + 30 } : {}) });
+};
+
+// ---- SHOTS (2.3: SLOP's LOOK, moved into CLIP). Videos only, collapsed to one line until a shot is taken.
+// Full-size frames from the file (main.js / clip.js "SHOTS"), saved in Downloads\SlopAMP\Shots\<video title>\ as
+// ref-01 Name (kind).png …; ★ Lead = ref-01; ◀ 1 s / ↻ / 1 s ▶ grab it again; Burst ×5 across the clip, keep the good ones.
+const shotKey = () => ({ file: CL.file, title: CL.srcTitle });
+function clipShotsLoad() {
+  if (!CL.info || !CL.info.hasVideo) { CL.shots = null; clipRenderShots(); return; }
+  const f = CL.file;
+  P.clipShots(shotKey()).then((v) => { if (CL.file !== f || !v || v.error) return; CL.shots = v; if (v.shots.length || v.burst.length) CL.shotsOpen = true; clipRenderShots(); });
+}
+function clipShotsSet(v) {
+  if (!v) return false;
+  if (v.error) { toast(v.error); return false; }
+  CL.shots = v; CL.shotsOpen = true;
+  if (!v.shots.some(s => s.n === CL.shotSel)) CL.shotSel = v.shots.length ? v.shots[v.shots.length - 1].n : null;
+  clipRenderShots();
+  return true;
+}
+function clipRenderShots() {
+  const sec = $('#clipShots'), v = CL.shots, has = !!(CL.info && CL.info.hasVideo);
+  sec.classList.toggle('hidden', !has);
+  if (!has) return;
+  const shots = (v && v.shots) || [], burst = (v && v.burst) || [];
+  $('#clipShotCount').textContent = shots.length ? `${shots.length} shot${shots.length === 1 ? '' : 's'}` : '';
+  $('#clipShotBody').classList.toggle('hidden', !CL.shotsOpen);
+  $('#clipShotToggle').innerHTML = CL.shotsOpen ? '&#9652;' : '&#9662;';
+  $('#clipShotToggle').title = CL.shotsOpen ? 'Hide the shots' : 'Show the shots';
+  $('#clipBurst').disabled = !!CL.shotBusy;
+  const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  $('#clipShotStrip').innerHTML = shots.length ? shots.map(s => `<div class="slop-th${s.n === CL.shotSel ? ' sel' : ''}" data-n="${s.n}" title="${esc(s.file)}"><img src="${esc(s.url)}" alt="" draggable="false">${s.lead ? '<span class="slop-th-lead">&#9733; LEAD</span>' : ''}<span class="slop-th-t">${clipFmt(s.t, false)}</span><div class="slop-th-cap">${esc(s.name || s.file.replace(/\.png$/, ''))}${s.kind ? ` <span>${s.kind}</span>` : ''}</div></div>`).join('')
+    : `<span class="dim">No shots yet: move the preview to a good frame and press <b>+ Shot</b> (or G), or try <b>Burst ×5</b>.</span>`;
+  const s = shots.find(x => x.n === CL.shotSel);
+  $('#clipShotEd').classList.toggle('hidden', !s);
+  if (s) {
+    $('#clipShotFile').textContent = s.file;
+    $('#clipShotAt').textContent = `· ${s.w && s.h ? `${s.w}×${s.h} · ` : ''}at ${clipFmt(s.t)}`;
+    const nm = $('#clipShotName'); if (nm.ownerDocument.activeElement !== nm) nm.value = s.name;
+    for (const b of $$('#clipShotEd [data-kind]')) b.classList.toggle('on', b.dataset.kind === s.kind);
+    $('#clipShotLead').disabled = s.lead;
+  }
+  const box = $('#clipBurstBox');
+  box.classList.toggle('hidden', !burst.length);
+  if (burst.length) {
+    CL.burstPick = CL.burstPick && CL.burstPick.length === burst.length ? CL.burstPick : burst.map(() => false);
+    const k = CL.burstPick.filter(Boolean).length;
+    box.innerHTML = `<div class="slop-burst-h"><b>BURST</b> · pick the ones to keep</div><div class="clip-burst-row">${burst.map((b, i) => `<div class="clip-burst-th${CL.burstPick[i] ? ' on' : ''}" data-i="${i}"><img src="${esc(b.url)}" alt="" draggable="false"><span class="chk">${CL.burstPick[i] ? '&#10003; keep' : '&nbsp;'}</span><span class="slop-th-t">${clipFmt(b.t, false)}</span></div>`).join('')}</div><div class="slop-row"><button type="button" class="sb" id="clipBurstKeep"${k ? '' : ' disabled'}>Keep ${k || ''}</button><button type="button" class="sb dim" id="clipBurstDrop">Discard the rest</button></div>`;
+  }
+  $('#clipShotWhere').textContent = v && v.dir ? `Saved in ${v.dir}` : '';
+}
+// shots are queued: pressing G twice quickly makes two shots (the time is taken when the key is pressed)
+let shotChain = Promise.resolve();
+function clipShotAdd() {
+  if (!CL.info || !CL.info.hasVideo) return shotChain;
+  const t = clipMedia.readyState >= 1 ? clipMedia.currentTime : CL.in, key = shotKey();
+  shotChain = shotChain.then(async () => {
+    const v = await P.clipShotAdd({ ...key, t });
+    if (CL.file !== key.file) return;
+    if (clipShotsSet(v) && v.added) { CL.shotSel = v.added; clipRenderShots(); toast(`Shot at ${clipFmt(t)} saved`, 1500); }
+  }).catch(() => {});
+  return shotChain;
+}
+async function clipShotBurst() {
+  if (!CL.info || !CL.info.hasVideo || CL.shotBusy) return;
+  CL.shotBusy = true; CL.burstPick = null; CL.shotsOpen = true; clipRenderShots();
+  $('#clipBurst').textContent = 'Burst…';
+  const v = await P.clipShotBurst({ ...shotKey(), a: CL.in, b: CL.out, count: 5 });
+  CL.shotBusy = false; $('#clipBurst').innerHTML = 'Burst &times;5';
+  clipShotsSet(v);
+}
+async function clipShotSet(patch) {
+  if (CL.shotSel == null) return;
+  CL.shotBusy = true;
+  const v = await P.clipShotSet({ ...shotKey(), n: CL.shotSel, patch });
+  CL.shotBusy = false;
+  clipShotsSet(v);
+}
+$('#clipShotAdd').onclick = clipShotAdd;
+$('#clipBurst').onclick = clipShotBurst;
+$('#clipShotToggle').onclick = () => { CL.shotsOpen = !CL.shotsOpen; clipRenderShots(); };
+$('#clipShotStrip').addEventListener('click', (e) => {
+  const th = e.target.closest('.slop-th'); if (!th) return;
+  CL.shotSel = +th.dataset.n; clipRenderShots();
+  const s = CL.shots.shots.find(x => x.n === CL.shotSel);
+  if (s && CL.info.previewUrl) { clipMedia.currentTime = s.t; clipDraw(); clipClock(); }
+});
+for (const b of $$('#clipShotEd [data-kind]')) b.onclick = () => { const s = CL.shots && CL.shots.shots.find(x => x.n === CL.shotSel); clipShotSet({ kind: s && s.kind === b.dataset.kind ? '' : b.dataset.kind }); };
+$('#clipShotName').addEventListener('change', (e) => clipShotSet({ name: e.target.value.trim() }));
+$('#clipShotName').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
+$('#clipShotLead').onclick = () => clipShotSet({ lead: true });
+$('#clipShotPrev').onclick = () => clipShotSet({ dt: -1 });
+$('#clipShotRe').onclick = () => clipShotSet({ dt: 0 });
+$('#clipShotNext').onclick = () => clipShotSet({ dt: 1 });
+$('#clipShotDel').onclick = async () => { if (CL.shotSel == null) return; const v = await P.clipShotDel({ ...shotKey(), n: CL.shotSel }); CL.shotSel = null; clipShotsSet(v); };
+$('#clipShotDir').onclick = () => P.clipShotFolder(shotKey());
+$('#clipBurstBox').addEventListener('click', async (e) => {
+  const th = e.target.closest('.clip-burst-th');
+  if (th) { const i = +th.dataset.i; CL.burstPick[i] = !CL.burstPick[i]; clipRenderShots(); return; }
+  if (e.target.closest('#clipBurstKeep') || e.target.closest('#clipBurstDrop')) {
+    const picks = e.target.closest('#clipBurstKeep') ? CL.burstPick.map((on, i) => (on ? i : -1)).filter(i => i >= 0) : [];
+    CL.burstPick = null;
+    clipShotsSet(await P.clipShotKeep({ ...shotKey(), picks }));
+  }
+});
+
+// ---- EDIT (2.3): the player's old SLOP button. Click: CLIP on the selected (else playing) song or video — as MP4 when
+// it has a video file, else MP3 (switchable in CLIP); a playing local file starts the preview where it's playing. Not
+// downloaded yet: a small menu (it's downloaded first). Click again while CLIP shows that file: CLIP closes.
+// Right-click: Clip MP3 / Clip video, Library → CLIPS. (2.3: SLOP is hidden — its code and packs stay; see "SLOP" above.)
+function editTarget() { return S.items.find(i => S.sel.has(i.id)) || curItem() || null; }
+async function editClick() {
+  const it = editTarget();
+  if (!it) { clipShow(!clipVisible); return; }
+  const kind = clipSource(it, 'mp4') ? 'mp4' : 'mp3', f = clipSource(it, kind);
+  if (clipVisible && f && CL.file === f) { clipShow(false); return; }
+  if (f) {
+    const t = it === curItem() && engine === 'local' && localPathOf(it) === f ? currentTime() : null;
+    const ok = await clipOpen(f, { kind, item: it, title: it.title });
+    if (ok && t > 0) { if (clipMedia.readyState >= 1) clipMedia.currentTime = t; else CL.seekTo = t; }
+    return;
+  }
+  if (isWeb(it) && !it.live) { editMenu(); return; }
+  toast(it.live ? 'A live stream can\u2019t be clipped.' : 'That file isn\u2019t there any more.');
+}
+function editMenu() {
+  const b = $('#bSlop'), it = editTarget();
+  openPop((add, hr) => {
+    if (it) {
+      add('dm-sec', 'EDIT');
+      const mp3 = clipSource(it, 'mp3'), mp4 = clipSource(it, 'mp4'), web = isWeb(it) && !it.live;
+      if (mp3 || web) add('dm-item', `\u2702 Clip MP3\u2026${mp3 ? '' : '  (downloads the MP3 first)'}`, () => clipItem(it, 'mp3'), it.title);
+      else add('dm-item off', '\u2702 Clip MP3\u2026');
+      if (mp4 || web) add('dm-item', `\u2702 Clip video\u2026${mp4 ? '' : '  (downloads the video first)'}`, () => clipItem(it, 'mp4'), it.title);
+      else if (it.type !== 'file' || it.hasVideo) add('dm-item off', '\u2702 Clip video\u2026');
+      hr();
+    } else add('dm-item', 'Open CLIP', () => clipShow(true));
+    add('dm-item', 'Library \u2192 CLIPS', () => openDownloadsManager('clips'));   // (SLOP is hidden in 2.3)
+  }, b);
+}
+$('#bSlop').onclick = () => editClick();
+$('#bSlop').addEventListener('contextmenu', (e) => { e.preventDefault(); editMenu(); });
+
+// ------------------------------------------------------------------ Library → CLIPS (2.3)
+// The CLIPS button: every file in mp3clips / mp4clips, with All / MP3 clips / MP4 clips. Clip rows are part
+// of DLM.rows (kind 'mp3clip' / 'mp4clip'), so ALL lists them too.
+const CLS = { sub: 'all' };
+const clipMode = () => DLM.filter === 'clips';
+const isClipRow = (r) => r && (r.kind === 'mp3clip' || r.kind === 'mp4clip');
+for (const b of $('#clsub').children) b.onclick = () => { CLS.sub = b.dataset.c; DLM.anchor = -1; dlmRender(); };
+function clipLibSel() { return dlmVisible().filter(r => isClipRow(r) && DLM.sel.has(dlmKey(r))); }
+function clipLibButtons() {
+  const sel = clipLibSel();
+  $('#clAdd').disabled = !sel.length;
+  $('#clAgain').disabled = !(sel.length === 1 && sel[0].srcExists);
+  $('#clAgain').title = sel.length === 1 && !sel[0].srcExists ? 'The file it was cut from isn’t there any more' : 'Open CLIP on the original with the same In / Out';
+  $('#clDel').disabled = !sel.length;
+  $('#clDel').textContent = `🗑 Delete selected${sel.length ? ` (${sel.length})` : ''}`;
+}
+function clipAgain(r) {
+  if (!r || !r.srcExists) { toast('The file this clip was cut from isn’t there any more.'); return; }
+  if ($('#dlmDlg').open) $('#dlmDlg').close();
+  const it = r.item && allItems().find(i => isWeb(i) && i.vid === r.item.vid);
+  clipOpen(r.src, { kind: r.kind === 'mp4clip' ? 'mp4' : 'mp3', item: it || (r.item ? { ...r.item } : null), title: r.from || undefined, in: r.in, out: r.out });
+}
+// Library rows -> play / add (files, or the clip / download as a file item)
+async function libAdd(rows, play) {
+  rows = rows.filter(r => r && !r.missing && r.kind !== 'playlist');
+  if (!rows.length) return;
+  const t = clipTargetTab(); if (t < 0) return;
+  const tab = S.tabs[t];
+  let first = null;
+  const fresh = [];
+  for (const r of rows) {
+    const have = tab.items.find(i => (i.type === 'file' ? i.path : localPathOf(i)) === r.path);
+    if (have && play) { first = first || have; continue; }
+    fresh.push(r.path);
+  }
+  const added = await addFilesToTab(fresh, t, false);
+  first = first || added[0];
+  if (play && first) { if (S.tab !== t) switchTab(t); playIndex(S.tabs[t].items.indexOf(first), 0, { tab: t }); }
+  else if (added.length) toast(`Added ${added.length} to "${tab.name}"`, 2000);
+}
+$('#clAdd').onclick = () => libAdd(clipLibSel(), false);
+$('#clAgain').onclick = () => { const s = clipLibSel(); if (s.length === 1) clipAgain(s[0]); };
+$('#clDel').onclick = () => { const rows = clipLibSel(); if (rows.length) dlmDelete(rows); };
+$('#clDir3').onclick = () => P.clipFolder('mp3');
+$('#clDir4').onclick = () => P.clipFolder('mp4');
+// Rename a clip (Library row menu)
+async function clipRenameRow(r) {
+  const d = $('#clRenDlg'), inp = $('#clRenIn');
+  inp.value = r.title;
+  d.returnValue = '';
+  d.showModal(); setTimeout(() => { inp.focus(); inp.select(); }, 0);
+  const ok = await new Promise((res) => d.addEventListener('close', () => res(d.returnValue === 'ok'), { once: true }));
+  if (!ok || !inp.value.trim() || inp.value.trim() === r.title) return;
+  const res = await P.clipRename(r.path, inp.value.trim());
+  if (!res || res.error) { toast((res && res.error) || 'Couldn’t rename it.'); return; }
+  for (const it of allItems()) if (it.type === 'file' && it.path === r.path) { it.path = res.path; it.title = res.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, ''); }
+  renderList(); saveSoon();
+  await dlmRefresh();
+}
+$('#clRenIn').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); $('#clRenDlg').close('ok'); } });
+// Right-click a Library row (2.3: the Library had no row menu before)
+$('#dlmBody').addEventListener('contextmenu', (e) => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  e.preventDefault();
+  const vis = dlmVisible(), r = vis[+tr.dataset.i]; if (!r) return;
+  if (!DLM.sel.has(dlmKey(r))) { DLM.sel = new Set([dlmKey(r)]); DLM.anchor = +tr.dataset.i; dlmRender(); }
+  const sel = vis.filter(x => DLM.sel.has(dlmKey(x)));
+  const t = clipTargetTab(), tname = t >= 0 ? S.tabs[t].name : 'Main';
+  const en = [];
+  if (r.kind === 'playlist') {
+    en.push([sel.length > 1 ? `Open ${sel.length} in new tabs` : 'Open in new tab', () => openPlaylistFiles(sel.filter(x => x.kind === 'playlist'))]);
+  } else if (!r.missing) {
+    en.push(['Play', () => libAdd([r], true)], [`Add to "${tname}"${sel.length > 1 ? ` (${sel.length})` : ''}`, () => libAdd(sel, false)],
+      ['Add to new tab', async () => { const n = newTab(); renderList(); await addFilesToTab(sel.filter(x => !x.missing && x.kind !== 'playlist').map(x => x.path), n); }]);
+    if (isClipRow(r)) {
+      en.push(null, [r.srcExists ? '✂ Clip again…  (same In/Out)' : '✂ Clip again…  (the original is gone)', () => clipAgain(r), !r.srcExists]);
+      if (r.srcExists) en.push(['Show original', () => P.showInFolder(r.src)]);
+      en.push(null, ['Rename…', () => clipRenameRow(r)]);
+    } else {
+      const fake = { type: 'file', path: r.path, hasVideo: r.kind === 'video' };
+      en.push(null, ['✂ Clip MP3…', () => { $('#dlmDlg').close(); clipOpen(r.path, { kind: 'mp3', title: r.title }); }]);
+      if (fake.hasVideo) en.push(['✂ Clip video…', () => { $('#dlmDlg').close(); clipOpen(r.path, { kind: 'mp4', title: r.title }); }]);
+      en.push(null);
+    }
+  }
+  if (!r.missing) en.push(['Show in folder', () => P.showInFolder(r.path)]);
+  en.push([`Delete${sel.length > 1 ? ` (${sel.length})` : ''}`, () => dlmDelete(sel)]);
+  showCtxMenu(en, e.clientX, e.clientY, e.target.ownerDocument);
+});
+
+// ------------------------------------------------------------------ YOUTUBE window (2.3)
+// youtube.com in a SlopAMP window: the YOUTUBE button on the playlist (or Layout → YOUTUBE). Opening it moves
+// the player's windows to the left edge and the YOUTUBE window fills the rest of the screen (windows.js
+// dockYt); closing it puts them back. The page is a separate web view laid over #ytwView (main.js ytweb.js);
+// only YouTube opens in it. The address can be dragged onto a playlist; + Add / ▶ Play in SlopAMP add the
+// video on the page. No double audio: a video starting on the page pauses SlopAMP, and while SlopAMP plays,
+// a video that starts by itself on the page (autoplay) is paused.
+var ytwVisible = false, ytwShade = false;   // var: syncWindows() reads them
+const YW = { get visible() { return ytwVisible; }, st: { url: '', title: '', back: false, fwd: false, loading: false }, tabId: null };
+function ytwShow(on) {
+  ytwVisible = !!on;
+  if (on) ytwShade = false;
+  syncWindows();
+  $('#pYt').classList.toggle('on', ytwVisible);
+  if (on) { ytwRenderTarget(); setTimeout(ytwMeasure, 80); setTimeout(ytwMeasure, 600); }
+}
+WM.ytweb = { toggle: () => ytwShow(!ytwVisible) };
+$('#pYt').onclick = () => ytwShow(!ytwVisible);
+$('#ytwCloseBtn').onclick = () => ytwShow(false);
+$('#ytwMinBtn').onclick = () => { ytwShade = !ytwShade; syncWindows(); ytwMeasure(); };
+function ytwMeasure() {
+  const v = $('#ytwView'); if (!v) return;
+  if (!ytwVisible || ytwShade) { P.ytwRect(null); return; }
+  const r = v.getBoundingClientRect();
+  P.ytwRect({ x: r.left, y: r.top, w: r.width, h: r.height });
+}
+WM.wins.ytweb && new ResizeObserver(() => ytwMeasure()).observe($('#ytwView'));
+const ytwVideo = () => linkItem(YW.st.url || '');      // the video on the page (null on home, search, a channel…)
+function ytwTargetTab() {
+  let t = YW.tabId ? S.tabs.findIndex(x => x.id === YW.tabId) : -1;
+  if (t < 0 || isHist(S.tabs[t])) t = clipTargetTab();
+  return t;
+}
+function ytwRenderTarget() {
+  const t = ytwTargetTab(), n = t >= 0 ? S.tabs[t].name : 'Main';
+  $('#ytwAdd').textContent = `+ Add to "${n.length > 14 ? `${n.slice(0, 13)}…` : n}"`;
+  $('#ytwAdd').title = `Add this video to the "${n}" tab`;
+}
+function ytwRender() {
+  const st = YW.st, vid = !!ytwVideo();
+  const inp = $('#ytwUrl');
+  if (inp.ownerDocument.activeElement !== inp) inp.value = st.url || '';
+  $('#ytwBack').disabled = !st.back; $('#ytwFwd').disabled = !st.fwd;
+  $('#ytwReload').innerHTML = st.loading ? '&#x2715;' : '&#8635;'; $('#ytwReload').title = st.loading ? 'Stop loading' : 'Reload';
+  $('#ytwAdd').disabled = !vid; $('#ytwPlay').disabled = !vid;
+  $('#ytwGrip').classList.toggle('off', !vid);
+  $('#ytwGrip').title = vid ? 'Drag this onto a playlist tab or row to add the video' : 'Open a video first, then drag this onto the playlist';
+  $('#ytwWait').textContent = st.loading ? 'Loading YouTube…' : '';
+  $('#ytwSum').textContent = st.title ? `· ${st.title.replace(/ - YouTube$/, '')}` : '';
+  ytwRenderStatus();
+  ytwRenderTarget();
+}
+function ytwRenderStatus() {
+  const L = $('#ytwStatL'), cur = curItem();
+  if (YW.st.signIn) L.innerHTML = 'Can’t sign in here? <b>&#9881; &rarr; Open in your normal browser</b>. Watching works signed out.';
+  else if (status === 'playing' && cur) { L.textContent = `● ${cur.title} is playing in SlopAMP, so videos here start paused`; }
+  else L.textContent = YW.st.loading ? 'Loading…' : '';
+}
+P.onYtw((ev) => {
+  if (!ev) return;
+  if (ev.type === 'state') { YW.st = ev; ytwRender(); return; }
+  if (ev.type === 'playing') {
+    if (status === 'playing' && ev.auto) { P.ytwPause(); return; }   // autoplay while SlopAMP plays: the page waits
+    if (status === 'playing') pause();                              // the user started a video on the page
+    clipPausePreview();
+  }
+});
+async function ytwAdd(play) {
+  const it = ytwVideo(); if (!it) { toast('Open a video on YouTube first.'); return; }
+  if (YW.st.title) it.title = YW.st.title.replace(/^\(\d+\)\s*/, '').replace(/ - YouTube$/, '') || it.title;
+  const t = ytwTargetTab(); if (t < 0) return;
+  const tab = S.tabs[t];
+  if (t === S.tab) insertItems([it], undefined, false); else { tab.items.push(it); renderTabs(); saveSoon(); }
+  attachKnownCopies([it]);
+  fillWebMeta(it);
+  if (play) { P.ytwPause(); playIndex(tab.items.indexOf(it), 0, { tab: t }); if (S.tab !== t) switchTab(t); }
+  else toast(`Added to "${tab.name}"`, 1800);
+}
+$('#ytwAdd').onclick = () => ytwAdd(false);
+$('#ytwPlay').onclick = () => ytwAdd(true);
+$('#ytwTabs').onclick = (e) => {
+  const anchor = e.currentTarget;
+  openPop((add, hr) => {
+    add('dm-sec', '+ Add puts the video in');
+    const cur = ytwTargetTab();
+    S.tabs.forEach((t, i) => { if (!isHist(t)) add(`dm-item${i === cur ? ' cur' : ''}`, t.name, () => { YW.tabId = t.id; ytwRenderTarget(); }); });
+    hr();
+    add('dm-item', 'New tab…', () => { const n = newTab(); YW.tabId = S.tabs[n].id; renderList(); renameTab(n); ytwRenderTarget(); });
+  }, anchor);
+};
+$('#ytwBack').onclick = () => P.ytwNav('back');
+$('#ytwFwd').onclick = () => P.ytwNav('forward');
+$('#ytwReload').onclick = () => P.ytwNav(YW.st.loading ? 'stop' : 'reload');
+$('#ytwHome').onclick = () => P.ytwNav('home');
+$('#ytwUrl').addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter') { e.preventDefault(); P.ytwNav('go', e.target.value); e.target.blur(); }
+  else if (e.key === 'Escape') { e.target.value = YW.st.url || ''; e.target.blur(); }
+});
+$('#ytwUrl').addEventListener('focus', (e) => e.target.select());
+$('#ytwGrip').addEventListener('dragstart', (e) => {
+  const it = ytwVideo();
+  if (!it) { e.preventDefault(); toast('Open a video on YouTube first, then drag it onto the playlist.'); return; }
+  e.dataTransfer.setData('text/uri-list', YW.st.url);
+  e.dataTransfer.setData('text/plain', YW.st.url);
+  e.dataTransfer.effectAllowed = 'copy';
+});
+$('#ytwMore').onclick = (e) => {
+  const anchor = e.currentTarget;
+  openPop((add, hr) => {
+    add('dm-item', '↗ Open this page in your normal browser', () => P.ytwNav('external'));
+    add('dm-item', 'Clear YouTube data (signs you out)…', async () => {
+      if (await confirmBox('Clear YouTube data?', 'This signs you out of YouTube in SlopAMP’s YOUTUBE window and clears its cookies and cache. Your playlists and downloads aren’t touched.', 'Clear')) { await P.ytwClear(); toast('YouTube data cleared.', 2000); }
+    });
+    hr();
+    add('dm-note', 'Only YouTube opens in this window; links to other sites open in your normal browser. SlopAMP doesn’t change YouTube’s pages. Drag the address (or a video’s thumbnail) onto a playlist to add it.').style.wordBreak = 'normal';
+  }, anchor);
+};
+
 // ------------------------------------------------------------------ Library → SKINS (1.7)
 // Your skins (Downloads\SlopAMP\skins, main.js "user skins") and the built-ins: apply, edit, rename,
 // export, show in Explorer, delete (Recycle Bin), import. Built-ins can't be renamed or deleted.
@@ -3621,7 +4460,7 @@ function slopLibRender() {
   grid.classList.toggle('list', list);
   if (!vis.length) {
     const q = ($('#dlmSearch').value || '').trim();
-    grid.innerHTML = `<div class="sl-empty">${SLIB.rows.length ? (q ? `No pack matches "${slopEsc(q)}".` : 'No pack has all of these.') : 'No SLOP packs yet. Play a YouTube video and click SLOP (or press G) to make one.'}</div>`;
+    grid.innerHTML = `<div class="sl-empty">${SLIB.rows.length ? (q ? `No pack matches "${slopEsc(q)}".` : 'No pack has all of these.') : 'No SLOP packs yet. Play a YouTube video, then right-click EDIT → SLOP this YouTube moment (or press G) to make one.'}</div>`;
   } else {
     grid.innerHTML = vis.map((r, i) => {
       const on = SLIB.sel.has(r.id), names = r.refs.map(x => x.name).filter(Boolean).join(' · ') || '—';
@@ -3684,8 +4523,8 @@ async function slopLibOpen(id, web) {
 // size: drag the grip (the dialog stays centred, so the width changes twice as fast as the cursor)
 function dlmApplySize() {
   const d = $('#dlmDlg'), scr = d.ownerDocument.defaultView.screen;
-  const big = slopMode(), mid = skinMode();
-  const w = S.lib.w || (big ? 1000 : mid ? 840 : 0), h = S.lib.h || (big ? 660 : 0);
+  const big = slopMode(), mid = skinMode() || clipMode();
+  const w = S.lib.w || (big ? 1000 : mid ? 880 : 0), h = S.lib.h || (big ? 660 : 0);
   d.style.width = w ? `${Math.min(w, scr.availWidth - 20)}px` : '';
   d.style.height = h ? `${Math.min(h, scr.availHeight - 20)}px` : '';
   d.classList.toggle('sized', !!h);
@@ -3858,7 +4697,8 @@ setInterval(() => { blink = !blink; }, 500);
     S.plShade = !!st.plShade; S.vidShade = !!st.vidShade;
     S.plHeight = st.plHeight || 230; visMode = st.visMode || 0;
     if (st.eq && Array.isArray(st.eq.gains) && st.eq.gains.length === 10) S.eq = { ...S.eq, ...st.eq };
-    if (S.eq.panel === 'hidden') S.eq.panel = 'open';   // the equalizer always shows at launch (minimized stays minimized)
+    // the equalizer always shows at launch (minimized stays minimized), except with Layout → Classic (stacked, No EQ)
+    if (S.eq.panel === 'hidden' && WM.info.preset !== 'classic-noeq') S.eq.panel = 'open';
     if (st.resume && typeof st.resume === 'object') S.resume = st.resume;
     S.subsOn = !!st.subsOn;
     if (st.lib && typeof st.lib === 'object') S.lib = { w: Number(st.lib.w) || 0, h: Number(st.lib.h) || 0, view: st.lib.view === 'list' ? 'list' : 'grid' };
