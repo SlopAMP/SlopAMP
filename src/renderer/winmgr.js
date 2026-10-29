@@ -21,8 +21,8 @@
   // ---------------------------------------------------------------- frames
   // Each window's frame: title, extra title slot, buttons (ids are what app.js wires up) and content.
   const FRAMES = {
-    main: { title: 'SLOPAMP', tbId: 'titlebar', logo: true, fit: true, content: ['#deck', '#updBar'],
-      buttons: [['btnAbout', '?', 'About / licenses'], ['btnLayout', '&#x29C9;', 'Window layout'], ['btnMin', '&#x2013;', 'Minimize'], ['btnMini', '&#x25AD;', 'Mini player (M)'], ['btnClose', '&#x2715;', 'Close']] },
+    main: { title: 'SLOPAMP', tbId: 'titlebar', logo: true, fit: true, content: ['#miniBar', '#deck', '#updBar'],
+      buttons: [['btnAbout', '?', 'About / licenses'], ['btnLayout', '&#x29C9;', 'Window layout'], ['btnMin', '&#x2013;', 'Minimize'], ['btnMini', '&#x25AD;', 'Mini mode (Ctrl+M)'], ['btnClose', '&#x2715;', 'Close']] },
     eq: { title: 'EQUALIZER', tbId: 'eqTitle', sumId: 'eqSum', fit: true, content: ['#eqPanel'],
       buttons: [['eqMinBtn', '&#x2013;', 'Minimize equalizer'], ['eqCloseBtn', '&#x2715;', 'Close equalizer']] },
     video: { title: 'VIDEO', tbId: 'visTitle', sumId: 'visSum', grip: true, content: ['#screen'],
@@ -169,6 +169,7 @@
       doc.defaultView.addEventListener('blur', end, { once: true });
     };
     tb.addEventListener('pointerdown', (e) => { if (!e.target.closest('button, .logo-dot.has-upd') && !document.body.classList.contains('fs')) startDrag(e, 'move', tb); });
+    if (id === 'main') WM.dragMain = (e, el) => startDrag(e, 'move', el);   // the mini bar (2.4) moves the player window too
     tb.addEventListener('contextmenu', (e) => { e.preventDefault(); openLayoutMenu({ doc, x: e.clientX, y: e.clientY }); });
     const grip = f.querySelector('.frame-grip');
     if (grip) grip.addEventListener('pointerdown', (e) => startDrag(e, 'resize', grip));
@@ -210,6 +211,7 @@
     m.appendChild(document.createElement('hr'));
     add(`dm-item${WM.info.snap ? ' cur' : ''}`, 'Snap to edges &amp; windows', async () => { WM.info = await P.wmOption('snap', !WM.info.snap); });
     add(`dm-item${WM.info.onTop ? ' cur' : ''}`, 'Keep windows on top', async () => { WM.info = await P.wmOption('onTop', !WM.info.onTop); });
+    if (WM.mini) add(`dm-item${WM.mini.on() ? ' cur' : ''}`, 'Mini mode<small>Ctrl+M</small>', () => WM.mini.toggle());   // 2.4 (#20)
     m.appendChild(document.createElement('hr'));
     add('dm-item', 'Reset layout<small>Ctrl+Alt+R</small>', () => WM.reset());
     m.appendChild(document.createElement('hr'));
@@ -225,7 +227,7 @@
   }
   WM.openLayoutMenu = openLayoutMenu;
   // app.js may show/hide windows first (Classic (stacked, No EQ) hides the EQ window, Classic shows it again)
-  WM.preset = async (name) => { if (WM.beforePreset) WM.beforePreset(name); WM.info = await P.wmPreset(name); };
+  WM.preset = async (name) => { if (WM.beforePreset) await WM.beforePreset(name); WM.info = await P.wmPreset(name); };
   // Reset layout: every window back, unshaded, stacked on the main screen. Rescues off-screen windows.
   WM.reset = async () => {
     if (WM.onReset) await WM.onReset();

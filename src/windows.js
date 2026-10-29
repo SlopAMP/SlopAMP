@@ -26,6 +26,7 @@ const HOSTS = ['popup', 'dialog'];
 const FIT = new Set(['main', 'eq']);            // height follows the content
 const MIN = { main: [420, 60], eq: [420, 40], video: [320, 180], playlist: [300, 150], skined: [460, 420], clip: [600, 420], ytweb: [800, 400] };
 const DEF = { w: 420, main: 190, eq: 160, video: 240, playlist: 300, skined: 680, skinedW: 540, clip: 640, clipW: 780, ytweb: 800, ytwebW: 1100 };
+const MINI_W = 480;       // mini mode (2.4): the player window becomes a bar this wide
 const YT_MIN_W = 800;     // the YOUTUBE window is never narrower: on a small screen it overlaps the stack instead
 const SNAP = 10;          // px: how close an edge must be to snap
 const TOUCH = 1;          // px: edges this close count as docked
@@ -64,6 +65,9 @@ class WindowManager {
       // the last layout picked (2.3.1): moving a window makes `preset` "custom", this stays (the lightning bolt reads it)
       if (PRESETS.includes(l.lastPreset)) out.lastPreset = l.lastPreset; else if (PRESETS.includes(out.preset)) out.lastPreset = out.preset;
       out.snap = l.snap !== false; out.onTop = !!l.onTop; if (l.ytFree) out.ytFree = true;
+      // mini mode (2.4): on at the last quit? and where the bar was (windows.main stays the full player's spot)
+      if (l.mini === true) out.mini = true;
+      if (l.miniPos && Number.isFinite(l.miniPos.x) && Number.isFinite(l.miniPos.y)) out.miniPos = { x: Math.round(l.miniPos.x), y: Math.round(l.miniPos.y) };
       for (const id of PANELS) if (l.windows && ok(l.windows[id])) out.windows[id] = r4(l.windows[id]);
       // heights the windows really had (rolled-up windows are shorter than windows[id].h)
       if (l.heights && typeof l.heights === 'object') for (const id of PANELS) if (Number.isFinite(l.heights[id])) out.heights[id] = Math.round(l.heights[id]);
@@ -158,7 +162,13 @@ class WindowManager {
   flush() {
     clearTimeout(this.saveT);
     if (this.started) this.layout.heights = Object.fromEntries(PANELS.map(id => [id, this.hOf(id)]));
-    try { this.saveLayout(JSON.parse(JSON.stringify(this.layout))); } catch (e) { this.log('layout save failed', e); }
+    const out = JSON.parse(JSON.stringify(this.layout));
+    if (this.mini && this.preMini) {        // mini mode: save the full player's spot, and the bar's separately
+      const b = this.b('main');
+      out.miniPos = { x: b.x, y: b.y };
+      out.windows.main = r4(this.preMini.b); out.heights.main = this.preMini.h;
+    }
+    try { this.saveLayout(out); } catch (e) { this.log('layout save failed', e); }
   }
 
   // ---------- window creation ----------
@@ -228,7 +238,7 @@ class WindowManager {
         if (chain.length) this.shift(chain, 0, nb.height - old.h);
         if (id === 'ytweb') this.layout.ytFree = true;
         else if (this.ytPrev && this.ytPrev.ids.includes(id)) this.ytPrev.moved = true;
-        this.layout.preset = 'custom';
+        if (!(this.mini && id === 'main')) this.layout.preset = 'custom';   // moving the mini bar isn't a layout change
         this.persist();
       } finally { busy = false; }
     };
@@ -342,8 +352,10 @@ class WindowManager {
         else if (reflow) this.shift(oldChain, 0, -old.h);
       } else if (vis) {
         const nh = this.hOf(id);
-        if (nh !== old.h && this.started) this.shift(oldChain, 0, nh - old.h);
-        if (nh !== old.h || !this.started) this.apply(id);
+        const miniSwap = id === 'main' && this.miniMoving;   // entering / leaving mini mode: nothing docked moves
+        if (nh !== old.h && this.started && !miniSwap) this.shift(oldChain, 0, nh - old.h);
+        if (nh !== old.h || !this.started || miniSwap) this.apply(id);
+        if (miniSwap) this.miniMoving = false;
       } else this.visible[id] = false;
     }
     if (!this.started) this.start();
@@ -410,7 +422,7 @@ class WindowManager {
     if (win.isFullScreen()) return;
     const cur = screen.getCursorScreenPoint();
     const resize = mode !== 'move';
-    const ids = resize ? [id] : id === 'main' ? this.group('main') : [id];
+    const ids = resize ? [id] : id === 'main' && !this.mini ? this.group('main') : [id];   // the mini bar moves alone
     const start = {};
     for (const o of ids) start[o] = { ...this.rect(o) };
     this.drag = { id, mode, resize, ids, cur, start, chain: resize ? this.below(id) : [], lastH: this.hOf(id) };
@@ -458,7 +470,8 @@ class WindowManager {
     this.mark([]);
     if (moved && this.drag0 === 'ytweb') this.layout.ytFree = true;
     else if (moved && this.ytPrev && dragMode === 'move' && this.ytPrev.ids.includes(this.drag0)) this.ytPrev.moved = true;   // the stack was dragged
-    if (moved) { this.layout.preset = 'custom'; this.persist(); this.toRenderer('wm:layout', this.info()); }
+    if (moved && !(this.mini && this.drag0 === 'main')) { this.layout.preset = 'custom'; this.persist(); this.toRenderer('wm:layout', this.info()); }
+    else if (moved) this.persist();
   }
   // Snap targets: the other visible windows' edges and the screens' work-area edges.
   targets(exclude) {
@@ -603,14 +616,33 @@ class WindowManager {
     this.persist();
     return this.info();
   }
+  // Mini mode (2.4, idea #20): the player window becomes a bar, always on top, where the bar was last time.
+  // Only the model changes here; the renderer then switches body.mini and syncs, which resizes the window.
+  // The other windows stay where they are (the video window too, when it stays open), and come back as they were.
   setMini(on) {
-    this.mini = !!on;
+    on = !!on;
+    if (on !== this.mini) {
+      const b = this.b('main');
+      if (on) {
+        this.preMini = { b: { ...b }, h: this.hOf('main') };
+        const p = this.layout.miniPos;
+        const spot = p && this.onScreen({ x: p.x, y: p.y, w: MINI_W, h: 30 }) ? p : { x: b.x, y: b.y };   // monitor gone: where the player was
+        Object.assign(b, { x: spot.x, y: spot.y, w: MINI_W });
+      } else {
+        this.layout.miniPos = { x: b.x, y: b.y };
+        if (this.preMini) Object.assign(b, this.preMini.b);
+        this.preMini = null;
+      }
+      this.mini = on; this.miniMoving = true;      // the next sync resizes the player without moving docked windows
+      this.layout.mini = on || undefined;
+      this.persist();
+    }
     const m = this.wins.get('main');
     if (m && !m.isDestroyed()) m.setAlwaysOnTop(this.mini || this.layout.onTop, this.mini ? 'floating' : 'normal');
     const dlg = this.wins.get('dialog'); if (dlg && !dlg.isDestroyed() && dlg.isVisible()) this.dialogLevel();
     return this.mini;
   }
-  info() { return { preset: this.layout.preset, lastPreset: this.layout.lastPreset || 'classic', snap: this.layout.snap, onTop: this.layout.onTop, skin: this.layout.skin, version: this.version }; }
+  info() { return { preset: this.layout.preset, lastPreset: this.layout.lastPreset || 'classic', snap: this.layout.snap, onTop: this.layout.onTop, skin: this.layout.skin, mini: !!this.mini, miniAtStart: !!this.layout.mini, version: this.version }; }
 
   // ---------- popup menus and dialogs ----------
   // x, y (and flipY: the anchor's top edge) are in the coordinates of window `from`.

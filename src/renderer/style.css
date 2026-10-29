@@ -845,3 +845,17 @@ body.win-clip.dropping .clip-wave, body.win-clip.dropping .ed-empty { outline: 2
 /* the separator before SKINS (was before SLOP, gone in 2.3.1) */
 .dlm-seg button[data-f="skins"] { margin-left: 15px; position: relative; }
 .dlm-seg button[data-f="skins"]::before { content: ''; position: absolute; left: -9px; top: 2px; bottom: 2px; width: 1px; background: var(--vctl-line); pointer-events: none; }
+
+/* ---- Mini mode (2.4, idea #20): the player window is one bar. body.mini is set in every window. */
+#miniBar { display: none; }
+body.mini #miniBar { display: flex; align-items: center; gap: 4px; padding: 3px 5px; height: 30px; box-sizing: border-box; cursor: move; user-select: none; }
+body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar, body.mini .win[data-win="main"] > .frame-edge { display: none !important; }
+#miniBar .tb { width: 24px; height: 20px; padding: 0; flex: none; cursor: pointer; }
+#miniBar .tb svg { width: 11px; height: 11px; }
+.mini-title { flex: 1; min-width: 60px; overflow: hidden; white-space: nowrap; height: 20px; line-height: 18px; box-sizing: border-box; font-size: var(--fs-s); letter-spacing: 1px; }
+.mini-title .marquee-inner { display: inline-block; padding-left: 5px; }
+.mini-title .marquee-inner.scroll { padding-left: 0; }
+.mini-time { flex: none; min-width: 44px; height: 20px; line-height: 18px; box-sizing: border-box; text-align: right; padding: 0 5px; font-size: var(--fs-s); }
+.mini-vol { display: flex; align-items: center; gap: 2px; flex: none; color: var(--ink-muted); }
+.mini-vol svg { width: 12px; height: 12px; fill: currentColor; }
+.mini-vol input.vol { width: 56px; cursor: pointer; }

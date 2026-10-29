@@ -14,6 +14,19 @@
 <!-- The panels below are wrapped in window frames and spread over separate windows by winmgr.js. -->
 
   <!-- ============ 1. RETRO DECK ============ -->
+  <!-- Mini mode (2.4, idea #20): the player window becomes this one bar (body.mini). Drag it anywhere;
+       double-click it, the button on its right or Ctrl+M goes back to the full player. -->
+  <section id="miniBar" title="Mini mode: drag to move · double-click (or Ctrl+M) for the full player · right-click for the Layout menu">
+    <button class="tb" id="mPrev" title="Previous (Z)"><svg viewBox="0 0 16 16"><path d="M3 3h2v10H3zM13 3v10L6 8z"/></svg></button>
+    <button class="tb" id="mPlay" title="Play (X)"><svg viewBox="0 0 16 16"><path d="M4 2.5v11L13 8z"/></svg></button>
+    <button class="tb" id="mPause" title="Pause (C)"><svg viewBox="0 0 16 16"><path d="M4 3h3v10H4zM9 3h3v10H9z"/></svg></button>
+    <button class="tb" id="mStop" title="Stop (V)"><svg viewBox="0 0 16 16"><path d="M3.5 3.5h9v9h-9z"/></svg></button>
+    <button class="tb" id="mNext" title="Next (B)"><svg viewBox="0 0 16 16"><path d="M11 3h2v10h-2zM3 3v10l7-5z"/></svg></button>
+    <div class="mini-title lcd-inset" id="miniTitleBox"><div class="marquee-inner" id="miniTitle"></div></div>
+    <span class="mini-time lcd-inset" id="miniTime">0:00</span>
+    <span class="mini-vol" title="Volume"><svg viewBox="0 0 16 16"><path d="M2 6h3l4-3v10L5 10H2z"/></svg><input type="range" id="miniVol" class="vol" min="0" max="100" value="80"></span>
+    <button class="tb" id="mFull" title="Back to the full player (double-click the bar, Ctrl+M)"><svg viewBox="0 0 16 16"><path d="M2 6V2h4v1.6H4.7L7 5.9 5.9 7 3.6 4.7V6zm12 4v4h-4v-1.6h1.3L9 10.1 10.1 9l2.3 2.3V10z"/></svg></button>
+  </section>
   <section id="deck">
     <div class="deck-body">
       <div class="lcd" id="lcd">

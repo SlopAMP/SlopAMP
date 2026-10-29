@@ -602,7 +602,9 @@ function setStatus(st) {
     if (typeof clipPausePreview === 'function') clipPausePreview();
     if (ytwVisible) P.ytwPause();
   }
+  const was = status;
   status = st;
+  if (WM.body.contains('mini') && (was === 'stopped') !== (st === 'stopped')) syncWindows({ reflow: false });
   if (ytwVisible && typeof ytwRenderStatus === 'function') setTimeout(ytwRenderStatus, 0);
   updateDlButton();
   $('#vPlayIcon').innerHTML = st === 'playing' ? '<path d="M4 3h3v10H4zM9 3h3v10H9z"/>' : '<path d="M4 2.5v11L13 8z"/>';
@@ -647,6 +649,7 @@ function drawClock() {
   ctx.fillStyle = hide ? off : on;
   ctx.fillRect(71, 12, 4, 4); ctx.fillRect(71, 26, 4, 4);
   ctx.shadowBlur = 0;
+  if (WM.body.contains('mini')) { const mt = $('#miniTime'); const v = `${neg ? '-' : ''}${status === 'stopped' ? 0 : Math.floor(t / 60)}:${String(status === 'stopped' ? 0 : t % 60).padStart(2, '0')}`; if (mt.textContent !== v) mt.textContent = v; mt.style.visibility = hide ? 'hidden' : ''; }
 }
 const stateCtx = $('#stateIcon').getContext('2d');
 function drawStateIcon() {
@@ -664,6 +667,7 @@ function setMarquee(item) {
   const base = item ? `${idx}. ${item.title}${item.duration ? ` (${fmtShort(item.duration)})` : ''}` : 'SLOPAMP · DROP FILES OR PASTE A LINK';
   el.classList.remove('scroll'); el.style.animationDuration = '';
   el.textContent = base;
+  renderMini(item ? item.title : 'SlopAMP');
   requestAnimationFrame(() => {
     const box = $('#marquee');
     if (el.scrollWidth > box.clientWidth - 8) {
@@ -687,6 +691,7 @@ function updateInfo(info, src) {
 function renderVolume() {
   const v = S.muted ? 0 : S.volume;
   const vol = $('#vol'); vol.value = S.volume; vol.style.setProperty('--p', `${S.volume}%`);
+  const mv = $('#miniVol'); if (mv) { mv.value = S.volume; mv.style.setProperty('--p', `${S.volume}%`); }
   $('#wedgeFill').style.width = `${v}%`;
   $('#vPct').textContent = `${S.volume}%`;
   $('#vMute').classList.toggle('muted', S.muted);
@@ -707,7 +712,7 @@ function syncWindows(opts = {}) {
   const vidShade = !fs && (audvis ? S.vis.panel === 'min' : S.vidShade);
   WM.setPanels({
     eq: { visible: !mini && S.eq.panel !== 'hidden', shade: S.eq.panel === 'min' },
-    video: { visible: !mini && (fs || (S.showVideo && !(audvis && S.vis.panel === 'hidden'))), shade: vidShade, title: audvis ? 'VISUALIZER' : 'VIDEO' },
+    video: { visible: mini ? miniVideo() : (fs || (S.showVideo && !(audvis && S.vis.panel === 'hidden'))), shade: vidShade, title: audvis ? 'VISUALIZER' : 'VIDEO' },
     playlist: { visible: !mini && S.showPlaylist, shade: S.plShade },
     skined: { visible: !mini && !!(WM.skins && WM.skins.editorOpen), shade: !!(WM.skins && WM.skins.editorShade) },
     clip: { visible: !mini && !!clipVisible, shade: !!clipShade },          // CLIP (2.3)
@@ -792,7 +797,8 @@ function setEqPanel(mode) {
 }
 // Layout → Classic (stacked, No EQ) hides the EQ window (the EQ itself keeps working: on/off, bands and preset
 // don't change); Layout → Classic (stacked) shows it again. winmgr.js calls this before the layout is applied.
-WM.beforePreset = (name) => {
+WM.beforePreset = async (name) => {
+  if (WM.body.contains('mini')) await toggleMini(false);       // a layout from the Layout menu: leave mini mode first (2.4)
   if (name === 'classic-noeq' && S.eq.panel !== 'hidden') { S.eq.panel = 'hidden'; renderEq(); saveSoon(); }
   else if (name === 'classic' && S.eq.panel === 'hidden') { S.eq.panel = 'open'; renderEq(); saveSoon(); }
 };
@@ -2104,29 +2110,65 @@ P.updGet().then((st) => { UPD = st; renderUpd(); });
 
 // ------------------------------------------------------------------ fullscreen & mini
 // Fullscreen = the video window fills its screen. Mini player = only the player window, kept on top.
+let fsFromMini = false;     // fullscreen started from mini mode: back to the bar afterwards (2.4)
 async function toggleFullscreen(force) {
-  if (WM.body.contains('mini') && force !== false) await toggleMini();
   const going = force === undefined ? !WM.body.contains('fs') : !!force;
+  if (going && WM.body.contains('mini')) { fsFromMini = true; await toggleMini(false); }
   if (going) { fsWanted = true; syncWindows(); }
   const on = await P.setFullscreen(going);
   if (!on) { fsWanted = false; syncWindows(); }
 }
-P.onFullscreen((on) => { fsWanted = false; WM.body.toggle('fs', on); syncWindows(); if (on) bumpIdle(); });
+P.onFullscreen((on) => { fsWanted = false; WM.body.toggle('fs', on); syncWindows(); if (on) bumpIdle(); else if (fsFromMini) { fsFromMini = false; toggleMini(true); } });
 let idleTimer;
 function bumpIdle() { WM.body.remove('idle'); clearTimeout(idleTimer); idleTimer = setTimeout(() => { if (WM.body.contains('fs')) WM.body.add('idle'); }, 2500); }
 WM.onDocs('mousemove', () => { if (WM.body.contains('fs')) bumpIdle(); });
-async function toggleMini() {
-  const on = !WM.body.contains('mini');
-  if (on && WM.body.contains('fs')) await toggleFullscreen(false);
-  WM.body.toggle('mini', on);
-  syncWindows({ reflow: false });
-  const res = await P.setMini(on);
-  $('#btnMini').title = res ? 'Restore full player (M)' : 'Mini player (M)';
+// Mini mode (2.4, idea #20): the player window becomes one always-on-top bar (⏮ ▶ ❚❚ ■ ⏭, title, time, volume, ⤢).
+// In: Layout → Mini mode, Ctrl+M (also M and the ▭ button). Out: double-click the bar, ⤢, Ctrl+M / M, the lightning
+// bolt or Reset layout. A video that's playing keeps its window where it is; everything else hides and comes back.
+// The bar remembers where it was dragged to, and SlopAMP starts in mini mode if it was quit in it.
+let miniBusy = false;
+async function toggleMini(force) {
+  const on = force === undefined ? !WM.body.contains('mini') : !!force;
+  if (on === WM.body.contains('mini') || miniBusy) return;
+  miniBusy = true;
+  try {
+    if (on && WM.body.contains('fs')) await toggleFullscreen(false);
+    await P.setMini(on);                         // the model first: the window then resizes in place (windows.js)
+    WM.body.toggle('mini', on);
+    if (on) renderMini();
+    syncWindows({ reflow: false });
+    $('#btnMini').title = on ? 'Back to the full player (Ctrl+M)' : 'Mini mode (Ctrl+M)';
+  } finally { miniBusy = false; }
 }
+WM.mini = { on: () => WM.body.contains('mini'), toggle: () => toggleMini() };
+// A video that's playing (or paused) keeps its window in mini mode; a song's visualizer doesn't
+const miniVideo = () => S.showVideo && !!curItem() && status !== 'stopped' && !WM.body.contains('audvis');
+let miniTitleBase = '';
+function renderMini(base) {
+  if (base !== undefined) miniTitleBase = base;
+  if (!WM.body.contains('mini')) return;
+  const el = $('#miniTitle');
+  el.classList.remove('scroll'); el.style.animationDuration = ''; el.textContent = miniTitleBase;
+  requestAnimationFrame(() => {
+    if (el.scrollWidth > $('#miniTitleBox').clientWidth - 6) {
+      el.textContent = `${miniTitleBase}  ***  ${miniTitleBase}  ***  `;
+      el.classList.add('scroll'); el.style.animationDuration = `${Math.max(6, miniTitleBase.length * 0.22)}s`;
+    }
+  });
+  renderVolume();
+}
+$('#mPrev').onclick = () => prev(); $('#mPlay').onclick = () => play(); $('#mPause').onclick = () => pause(); $('#mStop').onclick = () => stop(); $('#mNext').onclick = () => next(false);
+$('#mFull').onclick = () => toggleMini(false);
+$('#miniVol').addEventListener('input', (e) => setVolume(+e.target.value));
+$('#miniVol').addEventListener('wheel', (e) => { e.preventDefault(); setVolume(S.volume + (e.deltaY < 0 ? 5 : -5)); });
+$('#miniBar').addEventListener('pointerdown', (e) => { if (!e.target.closest('button, input') && WM.dragMain) WM.dragMain(e, $('#miniBar')); });
+$('#miniBar').addEventListener('dblclick', (e) => { if (!e.target.closest('button, input')) toggleMini(false); });
+$('#miniBar').addEventListener('contextmenu', (e) => { e.preventDefault(); WM.openLayoutMenu({ doc: e.target.ownerDocument, x: e.clientX, y: e.clientY }); });
 // Back to normal: leave fullscreen / mini, bring every window back (Reset layout also re-centres them).
 async function restoreWindows(opts = {}) {
+  fsFromMini = false;
   if (WM.body.contains('fs')) await toggleFullscreen(false);
-  if (WM.body.contains('mini')) await toggleMini();
+  if (WM.body.contains('mini')) await toggleMini(false);
   S.showVideo = true; S.showPlaylist = true; S.plShade = false; S.vidShade = false;
   if (S.eq.panel === 'hidden' && !opts.keepEqHidden) S.eq.panel = 'open';
   if (S.vis.panel === 'hidden') S.vis.panel = 'open';
@@ -2139,7 +2181,7 @@ WM.onReset = restoreWindows;
 // ------------------------------------------------------------------ wiring
 $('#btnMin').onclick = () => P.minimize();
 $('#btnClose').onclick = () => { recordResume(); saveNow(); P.close(); };
-$('#btnMini').onclick = toggleMini;
+$('#btnMini').onclick = () => toggleMini();
 // The lightning bolt (2.3.1): always Classic (stacked), except when Classic (stacked, No EQ) was the last layout
 // picked from the Layout menu: then that one, with the EQ hidden. (E under No EQ switches to Classic (stacked);
 // Reset layout, Ctrl+Alt+R, is unchanged and counts as Classic (stacked).)
@@ -2217,6 +2259,7 @@ WM.onDocs('keydown', (e) => {
   else if (e.ctrlKey && e.shiftKey && k.toLowerCase() === 's') { e.preventDefault(); quickSavePlaylist(); }
   else if (e.ctrlKey && k.toLowerCase() === 's') { e.preventDefault(); savePlaylistFile(); }
   else if (e.ctrlKey && k.toLowerCase() === 'l') { e.preventDefault(); loadPlaylistFile(); }
+  else if (e.ctrlKey && !e.altKey && !e.shiftKey && k.toLowerCase() === 'm') { e.preventDefault(); toggleMini(); }   // mini mode (2.4)
   else if (e.ctrlKey) return;
   else if (k === 'z') prev(); else if (k === 'x') play(); else if (k === 'c') pause(); else if (k === 'v') stop(); else if (k === 'b') next(false);
   else if (['n', 'p', 'k', 'h'].includes(k.toLowerCase()) && !e.ctrlKey && !e.altKey && mdKey(k.toLowerCase())) { e.preventDefault(); }
@@ -4222,6 +4265,7 @@ setInterval(() => { blink = !blink; }, 500);
   if (resumeAtBoot) setMarquee(resumeAtBoot); else if (S.anchor >= 0) setMarquee(S.items[S.anchor]); else setMarquee(null);
   if (resumeAtBoot && resumePoint(resumeAtBoot)) toast(`Press Play to continue "${resumeAtBoot.title}" from ${fmt(resumePoint(resumeAtBoot))}`, 5000);
   renderSpeed(); renderCc(); updateDlInfo(); renderVisPanel();
+  if (WM.info.miniAtStart) { await P.setMini(true); WM.body.add('mini'); renderMini(); $('#btnMini').title = 'Back to the full player (Ctrl+M)'; }   // quit in mini mode (2.4)
   syncWindows({ reflow: false });      // first layout: the windows appear where they were last time
   requestAnimationFrame(tick); VW().requestAnimationFrame(tickVideo);
   const info = await P.info();
