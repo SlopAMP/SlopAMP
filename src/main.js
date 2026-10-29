@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, net, screen, Menu, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, net, screen, Menu, globalShortcut, Tray, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { MediaServer, isMediaFile, encoderArgs } = require('./media');
@@ -44,7 +44,7 @@ let wm = null;        // movable windows (see windows.js)
 let clipper = null;   // CLIP (2.3, clip.js)
 let ytweb = null;     // the YOUTUBE window's page (2.3, ytweb.js)
 // Keys owned by the main process; the renderer's state saves must not wipe them.
-const MAIN_KEYS = ['window', 'layout', 'playlistDir', 'dlVideoDir', 'dlAudioDir', 'ytdlpUpdatedAt', 'downloads', 'update', 'clips'];
+const MAIN_KEYS = ['window', 'layout', 'playlistDir', 'dlVideoDir', 'dlAudioDir', 'ytdlpUpdatedAt', 'downloads', 'update', 'clips', 'sys'];
 const ytdlpDir = [path.join(process.resourcesPath || '', 'ytdlp'), path.join(__dirname, '..', 'vendor', 'ytdlp', process.platform)]
   .find(d => fs.existsSync(path.join(d, process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'))) || path.join(process.resourcesPath || '', 'ytdlp');
 let closing = false;
@@ -163,7 +163,7 @@ function createWindow() {
   // The YOUTUBE window's page appears / goes with its panel (2.3)
   ytweb = new YtWeb({ wm, log, send: (ch, v) => { if (win && !win.isDestroyed()) win.webContents.send(ch, v); } });
   wm.onPanel = (id, shown) => { if (id === 'ytweb') { if (shown) ytweb.show(); else ytweb.hide(); } };
-  if (isDev) global.__slopamp = { wm, ytweb };   // for the test scripts
+  if (isDev) global.__slopamp = { wm, ytweb, sys: { toTray: () => toTray(), fromTray: () => fromTray(), get inTray() { return inTray; }, get tray() { return tray; }, get title() { return trayTitle; }, menu: () => trayMenu().items.map(i => i.label), mediaKeys: () => Object.keys(MEDIA_KEYS).filter(a => globalShortcut.isRegistered(a)) } };   // for the test scripts
   Menu.setApplicationMenu(null);
 
   const panelUrl = `${server.base}/app/panel.html`;
@@ -204,6 +204,7 @@ function createWindow() {
     flushState();
   });
   win.on('closed', () => { win = null; });
+  win.on('minimize', () => { if (sysCfg().tray) setImmediate(toTray); });     // Minimize to tray (2.4)
 
   win.loadURL(`${server.base}/app/index.html`);
   if (process.env.PHOSPHOR_DEVTOOLS === '1') win.webContents.openDevTools({ mode: 'detach' });
@@ -900,6 +901,16 @@ function registerIpc() {
   ipcMain.on('shell:show', (_e, p) => { if (typeof p === 'string' && fs.existsSync(p)) shell.showItemInFolder(p); });
 
   ipcMain.on('win:minimize', () => win && win.minimize());
+  // ---- 2.4 #19: Minimize to tray / Use media keys (saved in state.sys), the tray tooltip (the song)
+  ipcMain.handle('sys:get', () => sysCfg());
+  ipcMain.handle('sys:set', (_e, key, value) => {
+    const c = sysCfg();
+    if (key === 'tray') c.tray = !!value;
+    else if (key === 'mediaKeys') { c.mediaKeys = !!value; if (c.mediaKeys) registerMediaKeys(); else unregisterMediaKeys(); }
+    setMainState({ sys: c });
+    return c;
+  });
+  ipcMain.on('sys:title', (_e, t) => { trayTitle = String(t || '').replace(/[\r\n]+/g, ' ').slice(0, 120); if (tray) { tray.setToolTip(trayTip()); tray.setContextMenu(trayMenu()); } });
   ipcMain.on('win:close', () => win && win.close());
   ipcMain.handle('win:fullscreen', (_e, on) => wm.setFullscreen(on));
   ipcMain.handle('win:mini', (_e, on) => wm.setMini(on));
@@ -970,6 +981,9 @@ async function resolveShortLink(u) {
   } catch (_) { return ''; }
 }
 
+// "Use media keys" off (2.4): Chromium's own media-key handling stays off too, so other players get the keys
+try { if (gotLock && !sysCfg().mediaKeys) app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling'); } catch (_) {}
+
 // ---------- lifecycle ----------
 app.whenReady().then(async () => {
   if (!gotLock) return;
@@ -1027,7 +1041,7 @@ app.whenReady().then(async () => {
     installDir: path.dirname(process.execPath),
     getState: () => (currentState || loadState()).update,
     setState: (v) => setMainState({ update: v }),
-    emit: (st) => { if (win && !win.isDestroyed()) win.webContents.send('upd:event', st); },
+    emit: (st) => { if (win && !win.isDestroyed()) win.webContents.send('upd:event', st); trayUpdateNote(st); },
     quit: () => { if (win && !win.isDestroyed()) win.close(); else app.quit(); },
     openExternal: (url) => shell.openExternal(url),
     log
@@ -1035,17 +1049,78 @@ app.whenReady().then(async () => {
   registerIpc();
   createWindow();
   updater.start();
-  registerMediaKeys();
+  if (sysCfg().mediaKeys) registerMediaKeys();
 });
 
 // Keyboard media keys (Play/Pause, Next, Previous, Stop) work even when SlopAMP isn't focused.
+// 2.4 (#19): "Use media keys" (on by default) — off, SlopAMP lets go of them for Spotify, the browser…
+const MEDIA_KEYS = { MediaPlayPause: 'playpause', MediaNextTrack: 'next', MediaPreviousTrack: 'prev', MediaStop: 'stop' };
 function registerMediaKeys() {
-  const keys = { MediaPlayPause: 'playpause', MediaNextTrack: 'next', MediaPreviousTrack: 'prev', MediaStop: 'stop' };
-  for (const [acc, action] of Object.entries(keys)) {
+  for (const [acc, action] of Object.entries(MEDIA_KEYS)) {
     try {
+      if (globalShortcut.isRegistered(acc)) continue;
       const ok = globalShortcut.register(acc, () => { if (win && !win.isDestroyed()) win.webContents.send('media-key', action); });
       if (!ok) log(`media key ${acc} is taken by another app`);
     } catch (e) { log('media key register failed', acc, e); }
+  }
+}
+function unregisterMediaKeys() { for (const acc of Object.keys(MEDIA_KEYS)) { try { globalShortcut.unregister(acc); } catch (_) {} } }
+
+// ---------- system tray (2.4, idea #19) ----------
+// "Minimize to tray" (off by default): minimizing SlopAMP (the – button, the taskbar, Win+Down; the mini bar too)
+// hides every SlopAMP window and shows a tray icon instead; click it (or Show SlopAMP) to bring them all back
+// where they were. ✕ still quits. The icon is only there while SlopAMP is in the tray; its tooltip is the song,
+// right-click for Previous / Play-Pause / Next / Stop / Show / Quit. Music and YouTube keep playing.
+function sysCfg() { const s = (currentState || loadState()).sys || {}; return { tray: s.tray === true, mediaKeys: s.mediaKeys !== false }; }
+let tray = null, inTray = false, trayTitle = '', trayNote = '';
+function trayIcon() {
+  const img = nativeImage.createFromPath(path.join(__dirname, 'renderer', 'icon.png'));
+  return img.isEmpty() ? img : img.resize({ width: 16, height: 16 });
+}
+function trayMenu() {
+  const key = (a) => () => { if (win && !win.isDestroyed()) win.webContents.send('media-key', a); };
+  return Menu.buildFromTemplate([
+    { label: (trayTitle || 'SlopAMP').slice(0, 60), enabled: false },
+    { type: 'separator' },
+    { label: 'Previous', click: key('prev') }, { label: 'Play / Pause', click: key('playpause') }, { label: 'Next', click: key('next') }, { label: 'Stop', click: key('stop') },
+    { type: 'separator' },
+    { label: 'Show SlopAMP', click: () => fromTray() },
+    { label: 'Quit', click: () => { if (win && !win.isDestroyed()) win.webContents.send('sys:quit'); else app.quit(); } }
+  ]);
+}
+function toTray() {
+  if (inTray || !win || win.isDestroyed() || closing) return;
+  inTray = true;
+  for (const [id, w] of wm.wins) if (id !== 'main' && !w.isDestroyed() && w.isVisible()) w.hide();
+  win.hide();
+  try {
+    tray = new Tray(trayIcon());
+    tray.setToolTip(trayTip());
+    tray.setContextMenu(trayMenu());
+    tray.on('click', () => fromTray());
+    tray.on('double-click', () => fromTray());
+  } catch (e) { log('tray failed', e.message); fromTray(); return; }
+  log('minimized to the tray');
+}
+function fromTray() {
+  if (!inTray) return;
+  inTray = false;
+  if (tray) { try { tray.destroy(); } catch (_) {} tray = null; }
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  for (const id of PANELS) { const w = wm.wins.get(id); if (id !== 'main' && w && !w.isDestroyed() && wm.visible[id]) w.showInactive(); }
+  wm.applyAll();
+  win.focus();
+  win.webContents.send('sys:restored');     // a dialog that was open comes back too (winmgr.js)
+}
+const trayTip = () => `SlopAMP${trayTitle ? ` · ${trayTitle}` : ''}`.slice(0, 127);
+function trayUpdateNote(st) {   // "update ready" (or a new version) as a tray balloon while SlopAMP is hidden there
+  const note = st && st.release && ['ready', 'available'].includes(st.status) && !st.hidden ? `${st.status}:${st.release.version}` : '';
+  if (!note || note === trayNote) { trayNote = note; return; }
+  trayNote = note;
+  if (tray && process.platform === 'win32') {
+    try { tray.displayBalloon({ title: 'SlopAMP', content: st.status === 'ready' ? `SlopAMP ${st.release.version} is ready to install. Click the icon to open SlopAMP.` : `SlopAMP ${st.release.version} is out. Click the icon to open SlopAMP.` }); } catch (_) {}
   }
 }
 app.on('will-quit', (e) => {

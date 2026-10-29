@@ -611,6 +611,7 @@ function setStatus(st) {
   drawStateIcon();
   updateMediaSession();
   renderTabs();
+  sysTitle();
 }
 
 // ------------------------------------------------------------------ UI: deck
@@ -668,6 +669,7 @@ function setMarquee(item) {
   el.classList.remove('scroll'); el.style.animationDuration = '';
   el.textContent = base;
   renderMini(item ? item.title : 'SlopAMP');
+  if (typeof sysTitle === 'function') sysTitle();
   requestAnimationFrame(() => {
     const box = $('#marquee');
     if (el.scrollWidth > box.clientWidth - 8) {
@@ -2777,11 +2779,31 @@ function mediaKey(action) {
   else if (action === 'stop') stop();
 }
 P.onMediaKey(mediaKey);
-if ('mediaSession' in navigator) {
+// Windows' media pop-up and keys (Chromium's media session). "Use media keys" off (2.4): SlopAMP doesn't answer them.
+function mediaSessionKeys(on) {
+  if (!('mediaSession' in navigator)) return;
   const ms = navigator.mediaSession;
   const h = { play: 'play', pause: 'pause', stop: 'stop', previoustrack: 'prev', nexttrack: 'next' };
-  for (const [ev, a] of Object.entries(h)) { try { ms.setActionHandler(ev, () => mediaKey(a)); } catch (_) {} }
-  try { ms.setActionHandler('seekbackward', () => seekBy(-10)); ms.setActionHandler('seekforward', () => seekBy(10)); } catch (_) {}
+  for (const [ev, a] of Object.entries(h)) { try { ms.setActionHandler(ev, on ? () => mediaKey(a) : null); } catch (_) {} }
+  try { ms.setActionHandler('seekbackward', on ? () => seekBy(-10) : null); ms.setActionHandler('seekforward', on ? () => seekBy(10) : null); } catch (_) {}
+}
+mediaSessionKeys(true);
+// ---- 2.4 (#19): Minimize to tray / Use media keys ("?" and the Layout menu), the tray's tooltip and Quit
+WM.sys = {
+  get: () => P.sysGet(),
+  set: async (k, v) => { const c = await P.sysSet(k, v); if (k === 'mediaKeys') mediaSessionKeys(c.mediaKeys); sysRender(c); toast(k === 'tray' ? (c.tray ? 'Minimize to tray: on. The – button now hides SlopAMP next to the clock.' : 'Minimize to tray: off.') : (c.mediaKeys ? 'Media keys: SlopAMP uses them.' : 'Media keys: SlopAMP leaves them to other players (fully after a restart).'), 3500); return c; }
+};
+function sysRender(c) { $('#sysTray').checked = !!c.tray; $('#sysKeys').checked = !!c.mediaKeys; $('#btnMin').title = c.tray ? 'Minimize to the tray' : 'Minimize'; }
+P.sysGet().then((c) => { sysRender(c); if (!c.mediaKeys) mediaSessionKeys(false); });
+$('#sysTray').onchange = (e) => WM.sys.set('tray', e.target.checked);
+$('#sysKeys').onchange = (e) => WM.sys.set('mediaKeys', e.target.checked);
+P.onSysQuit(() => $('#btnClose').click());
+P.onSysRestored(() => { if (WM.refitDialogs) WM.refitDialogs(); syncWindows({ reflow: false }); });
+var sysTitleLast = '';   // var: setStatus / setMarquee may run before this line
+function sysTitle() {   // the tray icon's tooltip: what's playing
+  const it = curItem();
+  const t = it ? `${status === 'playing' ? '▶' : status === 'paused' ? '❚❚' : '■'} ${it.title}` : '';
+  if (t !== sysTitleLast) { sysTitleLast = t; P.sysTitle(t); }
 }
 function updateMediaSession() {
   if (!('mediaSession' in navigator)) return;

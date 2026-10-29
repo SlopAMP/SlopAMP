@@ -214,6 +214,12 @@
     if (WM.mini) add(`dm-item${WM.mini.on() ? ' cur' : ''}`, 'Mini mode<small>Ctrl+M</small>', () => WM.mini.toggle());   // 2.4 (#20)
     m.appendChild(document.createElement('hr'));
     add('dm-item', 'Reset layout<small>Ctrl+Alt+R</small>', () => WM.reset());
+    if (WM.sys) {   // 2.4 (#19): the same two settings as in "?"
+      m.appendChild(document.createElement('hr'));
+      const c = await WM.sys.get();
+      add(`dm-item${c.tray ? ' cur' : ''}`, 'Minimize to tray', () => WM.sys.set('tray', !c.tray));
+      add(`dm-item${c.mediaKeys ? ' cur' : ''}`, 'Use media keys', () => WM.sys.set('mediaKeys', !c.mediaKeys));
+    }
     m.appendChild(document.createElement('hr'));
     add('dm-item', 'Skins\u2026', () => { if (WM.skins) WM.skins.openPicker(pos); });
     add('dm-item', 'Skin editor\u2026', () => { if (WM.skins) WM.skins.openEditor(); });
@@ -285,6 +291,7 @@
       P.wmDialog({ w, h, resize: !first });
     };
     const rs = new ResizeObserver(() => fit(false));
+    WM.refitDialogs = () => fit(true);    // back from the tray (2.4): an open dialog shows again
     for (const d of [...document.querySelectorAll('dialog')]) {
       doc.body.appendChild(d);
       const native = Object.getPrototypeOf(d).showModal;

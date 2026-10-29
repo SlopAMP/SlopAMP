@@ -418,9 +418,12 @@
         </label>
         <div class="upd-hint" id="updHint"></div>
       </div>
-      <div class="sys" id="aboutSys">
+      <div class="upd sys" id="aboutSys">
+        <div class="upd-head"><span class="upd-lbl">Windows &amp; keys</span></div>
+        <label class="sys-ck" title="The &#8211; button (and the taskbar) hides SlopAMP next to the clock instead; click its icon to bring it back. &#10005; still quits."><input type="checkbox" id="sysTray"><span>Minimize to the tray <small>(click its icon to come back)</small></span></label>
+        <label class="sys-ck" title="Your keyboard&#8217;s play / next / previous / stop keys control SlopAMP even in the background. Off: other players (Spotify, your browser) get them; fully after restarting SlopAMP."><input type="checkbox" id="sysKeys"><span>Use media keys <small>(also in the background)</small></span></label>
         <div id="assocRow"><div class="upd-head"><span class="upd-lbl">Playlist files</span><button type="button" id="assocBtn" title="Lets Windows open .m3u8 / .m3u / .pls playlists in SlopAMP (no admin needed)">Make SlopAMP open playlists&#8230;</button></div>
-        <div class="upd-hint" id="assocHint">Double-click a playlist to open it in SlopAMP: this registers SlopAMP for playlists and opens Windows&#8217; Default apps, where you pick SlopAMP for .m3u8 / .m3u (or right-click a playlist &rarr; Open with &rarr; Choose another app &rarr; SlopAMP &rarr; Always).</div></div>
+        <div class="sys-hint" id="assocHint" title="Or right-click a playlist &rarr; Open with &rarr; Choose another app &rarr; SlopAMP &rarr; Always">Then pick SlopAMP for .m3u8 / .m3u in Windows&#8217; Default apps.</div></div>
       </div>
       <div class="dlg-btns"><button type="button" id="aboutLic">View licenses</button><button value="close">Close</button></div>
     </form>

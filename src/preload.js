@@ -20,6 +20,12 @@ contextBridge.exposeInMainWorld('phosphor', {
   onShareProgress: (cb) => ipcRenderer.on('share:progress', (_e, v) => cb(v)),
   shareOpen: (zip) => ipcRenderer.invoke('share:open', zip),
   appAssoc: () => ipcRenderer.invoke('app:assoc'),
+  // 2.4 #19: Minimize to tray / Use media keys, the tray tooltip, Quit from the tray
+  sysGet: () => ipcRenderer.invoke('sys:get'),
+  sysSet: (k, v) => ipcRenderer.invoke('sys:set', k, v),
+  sysTitle: (t) => ipcRenderer.send('sys:title', t),
+  onSysQuit: (cb) => ipcRenderer.on('sys:quit', () => cb()),
+  onSysRestored: (cb) => ipcRenderer.on('sys:restored', () => cb()),
   plDelete: (paths) => ipcRenderer.invoke('pl:delete', paths),
   loadPlaylist: () => ipcRenderer.invoke('playlist:load'),
   dlInfo: () => ipcRenderer.invoke('dl:info'),
