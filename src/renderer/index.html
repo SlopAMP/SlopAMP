@@ -354,8 +354,8 @@
     <div class="dlm-bar cl-bar"><button type="button" id="clAdd" disabled>&#9654; Add to playlist</button><button type="button" class="dim" id="clAgain" disabled>&#9986; Clip again&#8230;</button><button type="button" class="red" id="clDel" disabled>&#x1F5D1; Delete selected</button><span class="spacer"></span><button type="button" class="dim" id="clDir3">&#x1F4C1; mp3clips</button><button type="button" class="dim" id="clDir4">&#x1F4C1; mp4clips</button></div>
     <div class="dlm-note cl-note">Clips are files in Downloads\SlopAMP\mp3clips and Downloads\SlopAMP\mp4clips (files you put there show up too). Double-click plays a clip; &#8220;Clip again&#8221; reopens CLIP on the original with the same In/Out. Deleted clips go to the Recycle Bin.</div>
     <div class="dlm-skins" id="dlmSkins"><div class="skl-list" id="sklList"></div></div>
-    <div class="dlm-bar skl-bar"><button type="button" id="sklApply" disabled>&#10003; Apply</button><button type="button" class="dim" id="sklEdit" disabled>&#9998; Edit</button><button type="button" class="dim" id="sklRename" disabled>Rename</button><button type="button" class="dim" id="sklExport" disabled>Export&#8230;</button><button type="button" class="dim" id="sklReveal" disabled>Show in Explorer</button><button type="button" class="red" id="sklDel" disabled>&#x1F5D1; Delete</button><span class="spacer"></span><button type="button" class="dim" id="sklImport">Import&#8230;</button><button type="button" class="dim" id="sklNew">+ New skin</button><button type="button" class="dim" id="sklOpenDir">&#x1F4C1; Open skins folder</button></div>
-    <div class="dlm-note skl-note">Your skins are .css files in Downloads\SlopAMP\skins. Deleted skins go to the Recycle Bin. Built-in skins can&#8217;t be changed or deleted: Edit starts a new skin from one. Double-click a skin to put it on.</div>
+    <div class="dlm-bar skl-bar"><button type="button" class="dim" id="sklNew">+ New skin</button><button type="button" class="dim" id="sklImport">Import&#8230;</button><button type="button" class="dim" id="sklOpenDir">&#x1F4C1; Open skins folder</button><span class="spacer"></span><button type="button" class="red" id="sklDel" disabled>&#x1F5D1; Delete selected</button></div>
+    <div class="dlm-note skl-note">Your skins are .css files in Downloads\SlopAMP\skins; deleted ones go to the Recycle Bin. Built-in skins can&#8217;t be changed or deleted: Edit a copy starts a skin of your own from one. Double-click (or Enter) puts a skin on; Del deletes the selected ones of yours; &#8943; or right-click for Rename, Export and Show in Explorer.</div>
     <div class="dlm-bar"><button type="button" id="dlmOpenTab" class="hidden">&#9654; Open in new tab</button><button type="button" class="red" id="dlmDel" disabled>&#x1F5D1; Delete selected</button><button type="button" class="red" id="dlmDelAll">Delete all&#8230;</button><span class="spacer"></span><button type="button" class="dim" id="dlmClean">Clean up missing</button><button type="button" class="dim" id="dlmOpen">&#x1F4C1; Open folder</button></div>
     <div class="dlm-note">Deleted files go to the Recycle Bin. Playlist items stay and stream from YouTube again. Deleting a saved playlist file doesn&#8217;t close any tab.</div>
       <div class="dlm-grip" id="dlmGrip" title="Drag to resize"></div>
@@ -366,7 +366,7 @@
     <form method="dialog">
       <div class="dlg-title" id="confirmTitle"></div>
       <div class="dlg-note" id="confirmText"></div>
-      <div class="dlg-btns"><button value="cancel">Cancel</button><button value="ok" id="confirmOk">OK</button></div>
+      <div class="dlg-btns"><button value="cancel">Cancel</button><button value="alt" id="confirmAlt" class="hidden">No</button><button value="ok" id="confirmOk">OK</button></div>
     </form>
   </dialog>
 

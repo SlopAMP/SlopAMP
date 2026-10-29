@@ -2404,12 +2404,15 @@ function showDlBar({ text, pct = 0, busy = false, buttons = [], hideAfter = 0, c
   bar.classList.remove('hidden');
   if (hideAfter) dlBarTimer = setTimeout(() => { bar.classList.add('hidden'); renderDlProgress(); }, hideAfter);
 }
-function confirmBox(title, text, okLabel) {
+function confirmBox(title, text, okLabel) { return choiceBox(title, text, okLabel).then(v => v === 'ok'); }
+// Three-way box (2.4): resolves 'ok', 'alt' (the extra button, when altLabel is given) or 'cancel'.
+function choiceBox(title, text, okLabel, altLabel) {
   return new Promise((resolve) => {
     const d = $('#confirmDlg');
     $('#confirmTitle').textContent = title; $('#confirmText').textContent = text; $('#confirmOk').textContent = okLabel || 'OK';
+    $('#confirmAlt').textContent = altLabel || ''; $('#confirmAlt').classList.toggle('hidden', !altLabel);
     d.returnValue = 'cancel';
-    d.addEventListener('close', () => resolve(d.returnValue === 'ok'), { once: true });
+    d.addEventListener('close', () => resolve(['ok', 'alt'].includes(d.returnValue) ? d.returnValue : 'cancel'), { once: true });
     d.showModal();
   });
 }
@@ -2980,9 +2983,7 @@ $('#dlmDelAll').onclick = () => { const rows = dlmVisible().filter(r => !r.missi
 $('#dlmDlg').addEventListener('keydown', (e) => {
   if (e.target && e.target.id === 'dlmSearch' && (e.key === 'Delete' || (e.ctrlKey && e.key.toLowerCase() === 'a'))) return;   // normal text editing
   if (skinMode()) {
-    if (e.target && e.target.id === 'sklRenIn') return;
-    if (e.key === 'Delete') { e.preventDefault(); if (!$('#sklDel').disabled) $('#sklDel').click(); }
-    else if (e.key === 'Enter' && sklOne()) { e.preventDefault(); sklApply(sklOne()); }
+    sklKey(e);
     return;
   }
   if (e.key === 'Delete') { e.preventDefault(); $('#dlmDel').click(); }
@@ -3800,11 +3801,14 @@ $('#ytwMore').onclick = (e) => {
   }, anchor);
 };
 
-// ------------------------------------------------------------------ Library → SKINS (1.7)
-// Your skins (Downloads\SlopAMP\skins, main.js "user skins") and the built-ins: apply, edit, rename,
-// export, show in Explorer, delete (Recycle Bin), import. Built-ins can't be renamed or deleted.
+// ------------------------------------------------------------------ Library → SKINS (1.7; rows with their own buttons in 2.4)
+// Your skins (Downloads\SlopAMP\skins, main.js "user skins") and the built-ins. Every row has its buttons:
+// Apply (✓ ON on the skin you have on), ✎ Edit (built-ins: Edit a copy), 🗑 Delete (yours; built-ins show 🔒),
+// and ⋯ (also right-click): Rename… / Export… / Show in Explorer. Click selects (tick boxes or Ctrl / Shift for
+// several of yours), double-click or Enter applies, Del deletes the selected ones of yours.
 const SKL = { sel: new Set(), anchor: -1, renaming: null };
 const skinMode = () => DLM.filter === 'skins';
+const sklUser = (id) => /^user:/.test(String(id));
 function sklRows() {
   const q = ($('#dlmSearch').value || '').trim().toLowerCase();
   const hit = (s) => !q || String(s.name).toLowerCase().includes(q) || String(s.baseName || '').toLowerCase().includes(q) || String(s.slug || s.id).includes(q);
@@ -3822,62 +3826,127 @@ function sklRender() {
   const dlg = $('#dlmDlg');
   dlg.classList.toggle('skinmode', skinMode());
   if (!skinMode()) return;
+  dlg.classList.remove('clipmode');                 // bug #2 (2.3.1): CLIPS → SKINS kept the clips filter line
   const { mine, built } = sklRows(), on = WM.skins.saved, all = WM.skins.user;
   const total = all.reduce((a, s) => a + (s.size || 0), 0);
-  $('#dlmCount').textContent = `${all.length} SKIN${all.length === 1 ? '' : 'S'} OF YOURS · ${total ? fmtSize(total).toUpperCase() : '0 KB'}`;
+  $('#dlmCount').textContent = `${all.length} SKIN${all.length === 1 ? '' : 'S'} OF YOURS · ${total ? fmtSize(total).toUpperCase() : '0 KB'} · ${WM.skins.list.length} BUILT-IN`;
   $('#dlmMiss').textContent = '';
   $('#dlmSearch').placeholder = 'Search skins…';
   $('#dlmSearchX').classList.toggle('hidden', !($('#dlmSearch').value || '').trim());
   const sw = (s) => `<span class="skl-sw">${(s.sw && s.sw.length === 6 ? s.sw : WM.skins.list[0].sw).map(c => `<i style="background:${htmlEsc(c)}"></i>`).join('')}</span>`;
-  const row = (s, user) => `<div class="skl-row${SKL.sel.has(s.id) ? ' on' : ''}" data-id="${htmlEsc(s.id)}">`
+  const btns = (s, user) => `<span class="skl-btns">`
+    + (s.id === on ? '<button type="button" class="skl-on" disabled title="The skin you have on">&#10003; ON</button>'
+      : `<button type="button" class="skl-b" data-a="apply" title="Put this skin on">Apply</button>`)
+    + (user ? '<button type="button" class="skl-b dim" data-a="edit" title="Open the Skin Editor on this skin">&#9998; Edit</button>'
+      : '<button type="button" class="skl-b dim" data-a="edit" title="Built-in skins can’t be changed: this opens the Skin Editor on a copy you save as your own">&#9998; Edit a copy</button>')
+    + (user ? '<button type="button" class="skl-b red" data-a="del" title="Move this skin to the Recycle Bin">&#x1F5D1; Delete</button>'
+      : '<span class="skl-lock" title="Built-in skins can’t be deleted">&#x1F512; built-in</span>')
+    + `<button type="button" class="skl-b dim skl-more" data-a="more" title="More: ${user ? 'Rename, Export, Show in Explorer' : 'Export'}">&#8943;</button></span>`;
+  const row = (s, user) => `<div class="skl-row${SKL.sel.has(s.id) ? ' on' : ''}${s.id === on ? ' cur' : ''}" data-id="${htmlEsc(s.id)}">`
     + (user ? `<span class="dlm-cb${SKL.sel.has(s.id) ? ' on' : ''}"></span>` : '<span class="dlm-cb" style="visibility:hidden"></span>')
     + sw(s)
     + (SKL.renaming === s.id ? `<span class="skl-n"><input type="text" id="sklRenIn" maxlength="60" value="${htmlEsc(s.name)}" spellcheck="false"></span>`
       : `<span class="skl-n">${htmlEsc(s.name)}${user ? (s.baseName ? `<small>from ${htmlEsc(s.baseName)}</small>` : '') : `<small>built-in · ${htmlEsc(s.group)}</small>`}</span>`)
-    + (s.id === on ? '<span class="skl-act">ON</span>' : '')
-    + `<span class="skl-f">${user ? `${htmlEsc(s.slug)}.css` : ''}</span>`
-    + `<span class="skl-sz">${user ? fmtSize(s.size) : ''}</span><span class="skl-dt">${user ? fmtDate(s.mtime) : ''}</span></div>`;
-  $('#sklList').innerHTML = '<div class="skl-sec">Mine</div>'
-    + (mine.length ? mine.map(s => row(s, true)).join('') : `<div class="skl-empty">${WM.skins.user.length ? 'None of your skins match.' : 'No skins of your own yet. <b>+ New skin</b> opens the Skin Editor on the skin you have on; <b>Import…</b> adds a .css someone shared.'}</div>`)
-    + '<div class="skl-sec">Built-in</div>' + built.map(s => row(s, false)).join('');
-  const sel = [...SKL.sel], one = sel.length === 1 ? sel[0] : null, u1 = one && /^user:/.test(one);
-  $('#sklApply').disabled = !one || one === on;
-  $('#sklEdit').disabled = !one; $('#sklEdit').innerHTML = one && !u1 ? '&#9998; New from this' : '&#9998; Edit';
-  $('#sklRename').disabled = !u1; $('#sklReveal').disabled = !u1; $('#sklExport').disabled = !one || one === 'classic';
-  $('#sklDel').disabled = !sel.length || sel.some(id => !/^user:/.test(id));
+    + (user ? `<span class="skl-f">${htmlEsc(s.slug)}.css</span><span class="skl-sz">${fmtSize(s.size)}</span><span class="skl-dt">${fmtDate(s.mtime)}</span>` : '')   // built-ins: the name gets the room
+    + btns(s, user) + '</div>';
+  $('#sklList').innerHTML = `<div class="skl-sec"><span>Mine (${all.length})</span><span class="skl-now">On now: ${htmlEsc(WM.skins.nameOf(on))}</span></div>`
+    + (mine.length ? mine.map(s => row(s, true)).join('') : `<div class="skl-empty">${WM.skins.user.length ? 'None of your skins match.' : 'No skins of your own yet. <b>+ New skin</b> opens the Skin Editor on the skin you have on; <b>Import…</b> adds a .css someone shared; <b>Edit a copy</b> on a built-in starts from that one.'}</div>`)
+    + `<div class="skl-sec"><span>Built-in (${WM.skins.list.length}) · can’t be changed or deleted</span></div>` + built.map(s => row(s, false)).join('');
+  const del = [...SKL.sel].filter(sklUser);
+  $('#sklDel').disabled = !del.length;
+  $('#sklDel').innerHTML = `&#x1F5D1; Delete selected${del.length ? ` (${del.length})` : ''}`;
   const ri = $('#sklRenIn'); if (ri && ri.ownerDocument.activeElement !== ri) { ri.focus(); ri.select(); }
+}
+function sklSelectOnly(id) {
+  SKL.sel.clear(); SKL.sel.add(id);
+  SKL.anchor = [...$('#sklList').querySelectorAll('.skl-row')].map(x => x.dataset.id).indexOf(id);
+  if (SKL.renaming && SKL.renaming !== id) SKL.renaming = null;
 }
 $('#sklList').addEventListener('click', (e) => {
   const r = e.target.closest('.skl-row'); if (!r || e.target.closest('input')) return;
-  const id = r.dataset.id, user = /^user:/.test(id);
+  const id = r.dataset.id, user = sklUser(id);
+  const b = e.target.closest('button[data-a]');
+  if (b) {                                            // a row's own button acts on that row only
+    if (!SKL.sel.has(id)) { sklSelectOnly(id); sklRender(); }
+    const a = b.dataset.a;
+    if (a === 'apply') sklApply(id);
+    else if (a === 'edit') sklEdit(id);
+    else if (a === 'del') sklDelete([id]);
+    else if (a === 'more') { const rc = b.getBoundingClientRect(); sklMenu(id, rc.right - 4, rc.bottom, b.ownerDocument); }
+    return;
+  }
   const order = [...$('#sklList').querySelectorAll('.skl-row')].map(x => x.dataset.id), i = order.indexOf(id);
   if (user && e.shiftKey && SKL.anchor >= 0) {
-    const [a, b] = [Math.min(SKL.anchor, i), Math.max(SKL.anchor, i)];
+    const [a, c] = [Math.min(SKL.anchor, i), Math.max(SKL.anchor, i)];
     if (!e.ctrlKey) SKL.sel.clear();
-    for (const x of order.slice(a, b + 1)) if (/^user:/.test(x)) SKL.sel.add(x);
+    for (const x of order.slice(a, c + 1)) if (sklUser(x)) SKL.sel.add(x);
   } else if (user && (e.ctrlKey || e.target.closest('.dlm-cb'))) {
     if (SKL.sel.has(id)) SKL.sel.delete(id); else SKL.sel.add(id);
-    for (const x of [...SKL.sel]) if (!/^user:/.test(x)) SKL.sel.delete(x);
+    for (const x of [...SKL.sel]) if (!sklUser(x)) SKL.sel.delete(x);
     SKL.anchor = i;
-  } else { SKL.sel.clear(); SKL.sel.add(id); SKL.anchor = i; }
+  } else sklSelectOnly(id);
   if (SKL.renaming && SKL.renaming !== id) SKL.renaming = null;
   sklRender();
 });
-$('#sklList').addEventListener('dblclick', (e) => { const r = e.target.closest('.skl-row'); if (r && !e.target.closest('input')) sklApply(r.dataset.id); });
+$('#sklList').addEventListener('dblclick', (e) => { const r = e.target.closest('.skl-row'); if (r && !e.target.closest('input, button')) sklApply(r.dataset.id); });
+$('#sklList').addEventListener('contextmenu', (e) => {
+  const r = e.target.closest('.skl-row'); if (!r || e.target.closest('input')) return;
+  e.preventDefault(); e.stopPropagation();
+  if (!SKL.sel.has(r.dataset.id)) { sklSelectOnly(r.dataset.id); sklRender(); }
+  sklMenu(r.dataset.id, e.clientX, e.clientY, e.target.ownerDocument);
+});
+function sklMenu(id, x, y, doc) {
+  const user = sklUser(id), on = id === WM.skins.saved;
+  const en = user ? [['Rename…', () => sklRename(id)], ['Export…', () => sklExport(id)], ['Show in Explorer', () => P.skinReveal(id)], null] : [['Export…', () => sklExport(id)], null];
+  en.push([on ? '✓ On now' : 'Apply', () => sklApply(id), on], [user ? 'Edit' : 'Edit a copy', () => sklEdit(id)]);
+  if (user) en.push(['Delete…', () => sklDelete([id])]);
+  showCtxMenu(en, x, y, doc);
+}
 async function sklApply(id) {
+  if (id === WM.skins.saved) return;
   if (WM.skins.editorOpen) { toast('Close the Skin Editor first, or pick the skin in its “Start from” list.'); return; }
   await WM.skins.apply(id); sklRender();
   toast(`Skin: ${WM.skins.nameOf(id)}`, 1600);
 }
-const sklOne = () => (SKL.sel.size === 1 ? [...SKL.sel][0] : null);
-$('#sklApply').onclick = () => { const id = sklOne(); if (id) sklApply(id); };
-$('#sklEdit').onclick = async () => {
-  const id = sklOne(); if (!id) return;
+async function sklEdit(id) {
+  // The editor has unsaved changes to another skin: save them, drop them, or stay (locked 2026-10-29)
+  if (WM.skins.editorDirty && WM.skins.editorBase !== id) {
+    const was = WM.skins.nameOf(WM.skins.editorBase), user = sklUser(WM.skins.editorBase);
+    const c = await choiceBox('The Skin Editor has unsaved changes', `Your changes to "${was}" aren’t saved yet.${user ? '' : '\n\nIt’s a built-in skin: Save keeps them as a new skin of yours under the name typed in the editor.'}\n\nSave them before opening "${WM.skins.nameOf(id)}"?`, 'Save', 'Discard');
+    if (c === 'cancel') return;
+    if (c === 'ok' && !await WM.skins.saveEditor()) return;     // no name typed for a built-in: the editor says so
+    if (c === 'alt') WM.skins.discardEditor();
+  }
   $('#dlmDlg').close();
   await WM.skins.openEditor(id);
-};
+}
+const sklRename = (id) => { if (sklUser(id)) { sklSelectOnly(id); SKL.renaming = id; sklRender(); } };
+async function sklExport(id) {
+  const r = await P.skinExport(id);
+  if (r && r.ok) toast(`Exported to ${r.file}`, 3500); else if (r && r.error) toast(`Couldn’t export: ${r.error}`);
+}
+async function sklDelete(ids) {
+  ids = ids.filter(sklUser); if (!ids.length) return;
+  const names = ids.map(id => WM.skins.nameOf(id)), onDel = ids.includes(WM.skins.saved);
+  if (WM.skins.editorOpen && (ids.includes(WM.skins.saved) || ids.includes(WM.skins.editorBase))) { toast('That skin is open in the Skin Editor: close the editor first.'); return; }
+  const ok = await confirmBox(ids.length > 1 ? `Delete ${ids.length} skins?` : `Delete "${names[0]}"?`,
+    `${ids.length > 1 ? 'These skin files go' : 'The skin file goes'} to the Recycle Bin:\n\n${names.join('\n')}${onDel ? `\n\n${ids.length > 1 ? `"${WM.skins.nameOf(WM.skins.saved)}" is` : 'It’s'} the skin you have on: SlopAMP goes back to SlopAMP Classic.` : ''}`, 'Delete');
+  if (!ok) return;
+  if (onDel) await WM.skins.apply('classic');
+  const res = await P.skinTrash(ids), failed = res.filter(r => !r.ok).length;
+  for (const id of ids) SKL.sel.delete(id);
+  await sklRefresh();
+  toast(failed ? `${failed} skin${failed > 1 ? 's' : ''} couldn’t be deleted.` : `${ids.length} skin${ids.length > 1 ? 's' : ''} moved to the Recycle Bin.`, 2500);
+}
+// Enter = Apply, Del = Delete (yours) on the selected row(s), while the SKINS list has the keys (not the search box)
+function sklKey(e) {
+  if (!skinMode() || e.target.closest('input, textarea, button') || e.ctrlKey || e.altKey) return false;
+  const sel = [...SKL.sel];
+  if (e.key === 'Enter' && sel.length === 1) { e.preventDefault(); sklApply(sel[0]); return true; }
+  if (e.key === 'Delete' && sel.some(sklUser)) { e.preventDefault(); sklDelete(sel); return true; }
+  return false;
+}
 $('#sklNew').onclick = async () => { $('#dlmDlg').close(); await WM.skins.openEditor(); };
-$('#sklRename').onclick = () => { const id = sklOne(); if (id && /^user:/.test(id)) { SKL.renaming = id; sklRender(); } };
 $('#sklList').addEventListener('keydown', async (e) => {
   if (e.target.id !== 'sklRenIn') return;
   e.stopPropagation();
@@ -3896,12 +3965,6 @@ $('#sklList').addEventListener('keydown', async (e) => {
   sklRender();
   toast(`Renamed to "${res.name}"`, 1800);
 });
-$('#sklExport').onclick = async () => {
-  const id = sklOne(); if (!id) return;
-  const r = await P.skinExport(id);
-  if (r && r.ok) toast(`Exported to ${r.file}`, 3500); else if (r && r.error) toast(`Couldn’t export: ${r.error}`);
-};
-$('#sklReveal').onclick = () => { const id = sklOne(); if (id) P.skinReveal(id); };
 $('#sklOpenDir').onclick = () => P.skinFolder();
 $('#sklImport').onclick = async () => {
   const res = await P.skinImport();
@@ -3911,19 +3974,7 @@ $('#sklImport').onclick = async () => {
   await sklRefresh();
   toast(ok.length ? `Imported ${ok.map(x => `"${x.name}"`).join(', ')}${bad.length ? `; ${bad.length > 1 ? `${bad.length} files weren’t skins` : '1 file wasn’t a skin'}` : ''}.` : bad[0].error, 4000);
 };
-$('#sklDel').onclick = async () => {
-  const ids = [...SKL.sel].filter(id => /^user:/.test(id)); if (!ids.length) return;
-  const names = ids.map(id => WM.skins.nameOf(id)), onDel = ids.includes(WM.skins.saved);
-  if (WM.skins.editorOpen && ids.includes(WM.skins.saved)) { toast('That skin is open in the Skin Editor: close the editor first.'); return; }
-  const ok = await confirmBox(ids.length > 1 ? `Delete ${ids.length} skins?` : `Delete "${names[0]}"?`,
-    `${ids.length > 1 ? 'These skin files go' : 'The skin file goes'} to the Recycle Bin:\n\n${names.join('\n')}${onDel ? '\n\nIt’s the skin you have on: SlopAMP goes back to SlopAMP Classic.' : ''}`, 'Delete');
-  if (!ok) return;
-  if (onDel) await WM.skins.apply('classic');
-  const res = await P.skinTrash(ids), failed = res.filter(r => !r.ok).length;
-  SKL.sel.clear();
-  await sklRefresh();
-  toast(failed ? `${failed} skin${failed > 1 ? 's' : ''} couldn’t be deleted.` : `${ids.length} skin${ids.length > 1 ? 's' : ''} moved to the Recycle Bin.`, 2500);
-};
+$('#sklDel').onclick = () => sklDelete([...SKL.sel]);
 // ------------------------------------------------------------------ Library: size, download info, re-checks
 // size: drag the grip (the dialog stays centred, so the width changes twice as fast as the cursor)
 function dlmApplySize() {

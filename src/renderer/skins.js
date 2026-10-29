@@ -347,6 +347,14 @@
   WM.skins = {
     list: SKINS, apply, openPicker, refresh, openEditor, closeEditor, nameOf,
     get current() { return current; }, get user() { return USER; }, get editorOpen() { return ED.open; }, get editorShade() { return ED.shade; },
+    // 2.4 (Library → SKINS rows): what the editor has open, whether it has unsaved changes, and save / drop them
+    get editorBase() { return ED.open ? ED.base : null; }, get editorDirty() { return ED.open && ED.dirty; },
+    async saveEditor() {
+      if (!ED.open || !ED.dirty) return true;
+      await edSave(!userOf(ED.base));     // yours: save in place; a built-in: Save as (needs the name typed in the editor)
+      return !ED.dirty;
+    },
+    discardEditor() { if (!ED.open) return; for (const g of ED_GROUPS) ED.g[g.key] = { h: 0, s: 100, l: 0, add: 0 }; ED.per = {}; ED.dirty = false; edClearLive(); edRender(); },   // like Reset all
     // for the Library: the skin that's on while the editor previews something else
     get saved() { return ED.open && ED.prev ? ED.prev : current; }
   };
