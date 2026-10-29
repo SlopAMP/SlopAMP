@@ -1,5 +1,10 @@
 # Changelog
 
+## Next (2.3.1 or 2.4.0) — planned, not built
+
+- **Remove the old SLOP code completely** (hidden since 2.3.0): the SLOP window and button code, LOOK, packs, the stream trim, prompt / lyrics.txt, motion.mp4, Zip pack and Open in slop.cc. CLIP, SHOTS and the Library must keep working. Users' existing `Downloads\SlopAMP\Slop` folders are **not** deleted.
+- From now on all editing work goes into CLIP.
+
 ## 2.3.0 — unreleased
 
 - **CLIP** (ideas #12 / #13): cut a piece out of a song or video and save it as a new MP3 or MP4, in its own SlopAMP window (like SLOP). Right-click a song or video in the playlist (also YT / X History) or the Library → **Clip MP3…** / **Clip video…**; a YouTube or X item that isn't downloaded yet is downloaded first, then CLIP opens. Layout → CLIP opens it empty (Clip what's playing, Pick a file…, or drop a file on it).
