@@ -44,6 +44,31 @@ WINDOWS
     (SlopAMP also does this by itself when a monitor is unplugged).
   * Window positions and sizes are remembered between launches.
 
+MINI MODE
+  * Layout -> Mini mode, Ctrl+M (or M, or the button next to "-" on the
+    player) turns the player into one small bar that stays on top of other
+    windows: previous / play / pause / stop / next, the title, the time,
+    a volume slider and a button to go back.
+  * Drag the bar anywhere; it comes back there next time. Double-click it
+    (or its button on the right, or Ctrl+M again) for the full player, with
+    every window back where it was. Right-click it for the Layout menu.
+  * A video that's playing keeps its window open (where it is); the other
+    windows hide until you leave mini mode. Fullscreen from mini mode goes
+    back to the bar afterwards. The lightning bolt, Reset layout and picking
+    a layout leave mini mode first. Quit in mini mode and SlopAMP starts in
+    it next time.
+
+TRAY AND MEDIA KEYS ("?" or the Layout menu)
+  * Minimize to the tray (off at first): "-" (or the taskbar) hides
+    SlopAMP next to the clock instead. Music and YouTube keep playing. Click
+    the icon to bring every window back where it was; hover it for the song;
+    right-click for Previous / Play-Pause / Next / Stop / Show / Quit. The
+    icon is only there while SlopAMP is in the tray. "x" still quits.
+  * Use media keys (on at first): your keyboard's play / next / previous /
+    stop keys control SlopAMP even in the background. Turn it off to leave
+    them to another player (Spotify, your browser); that's complete after
+    restarting SlopAMP.
+
 SKINS
   * Click SKINS on the player (or Skins... in the Layout menu) to change how
     SlopAMP looks. Ten skins: SlopAMP Classic (green, the default), Red Alert,
@@ -61,11 +86,15 @@ SKINS
     the skin is saved in Downloads\SlopAMP\skins as a .css file and
     shows under "Mine" in the picker. Closing without saving puts your skin
     back. A warning appears when text gets hard to read.
-  * Library -> SKINS lists your skins and the built-in ones: Apply, Edit,
-    Rename, Export (a .css to share), Show in Explorer, Delete (Recycle Bin),
-    Import (a .css someone shared) and Open skins folder. Built-in skins
-    can't be changed or deleted. Deleting the skin you have on goes back
-    to SlopAMP Classic.
+  * Library -> SKINS lists your skins and the built-in ones, each with its
+    own buttons: Apply (ON on the skin you have on), Edit and Delete for
+    yours; Apply and "Edit a copy" for the built-ins (they can't be changed
+    or deleted, so Edit starts a skin of your own from one). "..." or
+    right-click: Rename, Export (a .css to share), Show in Explorer.
+    Double-click or Enter puts a skin on; Del deletes the selected ones of
+    yours (Recycle Bin). Deleting the skin you have on goes back to SlopAMP
+    Classic. Below the list: + New skin, Import (a .css someone shared),
+    Open skins folder and Delete selected.
 
 ADDING THINGS
   * Drag files or folders onto any SlopAMP window (or onto SlopAMP.exe).
@@ -75,12 +104,32 @@ ADDING THINGS
   * Your playlist is saved automatically.
   * SAVE / LOAD (bottom bar, or Ctrl+S / Ctrl+L) write and open .m3u8 playlist
     files. Loading asks whether to replace your list or add to the end.
+  * Double-click a playlist file (.m3u8 / .m3u / .pls) or use Open with ->
+    SlopAMP: it opens in a new tab named after the file and starts playing
+    (the same file again just switches to its tab). To make double-click
+    use SlopAMP: "?" -> Make SlopAMP open playlists..., then pick SlopAMP
+    for .m3u8 / .m3u in Windows' Default apps (or right-click a playlist ->
+    Open with -> Choose another app -> SlopAMP -> Always use this app).
+
+SHARE A PLAYLIST
+  * Right-click a playlist tab -> Share playlist (.zip)... (or Library ->
+    PLAYLISTS -> right-click -> Share (.zip)...) makes one .zip with the
+    playlist and its songs and videos, so a friend gets everything.
+    YouTube / X links stay links; tick "Also include my downloaded copies"
+    to put those files in too. It shows the size first and which files are
+    missing; saved in Downloads\SlopAMP\Shared (Change... to pick another
+    place). Cancel stops it and leaves nothing behind.
+  * Inside: <name>.m3u8 and a <name> folder with the files, numbered in
+    playlist order. Unzip it and open the .m3u8 in any player.
+  * Got one? Drop the .zip on SlopAMP, LOAD it or Open with -> SlopAMP: it
+    unpacks to Downloads\SlopAMP\Shared\<name> (never over anything) and
+    opens as a new tab. Only songs, videos and playlists come out of it.
 
 KEYS
   Space       play / pause          Left/Right   seek 5 s (Shift = 30 s)
   Z X C V B   prev/play/pause/stop/next    Ctrl+Up/Down  volume
   F or F11    fullscreen video (Esc exits) - or the FULLSCREEN button
-  M           mini player              E             equalizer
+  Ctrl+M / M  mini mode                E             equalizer
   Ctrl+Alt+R  reset the window layout
   G / I / O   in CLIP (while it's the active window): shot / In / Out
   S / R       shuffle / repeat (off, all, one)
@@ -94,7 +143,8 @@ KEYS
 PLAYLIST TABS
   * Keep several playlists as tabs above the list. "+" (or Ctrl+T) adds a
     tab; double-click a tab to rename it; right-click for Rename, Duplicate,
-    Save as playlist file, Move left/right and Close. Ctrl+Tab switches tabs.
+    Save as playlist file, Share playlist (.zip), Move left/right and Close.
+    Ctrl+Tab switches tabs.
   * Music keeps playing from its own tab (marked with a green arrow) while
     you browse others; Next/Previous stay in that tab.
   * Drag items onto a tab to move them there (hold Ctrl to copy), or
