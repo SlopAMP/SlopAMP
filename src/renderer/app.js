@@ -1173,7 +1173,10 @@ WM.onDocs('drop', async (e) => {
   if (draggingInternal) { draggingInternal = false; moveSelectedTo(t.index); return; }
   const dt = e.dataTransfer;
   const paths = [...(dt.files || [])].map(f => P.pathForFile(f)).filter(Boolean);
-  if (paths.length) { await addPaths(paths, at); return; }
+  const zips = paths.filter(p => ZIP_RE.test(p));                 // 2.4: a shared playlist .zip opens as its own tab
+  for (const z of zips) { const k = await openSharedZip(z); if (k >= 0 && zips.length === 1 && paths.length === 1 && S.tabs[k].items.length) playIndex(0); }
+  if (paths.length > zips.length) { await addPaths(paths.filter(p => !ZIP_RE.test(p)), at); return; }
+  if (paths.length) return;
   const text = dt.getData('text/uri-list') || dt.getData('text/plain') || '';
   const urls = extractUrls(text);
   if (urls.length) addUrls(urls, at);
@@ -1508,6 +1511,7 @@ $('#tabStrip').addEventListener('contextmenu', (e) => {
     ['Rename…', () => renameTab(i)],
     ['Duplicate', () => duplicateTab(i)],
     ['Save as playlist file…', () => saveTabFile(i)],
+    ['Share playlist (.zip)…', () => shareOpenDlg(S.tabs[i].items, S.tabs[i].name), !S.tabs[i].items.length],
     null,
     ['New tab', () => { const n = newTab(); renameTab(n); }],
     ...(i > 0 && !isHist(S.tabs[i - 1]) ? [['Move left', () => moveTab(i, -1)]] : []),
@@ -1881,6 +1885,7 @@ function askLoadMode(name, count) {
 async function loadPlaylistFile() {
   const res = await P.loadPlaylist();
   if (!res || res.canceled) return;
+  if (res.zip) { await openSharedZip(res.zip); return; }     // 2.4: LOAD a shared playlist .zip
   if (!res.entries || !res.entries.length) { toast('That playlist is empty or has nothing SlopAMP can play.'); return; }
   let mode = 'replace';
   if (histOnScreen()) mode = 'newtab';          // never into a History tab
@@ -1905,6 +1910,7 @@ async function openAbout() {
   $('#aboutVer').textContent = `version ${info.version}`;
   $('#licFrame').classList.add('hidden'); $('#aboutLic').textContent = 'View licenses';
   $('#aboutEnc').textContent = info.hasFfmpeg ? `FFmpeg ready · video converter: ${info.encoder || 'detecting…'}` : 'FFmpeg not found — only natively supported formats will play.';
+  $('#assocRow').classList.toggle('hidden', info.platform !== 'win32');
   $('#aboutDlg').showModal();
 }
 $('#aboutLic').onclick = () => {
@@ -2226,7 +2232,7 @@ function selectRel(d) {
   const li = list.querySelector(`li[data-i="${i}"]`); if (li) li.scrollIntoView({ block: 'nearest' });
 }
 
-P.onOpenFiles(async (paths) => { const added = await addPaths(paths); if (added.length) playIndex(S.items.indexOf(added[0])); });
+P.onOpenFiles((paths) => openPaths(paths));   // 2.4: playlist files open as tabs, shared .zips unpack (openPaths)
 
 // ------------------------------------------------------------------ (2.3.1) SLOP is gone
 // SLOP (1.6–2.3: packs of a YouTube moment for slop.cc) was hidden in 2.3.0 and removed in 2.3.1. Editing is CLIP
@@ -2964,6 +2970,108 @@ $('#dlmSearch').addEventListener('input', () => { DLM.anchor = -1; dlmRender(); 
 $('#dlmSearch').addEventListener('keydown', (e) => { if (e.key === 'Escape' && e.target.value) { e.preventDefault(); e.stopPropagation(); e.target.value = ''; dlmRender(); } });
 $('#dlmSearchX').onclick = () => { $('#dlmSearch').value = ''; dlmRender(); $('#dlmSearch').focus(); };
 $('#dlmOpenTab').onclick = () => openPlaylistFiles(dlmVisible().filter(r => r.kind === 'playlist' && DLM.sel.has(dlmKey(r))));
+// ------------------------------------------------------------------ 2.4: Open with SlopAMP (#6) + Share playlist (#5)
+// Files handed to SlopAMP (double-click / Open with / command line / a second copy started): a playlist file opens
+// in a new tab named after it and the first item plays (the same file again switches to its tab); a shared .zip
+// unpacks into Downloads\SlopAMP\Shared\<name> and opens the same way; songs, videos and folders work as before.
+const PL_FILE_RE = /\.(m3u8?|pls)$/i, ZIP_RE = /\.zip$/i;
+const samePath = (a, b) => String(a || '').replace(/\//g, '\\').toLowerCase() === String(b || '').replace(/\//g, '\\').toLowerCase();
+async function openPaths(paths) {
+  paths = (paths || []).filter(p => typeof p === 'string');
+  const pls = paths.filter(p => PL_FILE_RE.test(p)), zips = paths.filter(p => ZIP_RE.test(p)), rest = paths.filter(p => !PL_FILE_RE.test(p) && !ZIP_RE.test(p));
+  if (rest.length) { const added = await addPaths(rest); if (added.length) playIndex(S.items.indexOf(added[0])); }
+  let first = null;
+  for (const p of pls) { const r = await openPlaylistAsTab(p); if (!first && r) first = r; }
+  for (const z of zips) { const k = await openSharedZip(z); if (!first && k >= 0) first = { k, fresh: true }; }
+  if (!first || rest.length) return;
+  switchTab(first.k);
+  const playingIt = S.playTab === first.k && status !== 'stopped' && status !== 'idle';
+  if (S.tabs[first.k].items.length && (first.fresh || !playingIt)) playIndex(0);
+}
+async function openPlaylistAsTab(p) {
+  const i = S.tabs.findIndex(t => t.src && samePath(t.src, p));
+  if (i >= 0) { switchTab(i); toast(`"${S.tabs[i].name}" is already open`, 1800); return { k: i, fresh: false }; }
+  showBusy(true);
+  const res = await P.plOpenFile(p);
+  showBusy(false);
+  if (!res || res.error || !res.entries) { toast(`Couldn’t open ${String(p).split(/[\\/]/).pop()}.`); return null; }
+  const k = newTab(res.name.replace(PL_FILE_RE, '').slice(0, 40));
+  S.tabs[k].src = res.path;
+  const added = res.entries.length ? addDescribed(res.entries, undefined, false) : [];
+  const miss = added.filter(x => x.missing).length;
+  toast(`Opened ${res.name} · ${added.length} item${added.length === 1 ? '' : 's'}${miss ? ` (${miss} not found)` : ''}`, 2600);
+  renderTabs(); saveSoon();
+  return { k, fresh: true };
+}
+async function openSharedZip(z) {
+  showBusy(true); toast(`Unpacking ${String(z).split(/[\\/]/).pop()}…`, 60000);
+  const res = await P.shareOpen(z);
+  showBusy(false);
+  if (!res || res.error) { toast(res && res.error && res.error !== 'missing' ? res.error : 'Couldn’t open that .zip.', 4000); return -1; }
+  const k = newTab(String(res.name).slice(0, 40));
+  if (res.playlist) S.tabs[k].src = res.playlist;
+  const added = res.entries && res.entries.length ? addDescribed(res.entries, undefined, false) : [];
+  toast(`Opened shared playlist "${res.name}" · ${added.length} item${added.length === 1 ? '' : 's'} · files in ${res.dir}${res.skipped ? ` (${res.skipped} skipped)` : ''}`, 5000);
+  renderTabs(); saveSoon();
+  return k;
+}
+// Share playlist (.zip): right-click a tab → Share playlist (.zip)…, or Library → PLAYLISTS → right-click → Share (.zip)…
+const SH = { items: [], name: '', dest: '', plan: null, busy: false, out: null };
+async function shareOpenDlg(items, name) {
+  SH.items = (items || []).map(i => ({ type: i.type, path: i.path, url: i.url, title: i.title, duration: i.duration, localVideo: i.localVideo, localAudio: i.localAudio }));
+  SH.name = String(name || 'Playlist'); SH.dest = ''; SH.out = null; SH.busy = false;
+  $('#shareFiles').checked = true; $('#shareDl').checked = false;
+  await shareRefresh();
+  $('#shareDlg').showModal();
+}
+async function shareRefresh() {
+  const p = await P.sharePlan(SH.items, SH.name, { includeFiles: $('#shareFiles').checked, includeDl: $('#shareDl').checked });
+  SH.plan = p; if (!SH.dest) SH.dest = p.dest;
+  const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 'S'}`;
+  $('#shareTitle').textContent = `Share "${SH.name}"`;
+  $('#shareSum').textContent = `${pl(p.items, 'ITEM')} · ${pl(p.files, 'FILE')}${p.files ? ` ${fmtSize(p.bytes).toUpperCase()}` : ''} · ${pl(p.links, 'LINK')}${p.missing.length ? ` · ${p.missing.length} MISSING` : ''}`;
+  $('#shareDlRow').classList.toggle('hidden', !p.dlCopies);
+  $('#shareDl').disabled = !$('#shareFiles').checked;
+  $('#shareDlSize').textContent = p.dlCopies ? `(+${p.dlCopies} file${p.dlCopies === 1 ? '' : 's'}, ${fmtSize(p.dlBytes)})` : '';
+  const w = [];
+  if (p.missing.length) w.push(`${p.missing.length === 1 ? '1 file is' : `${p.missing.length} files are`} missing and will be left out: ${p.missing.slice(0, 3).map(n => `"${n}"`).join(', ')}${p.missing.length > 3 ? '…' : ''}`);
+  if (p.bytes > 2 * 1024 ** 3) w.push(`That’s a big .zip (${fmtSize(p.bytes)}): fine to make, but check how you’ll send it.`);
+  if (!$('#shareFiles').checked) w.push('Without the files, the .zip only has the playlist with its links.');
+  $('#shareWarn').textContent = w.join(' '); $('#shareWarn').classList.toggle('hidden', !w.length);
+  $('#shareDest').textContent = SH.dest;
+  $('#shareGo').textContent = p.files ? `Make .zip (${fmtSize(p.bytes)})` : 'Make .zip';
+  $('#shareGo').disabled = !p.items;
+}
+function shareUi(state) {   // 'ready' | 'busy' | 'done'
+  SH.busy = state === 'busy';
+  for (const id of ['#shareFiles', '#shareDl', '#shareChange']) $(id).disabled = state !== 'ready' || (id === '#shareDl' && !$('#shareFiles').checked);
+  $('#shareProg').classList.toggle('hidden', state === 'ready');
+  $('#shareGo').classList.toggle('hidden', state === 'done'); $('#shareGo').disabled = state !== 'ready';
+  $('#shareShow').classList.toggle('hidden', state !== 'done');
+  $('#shareCancel').textContent = state === 'done' ? 'Close' : 'Cancel';
+}
+$('#shareFiles').onchange = $('#shareDl').onchange = () => shareRefresh();
+$('#shareChange').onclick = async () => { const f = await P.shareDest(SH.dest); if (f) { SH.dest = f; $('#shareDest').textContent = f; } };
+$('#shareGo').onclick = async () => {
+  shareUi('busy'); $('#shareBar').style.width = '0%'; $('#shareProgText').textContent = 'Starting…';
+  const r = await P.shareMake({ items: SH.items, name: SH.name, includeFiles: $('#shareFiles').checked, includeDl: $('#shareDl').checked, dest: SH.dest });
+  if (r && r.ok) { SH.out = r.file; shareUi('done'); $('#shareBar').style.width = '100%'; $('#shareProgText').textContent = `Saved ${r.file.split(/[\\/]/).pop()} (${fmtSize(r.size)})`; }
+  else { shareUi('ready'); $('#shareProg').classList.remove('hidden'); $('#shareProgText').textContent = r && r.error ? r.error : 'Couldn’t make the .zip.'; await shareRefresh(); }
+};
+P.onShareProgress((pr) => {
+  if (!SH.busy) return;
+  $('#shareBar').style.width = `${pr.total ? Math.min(100, Math.round(pr.done / pr.total * 100)) : 100}%`;
+  $('#shareProgText').textContent = `${pr.n || 0} of ${pr.of || 0} file${pr.of === 1 ? '' : 's'} · ${fmtSize(pr.done)} / ${fmtSize(pr.total)}`;
+});
+$('#shareCancel').onclick = () => { if (SH.busy) P.shareCancel(); else $('#shareDlg').close(); };
+$('#shareShow').onclick = () => { if (SH.out) P.showInFolder(SH.out); };
+$('#shareDlg').addEventListener('cancel', (e) => { if (SH.busy) { e.preventDefault(); P.shareCancel(); } });
+$('#shareDlg').addEventListener('close', () => shareUi('ready'));
+// "?" → Make SlopAMP open playlists…
+$('#assocBtn').onclick = async () => {
+  const r = await P.appAssoc();
+  toast(r && r.ok ? 'SlopAMP is registered for playlists. In Default apps, pick SlopAMP for .m3u8 / .m3u (or use Open with → Always).' : `Couldn’t register SlopAMP for playlists${r && r.error ? `: ${r.error}` : '.'}`, 6000);
+};
 async function openPlaylistFiles(rows) {
   let opened = 0, last = '';
   for (const r of rows) {
@@ -3663,6 +3771,7 @@ $('#dlmBody').addEventListener('contextmenu', (e) => {
   const en = [];
   if (r.kind === 'playlist') {
     en.push([sel.length > 1 ? `Open ${sel.length} in new tabs` : 'Open in new tab', () => openPlaylistFiles(sel.filter(x => x.kind === 'playlist'))]);
+    en.push(['Share (.zip)…', async () => { const res = await P.plOpen(r.path); if (res && res.entries) shareOpenDlg(res.entries.map(x => (x.url ? { url: x.url, title: x.title, duration: x.duration } : { type: 'file', path: x.path, title: x.title, duration: x.duration })), r.title); }]);
   } else if (!r.missing) {
     en.push(['Play', () => libAdd([r], true)], [`Add to "${tname}"${sel.length > 1 ? ` (${sel.length})` : ''}`, () => libAdd(sel, false)],
       ['Add to new tab', async () => { const n = newTab(); renderList(); await addFilesToTab(sel.filter(x => !x.missing && x.kind !== 'playlist').map(x => x.path), n); }]);
@@ -4013,7 +4122,7 @@ let saveT;
 function stateSnapshot() {
   return {
     version: 2,
-    tabs: S.tabs.map(t => ({ id: t.id, name: t.name, current: t.current, items: t.items.map(({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at }) => ({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at })) })),
+    tabs: S.tabs.map(t => ({ id: t.id, name: t.name, current: t.current, src: t.src || undefined, items: t.items.map(({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at }) => ({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at })) })),
     tab: S.tab, playTab: S.playTab, vis: S.vis, volume: S.volume, muted: S.muted, shuffle: S.shuffle, repeat: S.repeat,
     showVideo: S.showVideo, showPlaylist: S.showPlaylist, plShade: S.plShade, vidShade: S.vidShade, remaining: S.remaining, plHeight: S.plHeight, visMode, eq: S.eq,
     resume: S.resume, subsOn: S.subsOn, lib: S.lib, hist: S.hist, xhist: S.xhist
@@ -4065,7 +4174,7 @@ setInterval(() => { blink = !blink; }, 500);
   const okItem = (i) => i && (i.type === 'file' || i.type === 'youtube' || (i.type === 'x' && !!parseXUrl(i.url))) && (i.path || i.url);
   let savedCur = -1;
   if (st && Array.isArray(st.tabs) && st.tabs.length) {
-    S.tabs = st.tabs.map((t, k) => ({ id: t.id || 't' + nid(), name: String(t.name || `Playlist ${k + 1}`).slice(0, 40), current: -1, items: (t.items || []).filter(okItem).map(i => ({ ...i, id: i.id || nid() })), saved: Number.isInteger(t.current) ? t.current : -1 }));
+    S.tabs = st.tabs.map((t, k) => ({ id: t.id || 't' + nid(), name: String(t.name || `Playlist ${k + 1}`).slice(0, 40), src: typeof t.src === 'string' ? t.src : undefined, current: -1, items: (t.items || []).filter(okItem).map(i => ({ ...i, id: i.id || nid() })), saved: Number.isInteger(t.current) ? t.current : -1 }));
     S.tab = Math.min(Math.max(0, st.tab | 0), S.tabs.length - 1);
     S.playTab = Math.min(Math.max(0, st.playTab | 0), S.tabs.length - 1);
     savedCur = PT().saved;
@@ -4116,6 +4225,6 @@ setInterval(() => { blink = !blink; }, 500);
   syncWindows({ reflow: false });      // first layout: the windows appear where they were last time
   requestAnimationFrame(tick); VW().requestAnimationFrame(tickVideo);
   const info = await P.info();
-  if (info.pendingOpen && info.pendingOpen.length) { const added = await addPaths(info.pendingOpen); if (added.length) playIndex(S.items.indexOf(added[0])); }
+  if (info.pendingOpen && info.pendingOpen.length) await openPaths(info.pendingOpen);
   window.__phosphor = { __md: () => MD.viz, __mdLoad: (n) => mdLoad(n, 0), newTab, switchTab, closeTab, sendSelectedToTab, renameTab, curItem, __audio: () => ({ actx, analyser, eqNodes }), openDownloadsManager, dlmRefresh, DLM, verifyLocalCopies, setRate, pickSub, subsState: () => SUBS, downloadAll, recordResume, __mediaKey: mediaKey, get dlBatch() { return dlBatch; }, __eqNodes: eqNodes, loadEqPreset, setEqPanel, __markLive: (i, v) => markLive(S.items[i], v), __ytError: (code) => { engine = 'youtube'; onYtError({ data: code }); }, S, playIndex, addUrls, addPaths, next, prev, stop, play, pause, seekTo, setVolume, toggleMini, toggleFullscreen, syncWindows, WM, get engine() { return engine; }, get status() { return status; }, currentTime, currentDuration, L };
 })();

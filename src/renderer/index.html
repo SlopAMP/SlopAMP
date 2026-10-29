@@ -362,6 +362,20 @@
   </dialog>
 
 
+  <!-- Share playlist (2.4, idea #5): a playlist + its files as one .zip -->
+  <dialog id="shareDlg">
+    <form method="dialog">
+      <div class="dlg-title" id="shareTitle">Share playlist</div>
+      <div class="share-lcd lcd-inset" id="shareSum"></div>
+      <label class="share-ck"><input type="checkbox" id="shareFiles" checked><span>Include the songs and videos (files on this PC)<small>Your friend gets everything; YouTube / X links stay links.</small></span></label>
+      <label class="share-ck" id="shareDlRow"><input type="checkbox" id="shareDl"><span>Also include my downloaded copies of YouTube / X items <em id="shareDlSize"></em><small>So they play without internet. Off: those stay links.</small></span></label>
+      <div class="share-warn" id="shareWarn"></div>
+      <div class="share-to">Save to: <span id="shareDest"></span> <button type="button" id="shareChange">Change&#8230;</button></div>
+      <div class="share-prog hidden" id="shareProg"><div class="share-bar"><i id="shareBar"></i></div><span id="shareProgText"></span></div>
+      <div class="dlg-btns"><button type="button" id="shareCancel">Cancel</button><button type="button" id="shareShow" class="hidden">Show in folder</button><button type="button" id="shareGo">Make .zip</button></div>
+    </form>
+  </dialog>
+
   <dialog id="confirmDlg">
     <form method="dialog">
       <div class="dlg-title" id="confirmTitle"></div>
@@ -390,6 +404,10 @@
           <select id="updModeSel"><option value="auto">Install automatically</option><option value="notify">Notify me</option><option value="off">Off</option></select>
         </label>
         <div class="upd-hint" id="updHint"></div>
+      </div>
+      <div class="sys" id="aboutSys">
+        <div id="assocRow"><div class="upd-head"><span class="upd-lbl">Playlist files</span><button type="button" id="assocBtn" title="Lets Windows open .m3u8 / .m3u / .pls playlists in SlopAMP (no admin needed)">Make SlopAMP open playlists&#8230;</button></div>
+        <div class="upd-hint" id="assocHint">Double-click a playlist to open it in SlopAMP: this registers SlopAMP for playlists and opens Windows&#8217; Default apps, where you pick SlopAMP for .m3u8 / .m3u (or right-click a playlist &rarr; Open with &rarr; Choose another app &rarr; SlopAMP &rarr; Always).</div></div>
       </div>
       <div class="dlg-btns"><button type="button" id="aboutLic">View licenses</button><button value="close">Close</button></div>
     </form>

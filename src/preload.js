@@ -11,6 +11,15 @@ contextBridge.exposeInMainWorld('phosphor', {
   histMirror: (items, kind) => ipcRenderer.invoke('hist:mirror', items, kind),   // a History tab's synced copy ('yt' / 'x')
   plList: () => ipcRenderer.invoke('pl:list'),
   plOpen: (p) => ipcRenderer.invoke('pl:open', p),
+  // 2.4: #6 playlist files handed to SlopAMP, #5 Share playlist (.zip), "?" → Make SlopAMP open playlists…
+  plOpenFile: (p) => ipcRenderer.invoke('pl:openFile', p),
+  sharePlan: (items, name, o) => ipcRenderer.invoke('share:plan', items, name, o),
+  shareDest: (cur) => ipcRenderer.invoke('share:dest', cur),
+  shareMake: (o) => ipcRenderer.invoke('share:make', o),
+  shareCancel: () => ipcRenderer.send('share:cancel'),
+  onShareProgress: (cb) => ipcRenderer.on('share:progress', (_e, v) => cb(v)),
+  shareOpen: (zip) => ipcRenderer.invoke('share:open', zip),
+  appAssoc: () => ipcRenderer.invoke('app:assoc'),
   plDelete: (paths) => ipcRenderer.invoke('pl:delete', paths),
   loadPlaylist: () => ipcRenderer.invoke('playlist:load'),
   dlInfo: () => ipcRenderer.invoke('dl:info'),

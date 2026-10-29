@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { MediaServer, isMediaFile, encoderArgs } = require('./media');
 const { Clipper } = require('./clip');
+const share = require('./share');
 const { YtWeb } = require('./ytweb');
 const { Downloader } = require('./downloader');
 const { Updater } = require('./updater');
@@ -68,9 +69,29 @@ if (!gotLock) {
 
 function argvFiles(argv) {
   const appPath = path.resolve(app.getAppPath());
-  return argv.slice(1).filter(a => !a.startsWith('-') && path.resolve(a) !== appPath && path.resolve(a) !== path.resolve(process.execPath) && fs.existsSync(a) && (isMediaFile(a) || fs.statSync(a).isDirectory()))
+  // 2.4 (#6 / #5): playlist files (.m3u8 / .m3u / .pls) and shared .zip playlists come through too
+  return argv.slice(1).filter(a => !a.startsWith('-') && path.resolve(a) !== appPath && path.resolve(a) !== path.resolve(process.execPath) && fs.existsSync(a) && (isMediaFile(a) || /\.(m3u8?|pls|zip)$/i.test(a) || fs.statSync(a).isDirectory()))
     .map(a => path.resolve(a));
 }
+
+// 2.4 #6: SlopAMP as a playlist app for the current user (the installer does the same at install time).
+// The Portable copy registers its own .exe (its launcher passes the file on), so "Open with" survives restarts.
+const PLAYLIST_TYPES = ['.m3u8', '.m3u', '.pls'];
+function playlistAppExe() { return process.env.SLOPAMP_PORTABLE_EXE && fs.existsSync(process.env.SLOPAMP_PORTABLE_EXE) ? process.env.SLOPAMP_PORTABLE_EXE : process.execPath; }
+function registerPlaylistApp() {
+  const exe = playlistAppExe(), app1 = path.basename(exe), C = 'HKCU\\Software\\Classes';
+  const cmd = `"${exe}" "%1"`;
+  const keys = [
+    [`${C}\\SlopAMP.Playlist`, '', 'SlopAMP playlist'], [`${C}\\SlopAMP.Playlist\\DefaultIcon`, '', `${exe},0`], [`${C}\\SlopAMP.Playlist\\shell\\open\\command`, '', cmd],
+    [`${C}\\Applications\\${app1}`, 'FriendlyAppName', 'SlopAMP'], [`${C}\\Applications\\${app1}\\shell\\open\\command`, '', cmd],
+    ['HKCU\\Software\\SlopAMP\\Capabilities', 'ApplicationName', 'SlopAMP'], ['HKCU\\Software\\SlopAMP\\Capabilities', 'ApplicationDescription', 'SlopAMP media player'],
+    ['HKCU\\Software\\RegisteredApplications', 'SlopAMP', 'Software\\SlopAMP\\Capabilities'],
+    ...PLAYLIST_TYPES.flatMap(t => [[`${C}\\${t}\\OpenWithProgids`, 'SlopAMP.Playlist', '', 'REG_NONE'], [`${C}\\Applications\\${app1}\\SupportedTypes`, t, ''], ['HKCU\\Software\\SlopAMP\\Capabilities\\FileAssociations', t, 'SlopAMP.Playlist']])
+  ];
+  const run = (k, v, d, type) => new Promise((res, rej) => execFileReg(['add', k, ...(v ? ['/v', v] : ['/ve']), '/t', type || 'REG_SZ', ...(type === 'REG_NONE' ? [] : ['/d', d]), '/f'], (e) => (e ? rej(e) : res())));
+  return keys.reduce((p, [k, v, d, t]) => p.then(() => run(k, v, d, t)), Promise.resolve()).then(() => log(`playlist association registered for ${exe}`));
+}
+function execFileReg(args, cb) { require('child_process').execFile('reg.exe', args, { windowsHide: true }, cb); }
 
 // ---------- persistence ----------
 const stateFile = () => path.join(app.getPath('userData'), 'slopamp-state.json');
@@ -386,7 +407,8 @@ function downloadDirs() {
   const s = currentState || loadState();
   const base = path.join(app.getPath('downloads'), 'SlopAMP');
   return { video: s.dlVideoDir || path.join(base, 'Video'), audio: s.dlAudioDir || path.join(base, 'Audio'), playlists: path.join(base, 'Playlists'),
-    mp3clips: path.join(base, 'mp3clips'), mp4clips: path.join(base, 'mp4clips'), shots: path.join(base, 'Shots') };   // CLIP (2.3)
+    mp3clips: path.join(base, 'mp3clips'), mp4clips: path.join(base, 'mp4clips'), shots: path.join(base, 'Shots'),   // CLIP (2.3)
+    shared: path.join(base, 'Shared') };   // Share playlist (2.4): .zips made here, and shared .zips unpacked here
 }
 function playlistsDir() {
   const d = downloadDirs().playlists;
@@ -610,12 +632,58 @@ function registerIpc() {
       title: 'Load playlist',
       defaultPath: playlistsDir(),
       properties: ['openFile'],
-      filters: [{ name: 'Playlists', extensions: ['m3u8', 'm3u', 'pls'] }, { name: 'All files', extensions: ['*'] }]
+      filters: [{ name: 'Playlists', extensions: ['m3u8', 'm3u', 'pls', 'zip'] }, { name: 'All files', extensions: ['*'] }]
     });
     if (res.canceled || !res.filePaths.length) return { canceled: true };
     const file = res.filePaths[0];
+    if (/\.zip$/i.test(file)) return { zip: file };      // 2.4: a shared playlist .zip (renderer → share:open)
     rememberPlaylistDir(file);
     return { name: path.basename(file), entries: await loadPlaylistEntries(file) };
+  });
+  // ---- 2.4 #6: a playlist file handed to SlopAMP (double-click, Open with, the command line): read it for a new tab
+  ipcMain.handle('pl:openFile', async (_e, p) => {
+    if (typeof p !== 'string' || !PLAYLIST_RE.test(p) || !fs.existsSync(p)) return { error: 'missing' };
+    return { name: path.basename(p), path: path.resolve(p), entries: await loadPlaylistEntries(p) };
+  });
+  // ---- 2.4 #5: Share playlist (.zip) — share.js
+  let shareJob = null;
+  ipcMain.handle('share:plan', (_e, items, name, o) => {
+    const { summary } = share.plan(items, o || {});
+    return { ...summary, dest: path.join(downloadDirs().shared, `${share.safeName(name)}.zip`) };
+  });
+  ipcMain.handle('share:dest', async (_e, cur) => {
+    const r = await dialog.showSaveDialog(win, { title: 'Save the shared playlist as', defaultPath: typeof cur === 'string' ? cur : downloadDirs().shared, filters: [{ name: 'Zip file', extensions: ['zip'] }] });
+    return r.canceled || !r.filePath ? null : (/\.zip$/i.test(r.filePath) ? r.filePath : `${r.filePath}.zip`);
+  });
+  ipcMain.handle('share:make', async (e, o) => {
+    if (shareJob) return { ok: false, error: 'A .zip is already being made.' };
+    if (!o || typeof o.dest !== 'string' || !/\.zip$/i.test(o.dest)) return { ok: false, error: 'bad file name' };
+    const ac = new AbortController(); shareJob = ac;
+    let last = 0;
+    try {
+      return await share.make({ items: o.items, name: o.name, includeFiles: o.includeFiles !== false, includeDl: !!o.includeDl, dest: path.resolve(o.dest) },
+        (pr) => { const now = Date.now(); if (now - last > 150 || pr.done === pr.total) { last = now; if (!e.sender.isDestroyed()) e.sender.send('share:progress', pr); } }, ac.signal);
+    } finally { shareJob = null; }
+  });
+  ipcMain.on('share:cancel', () => { if (shareJob) shareJob.abort(); });
+  // A shared .zip: unpack into Downloads\SlopAMP\Shared\<name> and hand back its playlist (or its files) for a new tab
+  ipcMain.handle('share:open', async (_e, zip) => {
+    if (typeof zip !== 'string' || !/\.zip$/i.test(zip) || !fs.existsSync(zip)) return { error: 'missing' };
+    try {
+      const u = await share.unpack(zip, downloadDirs().shared);
+      if (u.error) return u;
+      log(`shared zip unpacked: ${path.basename(zip)} -> ${u.dir} (${u.media.length} files, ${u.playlists.length} playlist(s), ${u.skipped.length} skipped)`);
+      const pl = u.playlists[0];
+      const entries = pl ? await loadPlaylistEntries(pl) : await describeFiles(u.media);
+      return { name: path.basename(zip, path.extname(zip)), dir: u.dir, entries, skipped: u.skipped.length, playlist: pl || null };
+    } catch (err) { return { error: String(err.message || err) }; }
+  });
+  // ---- 2.4 #6: "?" → Make SlopAMP open playlists… (current user, no admin): register this copy, open Default apps
+  ipcMain.handle('app:assoc', async () => {
+    if (process.platform !== 'win32') return { ok: false, error: 'Windows only' };
+    try { await registerPlaylistApp(); } catch (err) { log('playlist association failed', err.message); return { ok: false, error: String(err.message || err) }; }
+    try { await shell.openExternal('ms-settings:defaultapps'); } catch (_) {}
+    return { ok: true, exe: playlistAppExe() };
   });
   // ---- downloads
   ipcMain.handle('dl:info', () => ({ available: downloader.available(), dirs: downloadDirs() }));

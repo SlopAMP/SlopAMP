@@ -464,6 +464,16 @@ body.mini #updBar { display: none; }
 .upd-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 8px 0 12px; font-size: var(--fs-m); color: var(--ink-muted); }
 .upd-meta .ok { color: var(--ink-green-dim); }
 #updDlg .dlg-btns { flex-wrap: wrap; }
+/* Share playlist (2.4) */
+/* width: frame.css (body.host-dialog #shareDlg) — the dialog window is sized to the dialog, so no vw here */
+.share-lcd { display: block; padding: 6px 9px; margin: 2px 0 10px; font: bold var(--fs-s) var(--font-lcd, monospace); letter-spacing: 1px; color: var(--green); }
+.share-ck { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-size: var(--fs-m); cursor: pointer; }
+.share-ck input { margin-top: 2px; } .share-ck small { display: block; color: var(--ink-muted); font-size: var(--fs-s); } .share-ck em { font-style: normal; color: var(--ink-muted); }
+.share-warn { color: var(--warn-ink, #ffd166); font-size: var(--fs-s); margin: 8px 0; }
+.share-to { font-size: var(--fs-s); color: var(--ink-muted); margin: 8px 0; word-break: break-all; } .share-to span { color: var(--ink-menu); }
+.share-to button { margin-left: 6px; padding: 1px 8px; }
+.share-prog { margin: 8px 0 10px; font-size: var(--fs-s); color: var(--ink-menu); } .share-bar { height: 8px; border: 1px solid var(--line-green); margin-bottom: 4px; } .share-bar i { display: block; height: 100%; width: 0; background: var(--green); transition: width .15s; }
+#aboutSys { margin-top: 10px; }
 #updDlg .dlg-btns button.go { background: linear-gradient(var(--accent-27b), var(--accent-18)); border-color: var(--accent-51); color: var(--base-96); font-weight: 600; }
 #updDlg .dlg-btns button.dim { background: none; border-color: transparent; color: var(--ink-muted); text-decoration: underline dotted; text-underline-offset: 2px; padding-inline: 4px; }
 

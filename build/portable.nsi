@@ -41,6 +41,8 @@ Section
   nodata:
   ; Tells SlopAMP it is the portable copy (it then never tries to install updates).
   System::Call 'Kernel32::SetEnvironmentVariable(t "SLOPAMP_PORTABLE", t "1")i'
+  ; 2.4: the portable .exe itself, so "?" -> Make SlopAMP open playlists... registers this file (not the temp copy)
+  System::Call 'Kernel32::SetEnvironmentVariable(t "SLOPAMP_PORTABLE_EXE", t "$EXEPATH")i'
   ${GetParameters} $1
   SetOutPath "$INSTDIR"
   Exec '"$INSTDIR\SlopAMP.exe" $1'

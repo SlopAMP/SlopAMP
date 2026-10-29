@@ -155,6 +155,13 @@ FunctionEnd
 !macro RegType EXT
   WriteRegStr HKCU "${APPKEY}\SupportedTypes" ".${EXT}" ""
 !macroend
+!macro PlType EXT
+  WriteRegNone HKCU "Software\Classes\.${EXT}\OpenWithProgids" "SlopAMP.Playlist"
+  WriteRegStr HKCU "Software\SlopAMP\Capabilities\FileAssociations" ".${EXT}" "SlopAMP.Playlist"
+!macroend
+!macro UnPlType EXT
+  DeleteRegValue HKCU "Software\Classes\.${EXT}\OpenWithProgids" "SlopAMP.Playlist"
+!macroend
 
 Section "SlopAMP (required)" SecMain
   SectionIn RO
@@ -213,6 +220,19 @@ Section "SlopAMP (required)" SecMain
   !insertmacro RegType wma
   !insertmacro RegType m3u
   !insertmacro RegType m3u8
+  !insertmacro RegType pls
+  ; 2.4 (#6): a real playlist handler, so "Open with" and Windows' Default apps list SlopAMP for playlists.
+  ; Windows doesn't let an installer make itself the default; the user picks SlopAMP once ("Always").
+  WriteRegStr HKCU "Software\Classes\SlopAMP.Playlist" "" "SlopAMP playlist"
+  WriteRegStr HKCU "Software\Classes\SlopAMP.Playlist\DefaultIcon" "" "$INSTDIR\${EXE},0"
+  WriteRegStr HKCU "Software\Classes\SlopAMP.Playlist\shell\open\command" "" '"$INSTDIR\${EXE}" "%1"'
+  !insertmacro PlType m3u8
+  !insertmacro PlType m3u
+  !insertmacro PlType pls
+  WriteRegStr HKCU "Software\SlopAMP\Capabilities" "ApplicationName" "SlopAMP"
+  WriteRegStr HKCU "Software\SlopAMP\Capabilities" "ApplicationDescription" "SlopAMP media player"
+  WriteRegStr HKCU "Software\RegisteredApplications" "SlopAMP" "Software\SlopAMP\Capabilities"
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 
   CreateDirectory "$SMPROGRAMS"
   CreateShortcut "$SMPROGRAMS\SlopAMP.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\${EXE}" 0
@@ -264,6 +284,11 @@ Section "Uninstall"
   Delete "$DESKTOP\SlopAMP.lnk"
   DeleteRegKey HKCU "${UNINSTKEY}"
   DeleteRegKey HKCU "${APPKEY}"
+  DeleteRegKey HKCU "Software\Classes\SlopAMP.Playlist"
+  !insertmacro UnPlType m3u8
+  !insertmacro UnPlType m3u
+  !insertmacro UnPlType pls
+  DeleteRegValue HKCU "Software\RegisteredApplications" "SlopAMP"
   DeleteRegKey HKCU "Software\SlopAMP"
   ; Only SlopAMP's own files (listed at build time from the staged app), then each folder only if it's
   ; now empty. Never RMDir /r: the install folder may be shared with other files (e.g. D:\Apps).
