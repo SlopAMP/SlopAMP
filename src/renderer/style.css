@@ -862,3 +862,14 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .mini-vol { display: flex; align-items: center; gap: 2px; flex: none; color: var(--ink-muted); }
 .mini-vol svg { width: 12px; height: 12px; fill: currentColor; }
 .mini-vol input.vol { width: 56px; cursor: pointer; }
+
+/* ---- X-ready MP4s (2.5, idea #22): tags + Fix for X */
+#list li .tag.xok { color: var(--info-75); } #list li .tag.xno { border-style: dashed; }   /* not for X: the row's own colour (readable in every skin) */
+.dlm-tag.xok, .dlm-tag.xno { margin-left: 6px; color: var(--ink-menu); font-weight: normal; } .dlm-tag.xno { border-style: dashed; }
+.xf-tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-s); margin: 4px 0 8px; }
+.xf-tbl th { text-align: left; color: var(--ink-muted); font-weight: normal; padding: 2px 6px; }
+.xf-tbl td { padding: 3px 6px; border-top: 1px solid var(--base-14b); color: var(--ink-menu); }
+.xf-tbl td.xf-bad { color: var(--warn-ink); } .xf-tbl td.xf-ok { color: var(--ink-menu); font-weight: 600; }
+.xf-row { font-size: var(--fs-s); color: var(--ink-muted); margin: 4px 0; word-break: break-all; } .xf-row b { color: var(--ink-menu); font-weight: 600; }
+.clip-x { margin-left: 6px; font: bold var(--fs-xs) var(--font-label); padding: 0 4px; border: 1px solid currentColor; border-radius: 2px; }
+.clip-xwarn { color: var(--warn-ink); }

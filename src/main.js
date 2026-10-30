@@ -163,7 +163,7 @@ function createWindow() {
   // The YOUTUBE window's page appears / goes with its panel (2.3)
   ytweb = new YtWeb({ wm, log, send: (ch, v) => { if (win && !win.isDestroyed()) win.webContents.send(ch, v); } });
   wm.onPanel = (id, shown) => { if (id === 'ytweb') { if (shown) ytweb.show(); else ytweb.hide(); } };
-  if (isDev) global.__slopamp = { wm, ytweb, sys: { toTray: () => toTray(), fromTray: () => fromTray(), get inTray() { return inTray; }, get tray() { return tray; }, get title() { return trayTitle; }, menu: () => trayMenu().items.map(i => i.label), mediaKeys: () => Object.keys(MEDIA_KEYS).filter(a => globalShortcut.isRegistered(a)) } };   // for the test scripts
+  if (isDev) global.__slopamp = { wm, ytweb, get clipper() { return clipper; }, sys: { toTray: () => toTray(), fromTray: () => fromTray(), get inTray() { return inTray; }, get tray() { return tray; }, get title() { return trayTitle; }, menu: () => trayMenu().items.map(i => i.label), mediaKeys: () => Object.keys(MEDIA_KEYS).filter(a => globalShortcut.isRegistered(a)) } };   // for the test scripts
   Menu.setApplicationMenu(null);
 
   const panelUrl = `${server.base}/app/panel.html`;
@@ -694,7 +694,7 @@ function registerIpc() {
     if (!downloader.available()) return { ok: false, reason: 'missing' };
     const vid = KEY_RE.test(job.vid || '') && (!isX || /^x\d/.test(job.vid)) ? job.vid : null;
     if (isX && !vid) return { ok: false, reason: 'unsupported' };
-    return downloader.start({ id: String(job.id), vid, x: isX, url: job.url, kind: job.kind === 'audio' ? 'audio' : 'video', quality: ['best', '1080', '720', '480'].includes(job.quality) ? job.quality : 'best', title: String(job.title || '') });
+    return downloader.start({ id: String(job.id), vid, x: isX, url: job.url, kind: job.kind === 'audio' ? 'audio' : 'video', quality: ['xready', 'best', '1080', '720', '480'].includes(job.quality) ? job.quality : 'xready', title: String(job.title || '') });
   });
   ipcMain.on('dl:cancel', (_e, id) => downloader.cancel(String(id)));
   // ---- user skins (see "user skins (1.7)" above)
@@ -705,6 +705,11 @@ function registerIpc() {
   ipcMain.handle('clip:save', (_e, o) => clipper.save(o).catch((e) => { log('clip save failed', e); return { ok: false, error: 'Couldn’t save the clip.' }; }));
   ipcMain.on('clip:cancel', (_e, job) => clipper.cancel(job));
   ipcMain.handle('clip:list', () => clipper.list());
+  // ---- 2.5 #22: X-ready MP4s (clip.js "X-ready", xready.js)
+  ipcMain.handle('x:status', (_e, files) => clipper.xStatus(files));
+  ipcMain.handle('x:plan', (_e, f) => (typeof f === 'string' ? clipper.xPlan(f) : { ok: false }));
+  ipcMain.handle('x:fix', (_e, o) => clipper.xFix(o).catch((e) => { log('Fix for X failed', e); return { ok: false, error: String(e.message || e) }; }));
+  ipcMain.on('x:cancel', (_e, job) => clipper.cancel(job));
   ipcMain.handle('clip:delete', (_e, paths) => clipper.remove(paths));
   ipcMain.handle('clip:rename', (_e, p, name) => { try { return clipper.rename(p, name); } catch (e) { return { error: String(e.message || e) }; } });
   ipcMain.handle('clip:pick', async () => {
@@ -1022,6 +1027,12 @@ app.whenReady().then(async () => {
         // X posts are added with a stand-in title ("@user · X post"); the file yt-dlp wrote is named after the post
         const xTitle = /^x\d/.test(ev.vid) && /^(@\w{1,15} · X post|X post \d+)( \(video \d+\))?$/.test(ev.title || '');
         rememberDownload(ev.vid, ev.kind === 'audio' ? 'audio' : 'video', ev.file, xTitle ? path.basename(ev.file).replace(/\.[^.]+$/, '').replace(DL_FILE_RE_TAIL, '').trim() : ev.title);
+      }
+      // 2.5 (#22): a finished video is checked for X first (Opus sound on an H.264 picture becomes AAC right here)
+      if (ev.status === 'done' && ev.file && ev.kind !== 'audio' && clipper) {
+        clipper.xAfterDownload(ev.file).catch((e) => { log('X check failed', e.message); return null; })
+          .then((r) => { if (win && !win.isDestroyed()) win.webContents.send('dl:event', { ...ev, x: r && r.x, xAudioFixed: !!(r && r.audioFixed) }); });
+        return;
       }
       if (win && !win.isDestroyed()) win.webContents.send('dl:event', ev);
     },

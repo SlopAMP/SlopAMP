@@ -389,6 +389,18 @@
     </form>
   </dialog>
 
+  <!-- Fix for X (2.5, idea #22): "<name> (X).mp4" next to the original -->
+  <dialog id="xfixDlg">
+    <form method="dialog">
+      <div class="dlg-title" id="xfTitle">Fix for X</div>
+      <table class="xf-tbl" id="xfTbl"></table>
+      <div class="xf-row" id="xfEnc"></div>
+      <div class="xf-row" id="xfOut"></div>
+      <div class="share-warn" id="xfWarn"></div>
+      <div class="dlg-btns"><button type="button" id="xfCancel">Cancel</button><button type="button" id="xfClip" class="hidden">&#9986; Open in CLIP</button><button type="button" id="xfGo">Fix for X</button></div>
+    </form>
+  </dialog>
+
   <dialog id="confirmDlg">
     <form method="dialog">
       <div class="dlg-title" id="confirmTitle"></div>
@@ -419,6 +431,9 @@
         <div class="upd-hint" id="updHint"></div>
       </div>
       <div class="upd sys" id="aboutSys">
+        <label class="upd-mode" for="dlFmtSel" title="X-ready: H.264 + AAC (posts to X), the best H.264 up to 1080p. Best quality: the largest picture (4K / 1440p, often VP9 / AV1), may not post to X.">Video downloads
+          <select id="dlFmtSel"><option value="xready">X-ready (H.264, up to 1080p)</option><option value="best">Best quality (4K / AV1)</option></select>
+        </label>
         <div class="upd-head"><span class="upd-lbl">Windows &amp; keys</span></div>
         <label class="sys-ck" title="The &#8211; button (and the taskbar) hides SlopAMP next to the clock instead; click its icon to bring it back. &#10005; still quits."><input type="checkbox" id="sysTray"><span>Minimize to the tray <small>(click its icon to come back)</small></span></label>
         <label class="sys-ck" title="Your keyboard&#8217;s play / next / previous / stop keys control SlopAMP even in the background. Off: other players (Spotify, your browser) get them; fully after restarting SlopAMP."><input type="checkbox" id="sysKeys"><span>Use media keys <small>(also in the background)</small></span></label>

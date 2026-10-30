@@ -301,7 +301,29 @@ YOUTUBE WINDOW
 DOWNLOADING YOUTUBE AND X VIDEOS
   * Click DOWNLOAD (on the player) to save the YouTube video you're watching,
     or right-click any YouTube or X item in the playlist -> Download...
-  * Pick Best / 1080p / 720p / 480p video (MP4) or Audio only (MP3).
+  * Pick X-ready / 720p / 480p / Best quality video (MP4) or Audio only (MP3).
+    X-ready (the default, ticked) saves H.264 video + AAC sound, the best up
+    to 1080p, so the file posts to X; 720p and 480p do the same, smaller.
+    Best quality takes the largest picture (4K / 1440p), usually VP9 or AV1,
+    which X won't take. "?" -> Video downloads picks which one is ticked and
+    what DOWNLOAD ALL uses.
+  * After a video download SlopAMP checks it for X. H.264 with Opus sound
+    gets AAC sound by itself (seconds). A video YouTube only has as VP9 /
+    AV1 is labelled "not for X".
+
+POSTING VIDEOS TO X
+  * Video files show "X ✓" (posts to X as it is) or "not for X" in the
+    playlist and the Library; hover the tag to see why.
+  * Right-click a video (playlist or Library, several at once too) -> Fix
+    for X... It shows what the file is now and what it'll be, then saves
+    "<name> (X).mp4" next to the original, which is kept: H.264 + AAC, at
+    most 1920x1200 (1200x1900 upright) and 60 fps. Progress shows at the
+    bottom with x to cancel. Uses your graphics card's encoder when it can,
+    like CLIP.
+  * Free X accounts can post up to 2:20 and 512 MB (X Premium: 4 hours and
+    16 GB on the web / iPhone). Longer or bigger: Fix for X warns and offers
+    Open in CLIP to trim it first. CLIP shows X ✓ on MP4 clips and warns past
+    2:20.
   * Files go to Downloads\SlopAMP\Video and Downloads\SlopAMP\Audio
     ("Change folders..." in the download menu to pick others).
   * When it's done the item shows SAVED (or MP3) and plays from your copy

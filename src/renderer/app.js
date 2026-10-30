@@ -37,6 +37,10 @@ Object.defineProperty(S, 'items', { get() { return S.tabs[S.tab].items; }, set(v
 Object.defineProperty(S, 'current', { get() { return S.tabs[S.tab].current; }, set(v) { S.tabs[S.tab].current = v; } });
 const PT = () => S.tabs[S.playTab] || S.tabs[0];                 // the tab that's playing
 const curItem = () => { const t = PT(); return t.items[t.current] || null; };   // the item that's playing
+// X-ready MP4s (2.5, #22; see "X-ready MP4s" below): file -> X check (or null), and the Fix for X queue
+const XS = new Map();
+const xsWant = new Set(); let xsT = 0;
+const XJ = { queue: [], active: null, done: [], failed: [], total: 0 };
 const allItems = () => S.tabs.flatMap(t => t.items);
 const tabOf = (item) => S.tabs.find(t => t.items.includes(item)) || null;
 let engine = null;     // 'local' | 'youtube' | null
@@ -987,6 +991,7 @@ function renderList() {
       tag.textContent = it.localVideo ? 'SAVED' : 'MP3'; tag.title = `Plays from your downloaded copy:\n${it.localVideo || it.localAudio}`;
       li.append(tag);
     }
+    { const xf = xVideoFile(it), x = xf && xOf(xf); if (x) li.append(xTag(x, 'tag')); }   // X ✓ / not for X (2.5, #22)
     if (it.noEmbed && !localPathOf(it)) { const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = 'WEB ONLY'; tag.title = 'Embedding disabled by owner — opens in browser, or download it'; li.append(tag); }
     const d = document.createElement('span'); d.className = 'd'; d.textContent = it.live ? '' : fmtShort(it.duration);
     if (inHist) { d.textContent = histAgo(it.at); d.classList.add('ago'); t.title = `${it.url}\n${HK[histScreenKind()].when} ${histWhen(it.at)}${it.duration ? ` · ${fmtShort(it.duration)} long` : ''}`; }
@@ -1122,6 +1127,8 @@ list.addEventListener('contextmenu', (e) => {
       entries.push(['Open in browser', () => P.openExternal(it.url)]);
     }
     entries.push(...clipMenuEntries(it));                 // CLIP (2.3)
+    { const files = S.items.filter(x => S.sel.has(x.id)).map(xVideoFile).filter(Boolean), own = xVideoFile(it);   // Fix for X (2.5)
+      if (own) entries.push([`𝕏 Fix for X…${files.length > 1 && files.includes(own) ? ` (${files.length})` : ''}`, () => xFixOpen(files.length > 1 && files.includes(own) ? files : [own])]); }
     const inHist = histOnScreen();
     const others = S.tabs.map((t, k) => [t, k]).filter(([t, k]) => k !== S.tab && !isHist(t));
     if (others.length) { entries.push(null); for (const [t, k] of others.slice(0, 8)) entries.push([`${inHist ? 'Copy' : 'Move'} to "${t.name}"`, () => sendSelectedToTab(k, inHist)]); }
@@ -1919,6 +1926,7 @@ async function openAbout() {
   $('#licFrame').classList.add('hidden'); $('#aboutLic').textContent = 'View licenses';
   $('#aboutEnc').textContent = info.hasFfmpeg ? `FFmpeg ready · video converter: ${info.encoder || 'detecting…'}` : 'FFmpeg not found — only natively supported formats will play.';
   $('#assocRow').classList.toggle('hidden', info.platform !== 'win32');
+  $('#dlFmtSel').value = dlDefault();
   $('#aboutDlg').showModal();
 }
 $('#aboutLic').onclick = () => {
@@ -2328,10 +2336,11 @@ async function openDlMenu(item, pos) {
     };
     if (ytm) audio();   // YouTube Music: MP3 first and highlighted
     add('dm-sec', 'Video (MP4)');
-    add('dm-item', '▶ Best quality <small>largest file</small>', () => startDownload(item, 'video', 'best'));
-    add('dm-item', '▶ 1080p', () => startDownload(item, 'video', '1080'));
-    add('dm-item', '▶ 720p', () => startDownload(item, 'video', '720'));
-    add('dm-item', '▶ 480p <small>smallest</small>', () => startDownload(item, 'video', '480'));
+    const def = dlDefault();   // 2.5 (#22): X-ready (H.264 + AAC) unless "?" says Best quality
+    add(`dm-item${def === 'xready' ? ' cur' : ''}`, '▶ X-ready <small>H.264 + AAC, up to 1080p</small>', () => startDownload(item, 'video', 'xready'));
+    add('dm-item', '▶ 720p <small>X-ready</small>', () => startDownload(item, 'video', '720'));
+    add('dm-item', '▶ 480p <small>X-ready, smallest</small>', () => startDownload(item, 'video', '480'));
+    add(`dm-item${def === 'best' ? ' cur' : ''}`, '▶ Best quality <small>4K / 1440p / AV1 · may not post to X</small>', () => startDownload(item, 'video', 'best'));
     if (!ytm) audio();
   }
   if (item.localVideo || item.localAudio) {
@@ -2347,6 +2356,9 @@ async function openDlMenu(item, pos) {
   add('dm-warn', 'Only download videos you have the right to save.');
   WM.popup(m, pos);
 }
+// "?" → Video downloads (2.5, #22): what DOWNLOAD's ✓ item, DOWNLOAD ALL and EDIT's download use by default
+$('#dlFmtSel').onchange = (e) => { S.dlFormat = e.target.value === 'best' ? 'best' : 'xready'; saveSoon(); toast(S.dlFormat === 'best' ? 'Video downloads: Best quality (4K / AV1; may not post to X).' : 'Video downloads: X-ready (H.264 + AAC, up to 1080p).', 3000); };
+const dlDefault = () => (S.dlFormat === 'best' ? 'best' : 'xready');
 async function startDownload(item, kind, quality, quiet) {
   // If the YouTube player already knows this is a live stream, don't even start yt-dlp.
   try {
@@ -2394,7 +2406,7 @@ P.onDl((ev) => {
   if (dlBatch && dlBatch.ids.has(ev.id) && ['done', 'error', 'canceled'].includes(ev.status)) {
     dlBatch.ids.delete(ev.id);
     dlBatch[ev.status === 'done' ? 'done' : ev.status === 'error' ? 'failed' : 'canceled']++;
-    if (ev.status === 'done' && ev.file) linkDownload(item, ev);
+    if (ev.status === 'done' && ev.file) { linkDownload(item, ev); if (ev.x !== undefined) XS.set(ev.file, ev.x || null); }
     if (ev.status === 'error' && ev.live && item) markLive(item, true);
     if (ev.status === 'done') updateDlInfo();
     if (!dlBatch.ids.size) finishDlBatch(); else renderDlProgress();
@@ -2407,7 +2419,9 @@ P.onDl((ev) => {
     if (blockedHere) showOverlay('Download finished', `"${title}" is saved on your PC.`, [{ label: '\u25b6 Play now', action: () => replayCurrent() }, { label: 'Skip', action: () => next(true) }]);
     const note = item && curItem() === item && engine === 'youtube' && !blockedHere ? ' — plays from your copy next time' : '';
     updateDlInfo();
-    showDlBar({ text: `✓ Saved: ${title}${note}`, pct: 100, buttons: [['Show in folder', () => P.showInFolder(ev.file)]], hideAfter: 8000 });
+    if (ev.x !== undefined) XS.set(ev.file, ev.x || null);     // 2.5 (#22): checked for X after the download
+    const xn = ev.x && !ev.x.ready ? ` — not X-ready (${ev.x.why})` : ev.xAudioFixed ? ' — sound changed to AAC: X-ready' : '';
+    showDlBar({ text: `✓ Saved: ${title}${note}${xn}`, pct: 100, buttons: [['Show in folder', () => P.showInFolder(ev.file)], ...(ev.x && !ev.x.ready ? [['𝕏 Fix for X', () => xFixOpen([ev.file])]] : [])], hideAfter: ev.x && !ev.x.ready ? 15000 : 8000 });
   } else if (ev.status === 'error') {
     if (ev.live && item) markLive(item, true);
     showDlBar({ text: `✕ Download failed: ${ev.error || 'unknown error'}`, pct: 0, buttons: item ? [['Try again', () => openDlMenu(item, { doc: $('#dlBar').ownerDocument, x: 20, y: 20 })]] : [], hideAfter: 12000 });
@@ -2419,6 +2433,7 @@ P.onDl((ev) => {
   renderList();
 });
 function renderDlProgress() {
+  if (XJ.active) return;          // Fix for X (2.5) has the bar while it runs
   const active = [...DL.entries()].find(([, d]) => ['updating', 'downloading', 'processing'].includes(d.status));
   const queued = [...DL.values()].filter(d => d.status === 'queued').length;
   if (!active) { if (queued) showDlBar({ text: `⇩ ${queued} download${queued > 1 ? 's' : ''} queued`, busy: true }); return; }
@@ -2439,7 +2454,7 @@ function renderDlProgress() {
   if (queued) text += `  (+${queued} queued)`;
   showDlBar({ text, pct: dlOverall(d), busy: d.status !== 'downloading', cancelId: id });
 }
-function showDlBar({ text, pct = 0, busy = false, buttons = [], hideAfter = 0, cancelId = null }) {
+function showDlBar({ text, pct = 0, busy = false, buttons = [], hideAfter = 0, cancelId = null, onClose = null }) {
   const bar = $('#dlBar');
   if (bar.classList.contains('hidden')) WM.host(bar, WM.noticeDoc());
   clearTimeout(dlBarTimer);
@@ -2450,8 +2465,8 @@ function showDlBar({ text, pct = 0, busy = false, buttons = [], hideAfter = 0, c
   for (const [label, fn] of buttons) { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { bar.classList.add('hidden'); fn(); }; bb.appendChild(b); }
   bb.classList.toggle('hidden', !buttons.length);
   const x = $('#dlbClose');
-  x.title = cancelId ? 'Cancel download' : 'Close';
-  x.onclick = () => { if (cancelId) P.dlCancel(cancelId); else bar.classList.add('hidden'); };
+  x.title = onClose ? 'Cancel' : cancelId ? 'Cancel download' : 'Close';
+  x.onclick = () => { if (onClose) onClose(); else if (cancelId) P.dlCancel(cancelId); else bar.classList.add('hidden'); };
   bar.classList.remove('hidden');
   if (hideAfter) dlBarTimer = setTimeout(() => { bar.classList.add('hidden'); renderDlProgress(); }, hideAfter);
 }
@@ -2838,10 +2853,11 @@ function openDlAllMenu() {
     const need = (kind) => dlTargets(kind).length;
     const n = (kind) => { const c = need(kind); return c === yts.length ? '' : c ? `  (${c} to go)` : '  (all saved)'; };
     add('dm-item', `♫ All as MP3${n('audio')}`, () => downloadAll('audio', 'best'));
-    add('dm-item', `▶ All as video — Best${n('video')}`, () => downloadAll('video', 'best'));
-    add('dm-item', '▶ All as video — 1080p', () => downloadAll('video', '1080'));
-    add('dm-item', '▶ All as video — 720p', () => downloadAll('video', '720'));
-    add('dm-item', '▶ All as video — 480p', () => downloadAll('video', '480'));
+    const def = dlDefault();
+    add(`dm-item${def === 'xready' ? ' cur' : ''}`, `▶ All as video — X-ready (H.264, up to 1080p)${n('video')}`, () => downloadAll('video', 'xready'));
+    add('dm-item', '▶ All as video — 720p (X-ready)', () => downloadAll('video', '720'));
+    add('dm-item', '▶ All as video — 480p (X-ready)', () => downloadAll('video', '480'));
+    add(`dm-item${def === 'best' ? ' cur' : ''}`, '▶ All as video — Best quality (may not post to X)', () => downloadAll('video', 'best'));
     hr();
     add('dm-note', 'Skips live streams and items already saved. Downloads run one at a time.');
     add('dm-warn', 'Only download videos you have the right to save.');
@@ -2967,6 +2983,7 @@ function dlmRender() {
     if (cm) { const fr = tr.querySelector('.from'); fr.textContent = r.from || '—'; fr.title = r.src ? `${r.from || ''}\n${r.src}${r.srcExists ? '' : ' (not there any more)'}` : 'Not made with CLIP (or its original isn\u2019t known)'; }
     tr.querySelector('.t').textContent = r.title; tr.querySelector('.t').title = `${r.title}\n${r.path}`;
     if (r.kind === 'playlist') { const c = document.createElement('span'); c.className = 'dlm-count'; c.textContent = ` \u00b7 ${r.count} item${r.count === 1 ? '' : 's'}`; tr.querySelector('.t').appendChild(c); }
+    if ((r.kind === 'video' || r.kind === 'mp4clip') && !r.missing) { const x = xOf(r.path); if (x) tr.querySelector('.t').appendChild(xTag(x, 'dlm-tag')); }   // 2.5 (#22)
     body.appendChild(tr);
   });
   $('#dlmEmpty').classList.toggle('hidden', vis.length > 0);
@@ -3251,6 +3268,100 @@ $('#clipCloseBtn').onclick = () => clipShow(false);
 $('#clipMinBtn').onclick = () => { clipShade = !clipShade; syncWindows(); };
 
 // ---- what to open
+// ------------------------------------------------------------------ X-ready MP4s (2.5, idea #22)
+// Video files get an "X ✓" / "not for X" tag (playlist and Library): H.264 + AAC within X's limits (xready.js).
+// "𝕏 Fix for X…" (right-click) makes "<name> (X).mp4" next to the original, which is kept: H.264 + AAC, yuv420p,
+// fitted to 1920×1200 / 1200×1900, ≤ 60 fps, +faststart, with CLIP's encoders. Over 2:20 or 512 MB it warns
+// (free X accounts) and offers to trim the video in CLIP first.
+const xVideoFile = (it) => (!it ? null : it.type === 'file' ? (it.hasVideo && !it.missing ? it.path : null) : (isWeb(it) && it.localVideo) || null);
+function xOf(f) {
+  if (!f) return undefined;
+  if (XS.has(f)) return XS.get(f);
+  xsWant.add(f); clearTimeout(xsT); xsT = setTimeout(xsFetch, 200);
+  return undefined;
+}
+async function xsFetch() {
+  const list = [...xsWant].filter(f => !XS.has(f)); xsWant.clear();
+  if (!list.length) return;
+  for (let i = 0; i < list.length; i += 200) {
+    const part = list.slice(i, i + 200), r = await P.xStatus(part);
+    for (const f of part) XS.set(f, (r && r[f]) || null);
+  }
+  renderList();
+  if ($('#dlmDlg').open && !skinMode()) dlmRender();
+  if (CL.info) clipRenderX();
+}
+function xTag(x, cls) {
+  const s = document.createElement('span');
+  s.className = `${cls} ${x.ready ? 'xok' : 'xno'}`;
+  s.textContent = x.ready ? 'X ✓' : 'not for X';
+  s.title = x.ready ? `Posts to X as it is: ${x.line}` : `X won't take it as it is (${x.why}): ${x.line}. Right-click → Fix for X`;
+  return s;
+}
+const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
+async function xFixOpen(files) {
+  files = [...new Set(files.filter(Boolean))];
+  if (!files.length) return;
+  if (XJ.active) { toast('Fix for X is already running: wait for it to finish (or cancel it).'); return; }
+  showBusy(true);
+  const plans = [];
+  for (const f of files) plans.push(await P.xPlan(f));
+  showBusy(false);
+  const bad = plans.filter(p => !p.ok), ready = plans.filter(p => p.ok && p.x.ready), todo = plans.filter(p => p.ok && !p.x.ready);
+  if (!todo.length) {
+    toast(ready.length === 1 && !bad.length ? `"${ready[0].title}" is already X-ready (${ready[0].x.line}): nothing to do.`
+      : ready.length && !bad.length ? `All ${ready.length} are already X-ready: nothing to do.` : `Can't fix that for X: ${bad[0] ? bad[0].error : 'unknown error'}`, 5000);
+    return;
+  }
+  const one = todo.length === 1 ? todo[0] : null;
+  $('#xfTitle').textContent = one ? `Fix for X: "${one.title}"` : `Fix ${todo.length} videos for X`;
+  const esc = htmlEsc;
+  $('#xfTbl').innerHTML = one
+    ? `<tr><th></th><th>now</th><th>for X</th></tr><tr><td>Video · sound</td><td class="xf-bad">${esc(one.x.line)}</td><td class="xf-ok">${esc(one.plan.line)}</td></tr><tr><td>Length · size</td><td>${mmss(one.x.duration)} · ${fmtSize(one.x.size)}</td><td>${mmss(one.x.duration)} · about ${fmtSize(one.plan.estMB * 1048576)}</td></tr>`
+    : `<tr><th>video</th><th>now</th><th>for X</th></tr>${todo.map(p => `<tr><td>${esc(p.title)}</td><td class="xf-bad">${esc(p.x.why)}</td><td class="xf-ok">${esc(`${p.plan.h}p${p.plan.fps ? ` · ${Math.round(p.plan.fps)} fps` : ''}`)}</td></tr>`).join('')}`;
+  $('#xfEnc').innerHTML = `Encoder: <b>${esc(todo[0].encoder)}</b>${todo[0].encoder === 'OpenH264' ? '' : ' <span class="dim">(OpenH264 if it fails)</span>'}`;
+  $('#xfOut').innerHTML = one ? `Saved as: <b>${esc(one.out.split(/[\\/]/).pop())}</b> next to the original (kept)` : 'Each saved as "&lt;name&gt; (X).mp4" next to its original (kept)';
+  const warn = [];
+  const long = todo.filter(p => p.x.long), big = todo.filter(p => p.x.big);
+  if (one && (one.x.long || one.x.big)) warn.push(`⚠ ${one.x.long ? `${mmss(one.x.duration)} long: over 2:20` : ''}${one.x.long && one.x.big ? ' and ' : ''}${one.x.big ? `${fmtSize(one.x.size)}: over 512 MB` : ''}. Free X accounts can't post it (X Premium: up to 4 h on web / iOS, 16 GB). Trim it in CLIP first?`);
+  else if (long.length || big.length) warn.push(`⚠ ${[...new Set([...long, ...big])].length} of them are over 2:20 or 512 MB: free X accounts can't post those (X Premium can).`);
+  if (ready.length) warn.push(`${ready.length} already X-ready (left as they are).`);
+  if (bad.length) warn.push(`${bad.length} can't be fixed: ${bad[0].error}`);
+  $('#xfWarn').textContent = warn.join(' '); $('#xfWarn').classList.toggle('hidden', !warn.length);
+  $('#xfClip').classList.toggle('hidden', !(one && (one.x.long || one.x.big)));
+  $('#xfClip').onclick = () => { $('#xfixDlg').close(); clipOpen(one.file, { kind: 'mp4' }); };
+  $('#xfGo').textContent = one ? 'Fix for X' : `Fix ${todo.length} for X`;
+  $('#xfGo').onclick = () => { $('#xfixDlg').close(); xFixRun(todo.map(p => p.file)); };
+  $('#xfixDlg').showModal();
+}
+$('#xfCancel').onclick = () => $('#xfixDlg').close();
+async function xFixRun(files) {
+  Object.assign(XJ, { queue: files.slice(), done: [], failed: [], total: files.length, canceled: false });
+  while (XJ.queue.length && !XJ.canceled) {
+    const f = XJ.queue.shift(), job = `x${Date.now()}`, name = f.split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
+    XJ.active = { job, file: f, name, n: XJ.total - XJ.queue.length };
+    xBar(0);
+    const r = await P.xFix({ job, file: f });
+    XJ.active = null;
+    if (r && r.ok && r.file) { XJ.done.push(r); XS.set(r.file, r.x || null); }
+    else if (r && r.canceled) XJ.canceled = true;
+    else if (r && r.ok && r.already) XJ.done.push({ file: f, already: true });
+    else XJ.failed.push({ file: f, name, error: (r && r.error) || 'unknown error' });
+  }
+  renderList();
+  if ($('#dlmDlg').open && !skinMode()) dlmRefresh();
+  const d = XJ.done.filter(x => !x.already), last = d[d.length - 1];
+  if (XJ.canceled) showDlBar({ text: `Fix for X canceled${d.length ? ` (${d.length} done)` : ''}. Nothing half-made was kept.`, pct: 0, hideAfter: 5000 });
+  else if (XJ.total === 1 && XJ.failed.length) showDlBar({ text: `✕ Couldn't fix "${XJ.failed[0].name}" for X: ${XJ.failed[0].error}. The original is untouched.`, pct: 0, hideAfter: 15000 });
+  else if (XJ.total === 1 && last) showDlBar({ text: `✓ Saved "${last.file.split(/[\\/]/).pop()}" (${fmtSize(last.size)}) · X-ready`, pct: 100, buttons: [['Show in folder', () => P.showInFolder(last.file)], ['Add to playlist', () => addPaths([last.file])]], hideAfter: 12000 });
+  else showDlBar({ text: `✓ ${d.length} fixed for X${XJ.failed.length ? `, ${XJ.failed.length} failed (${XJ.failed[0].name}: ${XJ.failed[0].error})` : ''}`, pct: 100, buttons: last ? [['Show in folder', () => P.showInFolder(last.file)], ['Add to playlist', () => addPaths(d.map(x => x.file))]] : [], hideAfter: 15000 });
+}
+function xBar(pct) {
+  const a = XJ.active; if (!a) return;
+  showDlBar({ text: `𝕏 Fix for X${XJ.total > 1 ? ` [${a.n} of ${XJ.total}]` : ''} · ${a.name} · ${pct}%`, pct, onClose: () => { XJ.canceled = true; XJ.queue = []; P.xCancel(a.job); } });
+}
+P.onClip((ev) => { if (ev && ev.type === 'xprogress' && XJ.active && ev.job === XJ.active.job) xBar(Math.max(0, Math.min(100, ev.pct))); });
+
 // the local file a playlist item has for a kind: 'mp3' takes the MP3, else the video's sound; 'mp4' needs a video
 function clipSource(it, kind) {
   if (!it) return null;
@@ -3271,7 +3382,7 @@ async function clipItem(it, kind, range) {
   if (!isWeb(it) || it.live) return false;
   // not downloaded yet: the normal download (MP3 or best video), then CLIP opens on it
   CL.pending = { id: it.id, kind };
-  const res = await startDownload(it, kind === 'mp4' ? 'video' : 'audio', 'best', true);
+  const res = await startDownload(it, kind === 'mp4' ? 'video' : 'audio', kind === 'mp4' ? dlDefault() : 'best', true);
   if (res && (res.ok || res.reason === 'busy' || res.reason === 'queued')) { toast(`Downloading ${kind === 'mp4' ? 'the video' : 'the MP3'} first. CLIP opens when it’s done.`, 3500); return true; }
   CL.pending = null;
   toast(res && res.reason === 'missing' ? 'The downloader isn’t included in this copy of SlopAMP.' : 'Couldn’t start the download.');
@@ -3315,6 +3426,20 @@ async function clipOpen(file, o = {}) {
 }
 
 // ---- drawing
+// 2.5 (#22): an exact-cut MP4 is X-ready when its picture fits X (1920×1200 / 1200×1900); warn past 2:20
+function clipRenderX() {
+  const info = $('#clipFmtInfo'); for (const el of [...info.querySelectorAll('.clip-x, .clip-xwarn')]) el.remove();
+  const i = CL.info || {}, V = CL.kind === 'mp4' && i.hasVideo;
+  if (V) {
+    const fits = (i.width >= i.height ? i.width <= 1920 && i.height <= 1200 : i.width <= 1200 && i.height <= 1900);
+    const src = xOf(CL.file), ok = CL.cut === 'fast' ? !!(src && src.ready) : fits;
+    const tag = document.createElement('span'); tag.className = 'clip-x'; tag.textContent = ok ? 'X ✓' : 'not for X';
+    tag.title = ok ? 'This clip posts to X as it is (H.264 + AAC)' : CL.cut === 'fast' ? 'A fast cut copies the file as it is; this one isn’t X-ready. Use Exact cut, or Fix for X after saving.' : 'Bigger than X takes (1920×1200): right-click the saved clip → Fix for X';
+    $('#clipFmtInfo').appendChild(tag);
+    const len = (CL.out || 0) - (CL.in || 0);
+    if (len > 140) { const w = document.createElement('span'); w.className = 'clip-xwarn'; w.textContent = ` ⚠ ${Math.floor(len / 60)}:${String(Math.round(len % 60)).padStart(2, '0')}: over X's 2:20 for free accounts`; $('#clipFmtInfo').appendChild(w); }
+  }
+}
 function clipRender() {
   const has = !!CL.info;
   $('#clipEmpty').classList.toggle('hidden', has);
@@ -3354,6 +3479,7 @@ function clipRender() {
   $('#clipCutExact').checked = CL.cut === 'exact'; $('#clipCutFast').checked = CL.cut === 'fast';
   $('#clipAlsoMp3').disabled = !i.hasAudio;
   $('#clipFmtInfo').textContent = V ? (CL.cut === 'fast' ? 'MP4 · copied as it is (no re-encode)' : `MP4 · H.264 + AAC${i.height ? ` · ${i.width}×${i.height}` : ''}`) : `MP3${CL.quality === 'copy' ? ' · same quality as the file' : ' · 320 kbps'}`;
+  clipRenderX();
   const t = clipTargetTab();
   $('#clipAddToLabel').textContent = `Add to "${t >= 0 ? S.tabs[t].name : 'Main'}" when it’s saved`;
   $('#clipFolderBtn').innerHTML = `&#x1F4C1; Open ${V ? 'mp4clips' : 'mp3clips'} folder`;
@@ -3366,6 +3492,7 @@ function clipRenderTimes() {
   if (!CL.info) return;
   const inEl = $('#clipIn'), outEl = $('#clipOut'), d = clipDoc();
   if (!d || d.activeElement !== inEl) inEl.value = clipFmt(CL.in);
+  clipRenderX();
   if (!d || d.activeElement !== outEl) outEl.value = clipFmt(CL.out);
   $('#clipLen').textContent = `LENGTH ${clipFmt(CL.out - CL.in)}`;
   $('#clipSave').innerHTML = CL.job ? $('#clipSave').innerHTML : `&#9986; Save clip ${clipFmt(CL.out - CL.in)} &#9656;`;
@@ -3843,11 +3970,13 @@ $('#dlmBody').addEventListener('contextmenu', (e) => {
     if (isClipRow(r)) {
       en.push(null, [r.srcExists ? '✂ Clip again…  (same In/Out)' : '✂ Clip again…  (the original is gone)', () => clipAgain(r), !r.srcExists]);
       if (r.srcExists) en.push(['Show original', () => P.showInFolder(r.src)]);
+      if (r.kind === 'mp4clip') en.push(['𝕏 Fix for X…', () => { $('#dlmDlg').close(); xFixOpen([r.path]); }]);
       en.push(null, ['Rename…', () => clipRenameRow(r)]);
     } else {
       const fake = { type: 'file', path: r.path, hasVideo: r.kind === 'video' };
       en.push(null, ['✂ Clip MP3…', () => { $('#dlmDlg').close(); clipOpen(r.path, { kind: 'mp3', title: r.title }); }]);
       if (fake.hasVideo) en.push(['✂ Clip video…', () => { $('#dlmDlg').close(); clipOpen(r.path, { kind: 'mp4', title: r.title }); }]);
+      if (fake.hasVideo) { const vs = sel.filter(x => (x.kind === 'video' || x.kind === 'mp4clip') && !x.missing).map(x => x.path); en.push([`𝕏 Fix for X…${vs.length > 1 ? ` (${vs.length})` : ''}`, () => { $('#dlmDlg').close(); xFixOpen(vs.length ? vs : [r.path]); }]); }
       en.push(null);
     }
   }
@@ -4190,7 +4319,7 @@ function stateSnapshot() {
     tabs: S.tabs.map(t => ({ id: t.id, name: t.name, current: t.current, src: t.src || undefined, items: t.items.map(({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at }) => ({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at })) })),
     tab: S.tab, playTab: S.playTab, vis: S.vis, volume: S.volume, muted: S.muted, shuffle: S.shuffle, repeat: S.repeat,
     showVideo: S.showVideo, showPlaylist: S.showPlaylist, plShade: S.plShade, vidShade: S.vidShade, remaining: S.remaining, plHeight: S.plHeight, visMode, eq: S.eq,
-    resume: S.resume, subsOn: S.subsOn, lib: S.lib, hist: S.hist, xhist: S.xhist
+    resume: S.resume, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, hist: S.hist, xhist: S.xhist
   };
 }
 function saveSoon() {
@@ -4260,6 +4389,7 @@ setInterval(() => { blink = !blink; }, 500);
     if (S.eq.panel === 'hidden' && (WM.info.lastPreset || WM.info.preset) !== 'classic-noeq') S.eq.panel = 'open';
     if (st.resume && typeof st.resume === 'object') S.resume = st.resume;
     S.subsOn = !!st.subsOn;
+    S.dlFormat = st.dlFormat === 'best' ? 'best' : 'xready';
     if (st.lib && typeof st.lib === 'object') S.lib = { w: Number(st.lib.w) || 0, h: Number(st.lib.h) || 0, view: st.lib.view === 'list' ? 'list' : 'grid' };
     for (const k of HIST_KINDS) {
       const h = st[HK[k].state]; if (!h || typeof h !== 'object') continue;

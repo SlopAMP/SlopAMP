@@ -46,7 +46,7 @@ class Downloader {
   }
 
   start(job) {
-    // job: { id, url, kind: 'video'|'audio', quality: 'best'|'1080'|'720'|'480', title }
+    // job: { id, url, kind: 'video'|'audio', quality: 'xready'|'best'|'1080'|'720'|'480', title }
     if (this.active && this.active.id === job.id && this.active.kind === job.kind) return { ok: false, reason: 'busy' };
     if (this.queue.some(j => j.id === job.id && j.kind === job.kind)) return { ok: false, reason: 'queued' };
     this.queue.push(job);
@@ -151,7 +151,11 @@ class Downloader {
     if (job.kind === 'audio') {
       a.push('-f', 'ba/b', '-x', '--audio-format', 'mp3', '--audio-quality', '0', '--embed-metadata');
     } else {
-      const sort = job.quality && job.quality !== 'best' ? `res:${job.quality},fps,vcodec:h264,acodec:m4a` : 'res,fps,vcodec:h264,acodec:m4a';
+      // 2.5 (#22): X-ready by default = H.264 first (best H.264 up to the height, AAC audio), so the .mp4 posts to X;
+      // a video with no H.264 falls back to its best format (SlopAMP then labels it "not for X"). 'best' = the
+      // largest picture whatever the codec (4K / 1440p are VP9 / AV1 on YouTube), as before 2.5.
+      const h = { xready: 1080, 1080: 1080, 720: 720, 480: 480 }[job.quality];
+      const sort = h ? `vcodec:h264,res:${h},fps,acodec:m4a` : 'res,fps,vcodec:h264,acodec:m4a';
       a.push('-f', 'bv*+ba/b', '-S', sort, '--merge-output-format', 'mp4', '--remux-video', 'webm>mp4', '--embed-metadata');
     }
     // an X post can hold several videos: take the one the link names (".../video/2"), else the first

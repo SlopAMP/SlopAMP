@@ -80,6 +80,7 @@ body.host-dialog #dlmDlg { width: 640px; margin: auto; }
 body.host-dialog #aboutDlg { width: 400px; }
 body.host-dialog #updDlg { width: 460px; }
 body.host-dialog #shareDlg { width: 540px; }
+body.host-dialog #xfixDlg { width: 540px; }
 body.host-dialog .dlm-scroll { max-height: 380px; }
 body.host-dialog .upd-notes { max-height: 260px; }
 body.host-dialog .dlg-title, body.host-dialog .dlm-title, body.host-dialog .about-hero { cursor: move; }

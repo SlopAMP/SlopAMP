@@ -11,6 +11,7 @@
 const path = require('path');
 const fs = require('fs');
 const { spawn, execFile } = require('child_process');
+const X = require('./xready');   // 2.5 (#22): X-ready MP4s
 
 const AUDIO_EXT = /\.(mp3|m4a|aac|wav|flac|ogg|opus)$/i;
 const VIDEO_EXT = /\.(mp4|m4v|mov|mkv|webm|avi)$/i;
@@ -26,6 +27,7 @@ class Clipper {
     this.peakCache = new Map();
     this.frameCache = new Map();
     this.jobs = new Map();          // job id -> { proc, tmp, canceled }
+    this.xCache = new Map();        // file -> { key: mtime|size, x } (X-ready check, 2.5)
   }
   static cutName(title, a, b) { return `${title} (${fmtCut(a)}-${fmtCut(b)})`; }
 
@@ -180,7 +182,8 @@ class Clipper {
     } finally { this.jobs.delete(job); }
   }
   cancel(job) {
-    const j = this.jobs.get(String(job)); if (!j) return;
+    const j = this.jobs.get(String(job));
+    if (!j) { (this.preCanceled || (this.preCanceled = new Set())).add(String(job)); return; }   // canceled before it started (2.5)
     j.canceled = true;
     if (j.proc) try { j.proc.kill(); } catch (_) {}
   }
@@ -208,6 +211,93 @@ class Clipper {
       p.on('error', (e) => { clearTimeout(kill); resolve({ code: 1, stderr: String(e.message) }); });
       p.on('close', (code) => { clearTimeout(kill); resolve({ code: code === null ? 1 : code, stderr: err }); });
     });
+  }
+
+  // ---------- X-ready MP4s (2.5, idea #22): xready.js has X's limits ----------
+  // Is each video file X-ready? { [file]: assess() | null } (null: not there, or no picture). Cached by mtime + size.
+  async xStatus(files) {
+    const out = {}, list = [...new Set((Array.isArray(files) ? files : []).filter(f => typeof f === 'string'))].slice(0, 5000);
+    let next = 0;
+    const one = async (f) => {
+      let st; try { st = fs.statSync(f); } catch (_) { out[f] = null; return; }
+      const key = `${st.mtimeMs}|${st.size}`, hit = this.xCache.get(f);
+      if (hit && hit.key === key) { out[f] = hit.x; return; }
+      const info = await this.server.probe(f);
+      const x = X.assess(info, st.size);
+      this.xCache.set(f, { key, x }); out[f] = x;
+    };
+    await Promise.all([0, 1, 2].map(async () => { while (next < list.length) await one(list[next++]); }));
+    return out;
+  }
+  forgetX(f) { this.xCache.delete(f); if (this.server.forget) this.server.forget(f); }
+  // After a video download: an H.264 picture with Opus (or other) sound gets AAC sound in place (seconds,
+  // the picture is copied). Anything else is only checked: a VP9 / AV1 fallback is labelled "not for X".
+  async xAfterDownload(file) {
+    let st; try { st = fs.statSync(file); } catch (_) { return null; }
+    let x = X.assess(await this.server.probe(file), st.size);
+    if (!x || x.ready || !(x.videoOk && x.container && !x.audioOk)) return { x, audioFixed: false };
+    const tmp = `${file}.xfix.part`;
+    const r = await this.run(['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', ...X.audioFixArgs(file, tmp)], 600000);
+    if (r.code !== 0 || !fs.existsSync(tmp)) { this.rm(tmp); this.log('X audio fix failed', file, r.stderr.slice(-300)); return { x, audioFixed: false }; }
+    try { fs.renameSync(tmp, file); } catch (e) { this.rm(tmp); this.log('X audio fix: could not replace', file, e.message); return { x, audioFixed: false }; }
+    this.forgetX(file);
+    st = fs.statSync(file);
+    x = X.assess(await this.server.probe(file), st.size);
+    this.xCache.set(file, { key: `${st.mtimeMs}|${st.size}`, x });
+    this.log(`X audio fix: ${path.basename(file)} now ${x && x.line}`);
+    return { x, audioFixed: true };
+  }
+  xEncoder() {
+    const e = this.server.encoder;
+    return !e || e === 'h264_mf' || e === 'libvpx' ? 'libopenh264' : e;     // like CLIP exact cut
+  }
+  // What Fix for X would do to one file (the dialog's "now → for X" table)
+  async xPlan(file) {
+    let st; try { st = fs.statSync(file); } catch (_) { return { ok: false, error: 'The file isn’t there any more.' }; }
+    const info = await this.server.probe(file);
+    const x = X.assess(info, st.size);
+    if (!x) return { ok: false, error: info ? 'There’s no picture in this file.' : 'SlopAMP can’t read this file.' };
+    if (!this.server.encoder && this.server.detectEncoder) await this.server.detectEncoder().catch(() => null);
+    const enc = this.xEncoder();
+    const names = { h264_nvenc: 'NVIDIA (h264_nvenc)', h264_amf: 'AMD (h264_amf)', h264_qsv: 'Intel (h264_qsv)', libopenh264: 'OpenH264' };
+    return { ok: true, file, title: path.basename(file).replace(/\.[^.]+$/, ''), x, plan: X.plan(info, st.size), out: X.outName(file, fs.existsSync), encoder: names[enc] || enc };
+  }
+  // Fix for X: "<name> (X).mp4" next to the original (kept). o: { job, file }. Progress: { type: 'xprogress', job, pct }.
+  async xFix(o) {
+    const job = String((o && o.job) || Date.now()), file = o && o.file;
+    let st; try { st = fs.statSync(file); } catch (_) { return { ok: false, error: 'The file isn’t there any more.' }; }
+    const info = await this.server.probe(file);
+    const x = X.assess(info, st.size);
+    if (!x) return { ok: false, error: 'There’s no picture in this file.' };
+    if (x.ready) return { ok: true, already: true, x };
+    const out = X.outName(file, fs.existsSync), tmp = `${out}.part`;
+    if (this.preCanceled && this.preCanceled.delete(job)) return { ok: false, canceled: true };
+    this.jobs.set(job, { canceled: false });
+    try {
+      let enc = this.xEncoder();
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const hw = enc !== 'libopenh264';
+        const args = X.ffArgs(info, st.size, file, tmp, this.encoderArgs(enc), hw);
+        const r = await this.runJob(job, ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-progress', 'pipe:1', '-nostats', ...args], x.duration,
+          (p) => this.send({ type: 'xprogress', job, pct: Math.round(p * 100) }));
+        if (this.jobs.get(job).canceled) { this.rm(tmp); return { ok: false, canceled: true }; }
+        if (r.code === 0 && fs.existsSync(tmp)) {
+          fs.renameSync(tmp, out);
+          const size = fs.statSync(out).size;
+          const nx = X.assess(await this.server.probe(out), size);
+          this.log(`Fix for X: ${path.basename(file)} -> ${path.basename(out)} (${enc}; ${nx && nx.line})`);
+          return { ok: true, file: out, size, x: nx, encoder: enc };
+        }
+        this.rm(tmp);
+        this.log(`Fix for X failed with ${enc}`, r.stderr.slice(-400));
+        if (!hw) {
+          const why = /Invalid data|moov atom|could not find codec|Invalid argument/i.test(r.stderr) ? 'the file looks damaged' : 'ffmpeg stopped';
+          return { ok: false, error: `${why} (${(r.stderr.trim().split('\n').pop() || '').slice(0, 120)})` };
+        }
+        enc = 'libopenh264';      // the hardware encoder said no: OpenH264 (software) instead
+      }
+      return { ok: false, error: 'ffmpeg stopped' };
+    } finally { this.jobs.delete(job); }
   }
 
   // ---------- SHOTS (2.3: SLOP's LOOK, moved into CLIP) ----------

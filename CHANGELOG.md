@@ -1,6 +1,15 @@
 # Changelog
 
-## 2.4.0 — unreleased
+## 2.5.0 — unreleased
+
+- **X-ready MP4s** (idea #22): videos SlopAMP downloads now post to X. **X-ready** is the default: H.264 video + AAC sound, the best H.264 up to 1080p (720p / 480p work the same way). A video that has no H.264 falls back to its best format and is labelled "not for X". **Best quality** (4K / 1440p, often VP9 / AV1) is still in the DOWNLOAD menu, and **"?" → Video downloads** picks which one DOWNLOAD's ✓ item, DOWNLOAD ALL and EDIT's download use. Before, "Best quality" was the top choice and often saved VP9 / AV1 with Opus sound, which X refuses ("Incompatible video codecs").
+- Every finished video download is checked for X. An H.264 picture with Opus sound gets AAC sound by itself in a few seconds (the picture is copied, nothing is re-encoded).
+- **X ✓ / not for X** tags on video files in the playlist and the Library; hover for the reason (e.g. "VP9 + Opus").
+- **𝕏 Fix for X…** (right-click a video in the playlist or the Library, several at once too): shows the file now and for X (codec, size, fps, about how big) and saves **"Title (X).mp4" next to the original, which is kept**. H.264 + AAC 160 kbps, 8-bit 4:2:0, fitted to 1920×1200 (or 1200×1900 upright), at most 60 fps, +faststart, with the same encoders as CLIP's Exact cut (NVIDIA / AMD / Intel, else OpenH264; OpenH264 if the hardware one fails). A video that's already H.264 within X's limits keeps its picture (copied) and only gets new sound. Progress with Cancel at the bottom; never over another file (" (X) (2).mp4"); clear errors; an X-ready file says "nothing to do".
+- Over X's limits for free accounts (2:20 or 512 MB) Fix for X warns and offers **✂ Open in CLIP** to trim it first (X Premium allows up to 4 h on web / iOS and 16 GB).
+- **CLIP**: an MP4 clip shows X ✓ (Exact cut makes H.264 + AAC) or "not for X" (bigger than 1920×1200, or a fast cut of a file that isn't X-ready), and warns when the clip is longer than 2:20.
+
+## 2.4.0 — released Oct 29, 2026
 
 - **Share playlist** (idea #5): right-click a playlist tab → **Share playlist (.zip)…** (also Library → PLAYLISTS → right-click → Share (.zip)…). One .zip with the playlist and its songs and videos, so a friend gets everything: `<name>.m3u8` plus a `<name>` folder with the files numbered in playlist order (any player can open it once unzipped). YouTube / X links stay links; "Also include my downloaded copies" puts those files in too. Shows the size and any missing files first; saved in `Downloads\SlopAMP\Shared` (Change… picks another place); files are stored as they are (no recompressing, any size); Cancel leaves nothing behind.
 - **Opening a shared .zip**: drop it on SlopAMP, LOAD it, or Open with → SlopAMP. It unpacks into `Downloads\SlopAMP\Shared\<name>` (a new folder, never over anything; only songs, videos and playlists come out) and opens as a new tab.

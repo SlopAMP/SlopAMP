@@ -78,6 +78,7 @@ class MediaServer {
   }
 
   // ---------- probing ----------
+  forget(file) { this.probes.delete(file); }   // the file changed (2.5: Fix for X's audio fix rewrites it)
   probe(file) {
     if (this.probes.has(file)) return Promise.resolve(this.probes.get(file));
     return new Promise((resolve) => {
@@ -323,11 +324,12 @@ function summarize(j) {
     hasCover: !!cover,
     subs,
     coverIndex: cover ? cover.index : -1,
-    video: v ? { codec: v.codec_name, pixFmt: v.pix_fmt || '', width: v.width, height: v.height, profile: v.profile || '' } : null,
+    video: v ? { codec: v.codec_name, pixFmt: v.pix_fmt || '', width: v.width, height: v.height, profile: v.profile || '', fps: rate(v.avg_frame_rate) || rate(v.r_frame_rate) } : null,
     audio: a ? { codec: a.codec_name, sampleRate: parseInt(a.sample_rate, 10) || 0, channels: a.channels || 0, bitrate: parseInt(a.bit_rate, 10) || 0 } : null
   };
 }
 
+function rate(r) { const m = /^(\d+)\/(\d+)$/.exec(String(r || '')); const f = m && +m[2] ? +m[1] / +m[2] : 0; return f > 0 && f < 1000 ? Math.round(f * 100) / 100 : 0; }   // "30000/1001" -> 29.97
 function lowerKeys(o) { const r = {}; for (const k of Object.keys(o)) r[k.toLowerCase()] = o[k]; return r; }
 
 const SUB_EXT = /\.(srt|vtt|ass|ssa)$/i;

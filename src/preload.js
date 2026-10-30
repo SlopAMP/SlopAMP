@@ -104,6 +104,11 @@ contextBridge.exposeInMainWorld('phosphor', {
   clipPick: () => ipcRenderer.invoke('clip:pick'),
   clipFolder: (kind) => ipcRenderer.send('clip:folder', kind),
   onClip: (cb) => ipcRenderer.on('clip:event', (_e, ev) => cb(ev)),
+  // 2.5 #22: X-ready MP4s
+  xStatus: (files) => ipcRenderer.invoke('x:status', files),
+  xPlan: (f) => ipcRenderer.invoke('x:plan', f),
+  xFix: (o) => ipcRenderer.invoke('x:fix', o),
+  xCancel: (job) => ipcRenderer.send('x:cancel', job),
   clipShots: (o) => ipcRenderer.invoke('clip:shots', o),          // SHOTS (SLOP's LOOK, in CLIP)
   clipShotAdd: (o) => ipcRenderer.invoke('clip:shot-add', o),
   clipShotSet: (o) => ipcRenderer.invoke('clip:shot-set', o),
