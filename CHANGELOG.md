@@ -1,6 +1,10 @@
 # Changelog
 
-## 2.5.0 — unreleased
+## 2.5.1 — unreleased
+
+- Fix (found in the 2.5.0 smoke test): the X ✓ / not for X tag could stay wrong when a video was downloaded again under the same file name (X-ready, deleted, then Best quality): SlopAMP remembered what the old file was. Every file is now read again when its size or date changes, and the tags in the playlist, History and Library are re-checked when a download finishes, after a delete and when you come back to SlopAMP (also after a file is replaced in Explorer).
+
+## 2.5.0 — not released on its own (ships in 2.5.1)
 
 - **X-ready MP4s** (idea #22): videos SlopAMP downloads now post to X. **X-ready** is the default: H.264 video + AAC sound, the best H.264 up to 1080p (720p / 480p work the same way). A video that has no H.264 falls back to its best format and is labelled "not for X". **Best quality** (4K / 1440p, often VP9 / AV1) is still in the DOWNLOAD menu, and **"?" → Video downloads** picks which one DOWNLOAD's ✓ item, DOWNLOAD ALL and EDIT's download use. Before, "Best quality" was the top choice and often saved VP9 / AV1 with Opus sound, which X refuses ("Incompatible video codecs").
 - Every finished video download is checked for X. An H.264 picture with Opus sound gets AAC sound by itself in a few seconds (the picture is copied, nothing is re-encoded).

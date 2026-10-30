@@ -2406,7 +2406,7 @@ P.onDl((ev) => {
   if (dlBatch && dlBatch.ids.has(ev.id) && ['done', 'error', 'canceled'].includes(ev.status)) {
     dlBatch.ids.delete(ev.id);
     dlBatch[ev.status === 'done' ? 'done' : ev.status === 'error' ? 'failed' : 'canceled']++;
-    if (ev.status === 'done' && ev.file) { linkDownload(item, ev); if (ev.x !== undefined) XS.set(ev.file, ev.x || null); }
+    if (ev.status === 'done' && ev.file) { linkDownload(item, ev); if (ev.x !== undefined) XS.set(ev.file, ev.x || null); else XS.delete(ev.file); xsRecheck(); }
     if (ev.status === 'error' && ev.live && item) markLive(item, true);
     if (ev.status === 'done') updateDlInfo();
     if (!dlBatch.ids.size) finishDlBatch(); else renderDlProgress();
@@ -2419,7 +2419,8 @@ P.onDl((ev) => {
     if (blockedHere) showOverlay('Download finished', `"${title}" is saved on your PC.`, [{ label: '\u25b6 Play now', action: () => replayCurrent() }, { label: 'Skip', action: () => next(true) }]);
     const note = item && curItem() === item && engine === 'youtube' && !blockedHere ? ' — plays from your copy next time' : '';
     updateDlInfo();
-    if (ev.x !== undefined) XS.set(ev.file, ev.x || null);     // 2.5 (#22): checked for X after the download
+    if (ev.x !== undefined) XS.set(ev.file, ev.x || null); else XS.delete(ev.file);   // 2.5 (#22): checked for X after the download
+    xsRecheck();
     const xn = ev.x && !ev.x.ready ? ` — not X-ready (${ev.x.why})` : ev.xAudioFixed ? ' — sound changed to AAC: X-ready' : '';
     showDlBar({ text: `✓ Saved: ${title}${note}${xn}`, pct: 100, buttons: [['Show in folder', () => P.showInFolder(ev.file)], ...(ev.x && !ev.x.ready ? [['𝕏 Fix for X', () => xFixOpen([ev.file])]] : [])], hideAfter: ev.x && !ev.x.ready ? 15000 : 8000 });
   } else if (ev.status === 'error') {
@@ -2500,6 +2501,7 @@ async function deleteLocalCopy(item) {
       if (item.vid) P.dlForget(item.vid, files.length > 1 ? undefined : (f.toLowerCase().endsWith('.mp3') ? 'audio' : 'video'));
     } else failed++;
   }
+  for (const f of files) XS.delete(f);
   saveSoon(); renderList();
   if (failed) toast('Couldn’t delete the file — it may be open in another program.', 4000);
   else toast('Local copy moved to the Recycle Bin.');
@@ -3205,7 +3207,7 @@ async function dlmDelete(allRows, all) {
     const cr = await P.clipDelete(clRows.map(r => r.path)); plFailed += cr.filter(x => !x.ok).length;
   }
   if (!rows.length) {
-    DLM.sel.clear(); await dlmRefresh();
+    DLM.sel.clear(); await dlmRefresh(); xsRecheck();
     const n = plRows.length + clRows.length;
     toast(plFailed ? `${plFailed} file${plFailed === 1 ? '' : 's'} couldn\u2019t be deleted.` : `${n} item${n === 1 ? '' : 's'} moved to the Recycle Bin.`, 2500);
     return;
@@ -3224,7 +3226,7 @@ async function dlmDelete(allRows, all) {
   if (wasCurrent) { engine = cur.type === 'x' && !localPathOf(cur) ? null : 'youtube'; setMarquee(cur); }
   DLM.sel.clear();
   renderList(); saveSoon(); updateDlButton();
-  await dlmRefresh();
+  await dlmRefresh(); xsRecheck();
   failed += plFailed;
   const done = res.length + plRows.length + clRows.length - failed;
   if (failed) toast(`Deleted ${done}. ${failed} couldn’t be deleted — they may be open in another program.`, 4500);
@@ -3290,6 +3292,22 @@ async function xsFetch() {
   renderList();
   if ($('#dlmDlg').open && !skinMode()) dlmRender();
   if (CL.info) clipRenderX();
+}
+// Re-check every tag already shown (2.5.1): after a download finishes, after a delete, and when you come back to
+// SlopAMP. Cheap: the main process only re-reads a file whose size or modified time changed.
+let xsRechecking = null;
+function xsRecheck() {
+  if (xsRechecking) return xsRechecking;
+  xsRechecking = (async () => {
+    const files = [...XS.keys()];
+    let changed = false;
+    for (let i = 0; i < files.length; i += 200) {
+      const part = files.slice(i, i + 200), r = await P.xStatus(part);
+      for (const f of part) { const nv = (r && r[f]) || null; if (JSON.stringify(nv) !== JSON.stringify(XS.get(f))) { XS.set(f, nv); changed = true; } }
+    }
+    if (changed) { renderList(); if ($('#dlmDlg').open && !skinMode()) dlmRender(); if (CL.info) clipRenderX(); }
+  })().finally(() => { xsRechecking = null; });
+  return xsRechecking;
 }
 function xTag(x, cls) {
   const s = document.createElement('span');
@@ -4307,7 +4325,7 @@ async function updateDlInfo() {
 let focusCheckAt = 0;
 WM.onWins('focus', () => {
   const now = Date.now(); if (now - focusCheckAt < 1500) return; focusCheckAt = now;
-  verifyLocalCopies().then(() => attachKnownCopies());
+  verifyLocalCopies().then(() => attachKnownCopies()).then(() => xsRecheck());   // X tags follow the files (2.5.1)
   if ($('#dlmDlg').open) dlmRefresh(); else updateDlInfo();
 });
 

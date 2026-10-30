@@ -79,14 +79,19 @@ class MediaServer {
 
   // ---------- probing ----------
   forget(file) { this.probes.delete(file); }   // the file changed (2.5: Fix for X's audio fix rewrites it)
+  // Cached per file *and* its size + modified time (2.5.1): a file deleted and downloaded again under the same
+  // name (X-ready, then Best quality) or replaced in Explorer is read again, never answered from the old copy.
   probe(file) {
-    if (this.probes.has(file)) return Promise.resolve(this.probes.get(file));
+    let stamp = '';
+    try { const st = fs.statSync(file); stamp = `${st.size}|${st.mtimeMs}`; } catch (_) { this.probes.delete(file); }
+    const hit = this.probes.get(file);
+    if (hit && stamp && hit.stamp === stamp) return Promise.resolve(hit.info);
     return new Promise((resolve) => {
       this.track(execFile(this.ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file],
         { maxBuffer: 16 * 1024 * 1024, windowsHide: true, timeout: 20000 }, (err, stdout) => {
           let info = null;
           if (!err) { try { info = summarize(JSON.parse(stdout)); } catch (_) {} }
-          if (info) this.probes.set(file, info);
+          if (info && stamp) this.probes.set(file, { info, stamp }); else this.probes.delete(file);
           resolve(info);
         }));
     });
