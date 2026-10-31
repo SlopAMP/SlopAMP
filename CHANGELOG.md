@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.5.2 — unreleased
+## 2.5.2 — released Oct 31, 2026
 
 - **Import skin** in the SKINS picker (idea #24): a tile next to **+ New skin** in MINE. Pick a `.css` skin and it's copied into `Downloads\SlopAMP\skins` with the same checks as the Skin editor's Import… (a file that isn't a skin or is too big says so and adds nothing). The SKINS panel opens again with the new skin in MINE, outlined for a moment; click it to put it on. Library → SKINS updates too.
 - **Importing skins** (the picker, the Skin editor and Library → SKINS all use the same rules now): a skin whose name you already have comes in as **"Sunset Gold 2"** (then 3, 4 …) instead of a second "Sunset Gold"; the same skin again (the same file, also with other line endings, or one you exported) isn't copied: **"You already have this skin."**, and that skin is outlined in MINE. Several files at once say what happened to each kind ("Imported "A"; you already have "B"; 1 file wasn’t a skin.").
