@@ -89,7 +89,7 @@
       + `<div class="sk-pv" style="background:${esc(frame)}"><div class="sk-tb" style="background:${esc(tb)}"></div><div class="sk-body">`
       + `<div class="sk-lcd" style="background:${esc(lcd)};color:${esc(on)};text-shadow:0 0 4px ${esc(on)}">0:42</div>`
       + `<div class="sk-list" style="background:${esc(list)}">${[80, 60, 70, 50].map((w, i) => `<i style="background:${esc(text)};width:${w}%;opacity:${1 - i * 0.15}"></i>`).join('')}</div>`
-      + `</div></div><div class="sk-name"><b>${s.id === current ? '&#10003;' : ''}</b><span>${esc(s.name)}</span></div></div>`;
+      + `</div>${s.id === current ? '<b class="sk-on" title="The skin you have on">&#10003;</b>' : ''}</div><div class="sk-name"><span>${esc(s.name)}</span></div></div>`;   // 2.5.2: ✓ on the preview, so the name has the card's full width
   }
   function renderPicker() {
     const m = WM.$('#skinMenu'); if (!m) return;

@@ -509,9 +509,10 @@ select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink);
 #skinMenu .sk-grid { display: grid; grid-template-columns: repeat(5, 104px); gap: 6px; }
 #skinMenu .sk-card { border: 1px solid var(--line-dim); padding: 4px; cursor: pointer; }
 #skinMenu .sk-card:hover { border-color: var(--ink-dim); background: var(--pl-sel); }
-#skinMenu .sk-card:hover .sk-name, #skinMenu .sk-card:hover .sk-name b { color: var(--list-sel-ink); }
+#skinMenu .sk-card:hover .sk-name { color: var(--list-sel-ink); }
 #skinMenu .sk-card.cur { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
-#skinMenu .sk-pv { height: 46px; border: 1px solid var(--black); display: flex; flex-direction: column; overflow: hidden; }
+#skinMenu .sk-pv { height: 46px; border: 1px solid var(--black); display: flex; flex-direction: column; overflow: hidden; position: relative; }
+#skinMenu .sk-on { position: absolute; right: 2px; bottom: 2px; width: 15px; height: 15px; display: flex; align-items: center; justify-content: center; background: var(--green); color: var(--black); font: bold 11px/1 var(--font-ui); border-radius: 2px; box-shadow: 0 0 0 1px var(--black); }   /* 2.5.2: the skin you have on */
 #skinMenu .sk-tb { height: 6px; }
 #skinMenu .sk-body { flex: 1; display: flex; gap: 3px; padding: 3px; }
 #skinMenu .sk-lcd { width: 42px; display: flex; align-items: center; justify-content: center; font: bold var(--fs-base) var(--font-lcd); letter-spacing: -.5px; }
@@ -519,7 +520,6 @@ select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink);
 #skinMenu .sk-list i { display: block; height: 3px; border-radius: 1px; }
 #skinMenu .sk-name { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: var(--fs-m); white-space: nowrap; min-width: 0; }
 #skinMenu .sk-name span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }   /* 2.5.2: a long name ends in … (full name in the tooltip) */
-#skinMenu .sk-name b { color: var(--menu-accent); font-weight: normal; width: 10px; flex: none; }
 #skinMenu .sk-foot { margin: 7px 2px 0; color: var(--ink-dim); font-size: var(--fs-s2); }
 
 #clipPanel, #ytwPanel { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--dialog-bg); color: var(--ink-menu); font: var(--fs-base)/1.35 var(--font-ui); }

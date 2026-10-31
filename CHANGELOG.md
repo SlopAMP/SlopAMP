@@ -1,11 +1,11 @@
 # Changelog
 
-## 2.5.2 — unreleased (made locally, not built yet)
+## 2.5.2 — unreleased
 
 - **Import skin** in the SKINS picker (idea #24): a tile next to **+ New skin** in MINE. Pick a `.css` skin and it's copied into `Downloads\SlopAMP\skins` with the same checks as the Skin editor's Import… (a file that isn't a skin or is too big says so and adds nothing). The SKINS panel opens again with the new skin in MINE, outlined for a moment; click it to put it on. Library → SKINS updates too.
 - **Importing skins** (the picker, the Skin editor and Library → SKINS all use the same rules now): a skin whose name you already have comes in as **"Sunset Gold 2"** (then 3, 4 …) instead of a second "Sunset Gold"; the same skin again (the same file, also with other line endings, or one you exported) isn't copied: **"You already have this skin."**, and that skin is outlined in MINE. Several files at once say what happened to each kind ("Imported "A"; you already have "B"; 1 file wasn’t a skin.").
 - A skin made by hand (no preview colours in its header) now shows its own colours on its card in the picker and the Library instead of Classic green; on import they're saved in its header. Skins imported earlier get them too.
-- SKINS picker: a long skin name ends in "…" inside its card instead of running to the edge (the full name is in the tooltip).
+- SKINS picker: the ✓ for the skin you have on now sits on the corner of its preview, so names get the card's full width ("SlopAMP Classic" fits); a name that is still too long ends in "…" inside its card instead of running to the edge (the full name is in the tooltip).
 - Share playlist's "to" line and the Fix for X rows wrap between words too (they could split a word like the menu notes did).
 - Fix: the DOWNLOAD ALL menu's note broke words in the middle ("one a t a time") (bug #3). "Downloads run one at a time." now has its own line, and menu notes never split a word any more: they wrap between words, and only something too long for a whole line (a folder path) is broken. This also fixes the same wrapping in the other menu notes (subtitles, downloads, live streams, keys).
 
