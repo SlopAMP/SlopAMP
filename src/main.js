@@ -337,8 +337,10 @@ function skinEntry(full) {
   try { st = fs.statSync(full); text = fs.readFileSync(full, 'utf8').slice(0, 4000); } catch (_) { return null; }
   const m = skinMeta(text), slug = path.basename(full, '.css');
   return { id: `user:${slug}`, slug, file: full, name: String(m.name || slug).slice(0, 60), base: typeof m.base === 'string' ? m.base : '', baseName: typeof m.baseName === 'string' ? m.baseName : '',
-    sw: Array.isArray(m.sw) ? m.sw.slice(0, 6).map(String) : null, size: st.size, mtime: st.mtimeMs };
+    sw: Array.isArray(m.sw) ? m.sw.slice(0, 6).map(String) : swatchFallback(full), size: st.size, mtime: st.mtimeMs };
 }
+// a skin imported before 2.5.2 (or dropped in the folder by hand) has no preview colours: take them from its values
+function swatchFallback(full) { try { return swatchesOf(splitSkin(cleanSkinCss(fs.readFileSync(full, 'utf8').slice(0, SKIN_MAX))).vars); } catch (_) { return null; } }
 function listSkins() {
   let files = [];
   try { files = fs.readdirSync(skinsDir()).filter(f => /^[a-z0-9-]{1,60}\.css$/.test(f)); } catch (_) {}
@@ -388,20 +390,54 @@ function renameSkin(id, name) {
   if (out !== f) rmQuiet(f);
   return skinEntry(out);
 }
+// The picker / Library preview colours [frame, title bar, LCD, LCD digits, list, list text] of a skin whose
+// header has none (2.5.2): its own values on top of Classic's, var(--x) followed, first colour of a gradient.
+const SW_VARS = [['--frame', '#2b2e3a'], ['--tb-bg', '#3b3f50'], ['--lcd', '#000'], ['--lcd-on', '#3dff6e'], ['--list-bg', '#000'], ['--pl-green', '#33e85b']];
+const COLOR_RE = /#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/i;
+let classicVars = null;
+function swatchesOf(vars) {
+  if (!classicVars) { try { classicVars = splitSkin(fs.readFileSync(path.join(BUILTIN_SKINS, 'classic.css'), 'utf8')).vars; } catch (_) { classicVars = new Map(); } }
+  const all = new Map([...classicVars, ...vars]);
+  const look = (n, depth = 0) => {
+    const v = String(all.get(n) || '');
+    const c = v.match(COLOR_RE); if (c) return c[0];
+    const r = /var\(\s*(--[\w-]+)/.exec(v); return r && depth < 8 ? look(r[1], depth + 1) : null;
+  };
+  return SW_VARS.map(([n, d]) => (look(n) || d).slice(0, 40));
+}
+// A skin without its header comment, the same however its lines end: what "the same skin" compares
+const skinBody = (t) => String(t).replace(/\r\n?/g, '\n').replace(/^\uFEFF?\s*\/\*[\s\S]*?\*\/\s*/, '').trim();
+// A name nobody in MINE has: "Sunset Gold", then "Sunset Gold 2", "Sunset Gold 3" …
+function freeSkinName(name) {
+  const taken = new Set(listSkins().map(s => s.name.toLowerCase()));
+  if (!taken.has(name.toLowerCase())) return name;
+  for (let i = 2; ; i++) { const n = `${name.slice(0, 60 - String(i).length - 1).trim()} ${i}`; if (!taken.has(n.toLowerCase())) return n; }
+}
 function importSkin(src) {
   const st = fs.statSync(src);
   if (st.size > SKIN_MAX) return { file: src, error: 'That file is too big to be a skin.' };
-  const text = cleanSkinCss(fs.readFileSync(src, 'utf8'));
+  const raw = fs.readFileSync(src), text = cleanSkinCss(raw.toString('utf8'));
   const { vars } = splitSkin(text);
   if (vars.size < 3) return { file: src, error: 'That isn’t a SlopAMP skin (no :root block with -- colours).' };
+  // 2.5.2: the same skin again (the same file, or the same skin under the header SlopAMP gave it) isn't copied twice
+  const body = skinBody(text);
+  for (const s of listSkins()) {
+    let t; try { t = fs.readFileSync(s.file); } catch (_) { continue; }
+    if (t.equals(raw) || skinBody(t.toString('utf8')) === body) return { file: src, have: s.id, name: s.name, error: 'You already have this skin.' };
+  }
   const head = /SlopAMP skin:\s*"([^"]{1,60})"/.exec(text), meta = skinMeta(text);
-  const name = String(meta.name || (head && head[1]) || path.basename(src, path.extname(src))).slice(0, 60);
+  const asked = String(meta.name || (head && head[1]) || path.basename(src, path.extname(src))).trim().slice(0, 60) || 'My skin';
+  const name = freeSkinName(asked);                          // 2.5.2: a name you already have becomes "Name 2"
   const slug = freeSlug(name), out = path.join(skinsDir(), `${slug}.css`);
   fs.mkdirSync(skinsDir(), { recursive: true });
-  // keep it as it came (cleaned); give it our header if it had none, so it has a name in the picker
-  const withHead = /slopamp:\s*\{/.test(text) ? text : skinHeader(name, { v: 1, name, base: 'classic', baseName: '' }) + text.replace(/^\/\*[\s\S]*?\*\/\s*/, '');
+  // keep it as it came (cleaned) when it has our header, its own name and preview colours; else give it our
+  // header (the name it gets, and preview colours from its own values so it doesn't show as Classic green)
+  const ours = /slopamp:\s*\{/.test(text);
+  const sw = Array.isArray(meta.sw) && meta.sw.length === 6 ? meta.sw : swatchesOf(vars);
+  const withHead = ours && name === meta.name && sw === meta.sw ? text
+    : skinHeader(name, ours ? { ...meta, name, sw } : { v: 1, name, base: 'classic', baseName: '', sw }) + text.replace(/^\uFEFF?\s*\/\*[\s\S]*?\*\/\s*/, '');
   fs.writeFileSync(out, withHead);
-  log(`skin imported: ${path.basename(src)} -> ${slug}.css`);
+  log(`skin imported: ${path.basename(src)} -> ${slug}.css${name !== asked ? ` (as "${name}")` : ''}`);
   return skinEntry(out);
 }
 function downloadDirs() {

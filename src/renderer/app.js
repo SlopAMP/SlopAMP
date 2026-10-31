@@ -4288,12 +4288,10 @@ $('#sklList').addEventListener('keydown', async (e) => {
 });
 $('#sklOpenDir').onclick = () => P.skinFolder();
 $('#sklImport').onclick = async () => {
-  const res = await P.skinImport();
-  if (!res || !res.length) return;
-  const ok = res.filter(x => x.id), bad = res.filter(x => x.error);
+  const ok = await WM.skins.importSkins();        // the SKINS picker's and the Skin editor's Import (same checks and messages)
+  if (!ok.length) return;
   SKL.sel.clear(); for (const x of ok) SKL.sel.add(x.id);
   await sklRefresh();
-  toast(ok.length ? `Imported ${ok.map(x => `"${x.name}"`).join(', ')}${bad.length ? `; ${bad.length > 1 ? `${bad.length} files weren’t skins` : '1 file wasn’t a skin'}` : ''}.` : bad[0].error, 4000);
 };
 $('#sklDel').onclick = () => sklDelete([...SKL.sel]);
 // ------------------------------------------------------------------ Library: size, download info, re-checks

@@ -82,14 +82,14 @@
 
   // ---- the picker (lives in the popup-menu window like the other menus)
   const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  let fresh = new Set();                            // #24: skins just imported from the picker, outlined for a moment
+  let fresh = new Set(), freshTimer = 0;                            // #24: skins just imported from the picker, outlined for a moment
   function card(s) {
     const [frame, tb, lcd, on, list, text] = s.sw && s.sw.length === 6 ? s.sw : SKINS[0].sw;
     return `<div class="sk-card${s.id === current ? ' cur' : ''}${fresh.has(s.id) ? ' fresh' : ''}" data-skin="${esc(s.id)}" title="${esc(s.name)}">`
       + `<div class="sk-pv" style="background:${esc(frame)}"><div class="sk-tb" style="background:${esc(tb)}"></div><div class="sk-body">`
       + `<div class="sk-lcd" style="background:${esc(lcd)};color:${esc(on)};text-shadow:0 0 4px ${esc(on)}">0:42</div>`
       + `<div class="sk-list" style="background:${esc(list)}">${[80, 60, 70, 50].map((w, i) => `<i style="background:${esc(text)};width:${w}%;opacity:${1 - i * 0.15}"></i>`).join('')}</div>`
-      + `</div></div><div class="sk-name"><b>${s.id === current ? '&#10003;' : ''}</b>${esc(s.name)}</div></div>`;
+      + `</div></div><div class="sk-name"><b>${s.id === current ? '&#10003;' : ''}</b><span>${esc(s.name)}</span></div></div>`;
   }
   function renderPicker() {
     const m = WM.$('#skinMenu'); if (!m) return;
@@ -349,7 +349,7 @@
   }
 
   WM.skins = {
-    list: SKINS, apply, openPicker, refresh, openEditor, closeEditor, nameOf,
+    list: SKINS, apply, openPicker, refresh, openEditor, closeEditor, nameOf, importSkins,
     get current() { return current; }, get user() { return USER; }, get editorOpen() { return ED.open; }, get editorShade() { return ED.shade; },
     // 2.4 (Library → SKINS rows): what the editor has open, whether it has unsaved changes, and save / drop them
     get editorBase() { return ED.open ? ED.base : null; }, get editorDirty() { return ED.open && ED.dirty; },
@@ -365,15 +365,27 @@
 
   // Import (the editor's Import… button and, #24, the picker's Import skin tile): main.js copies each .css into
   // Downloads\SlopAMP\skins (checks it, gives a taken name a free file name), then MINE and the Library update.
+  // 2.5.2: a name you already have comes in as "Name 2"; the same skin again isn't copied ("You already have this skin.")
+  function importMessage(res) {
+    if (res.length === 1 && res[0].error) return res[0].error;
+    const ok = res.filter(x => x.id), have = res.filter(x => x.have), bad = res.filter(x => x.error && !x.have);
+    const parts = [];
+    if (ok.length) parts.push(`Imported ${ok.map(x => `"${x.name}"`).join(', ')}`);
+    if (have.length) parts.push(have.length > 1 ? `you already have ${have.length} of them` : `you already have "${have[0].name}"`);
+    if (bad.length) parts.push(bad.length > 1 ? `${bad.length} files weren’t skins` : '1 file wasn’t a skin');
+    const t = parts.join('; ');
+    return t.charAt(0).toUpperCase() + t.slice(1) + '.';
+  }
   async function importSkins() {
     const res = await P.skinImport();
     if (!res || !res.length) return [];
-    const ok = res.filter(x => x.id), bad = res.filter(x => x.error);
-    fresh = new Set(ok.map(x => x.id));
+    const ok = res.filter(x => x.id);
+    fresh = new Set([...ok.map(x => x.id), ...res.filter(x => x.have).map(x => x.have)]);   // the one you already have is outlined too
     await refresh();
-    window.toast(ok.length ? `Imported ${ok.map(x => `"${x.name}"`).join(', ')}${bad.length ? `; ${bad.length > 1 ? `${bad.length} files weren’t skins` : '1 file wasn’t a skin'}` : ''}.` : bad[0].error, 4000);
+    window.toast(importMessage(res), 4000);
     if (typeof window.skinLibChanged === 'function') window.skinLibChanged();
-    if (fresh.size) setTimeout(() => { fresh = new Set(); WM.$$('#skinMenu .sk-card.fresh').forEach(c => c.classList.remove('fresh')); }, 4000);
+    clearTimeout(freshTimer);       // a second import within 4 s keeps its own outline for the full 4 s
+    if (fresh.size) freshTimer = setTimeout(() => { fresh = new Set(); WM.$$('#skinMenu .sk-card.fresh').forEach(c => c.classList.remove('fresh')); }, 4000);
     return ok;
   }
   // The file picker takes the focus, and the SKINS panel closes when SlopAMP loses it: open it again where it was
