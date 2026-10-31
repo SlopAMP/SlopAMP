@@ -82,9 +82,10 @@
 
   // ---- the picker (lives in the popup-menu window like the other menus)
   const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let fresh = new Set();                            // #24: skins just imported from the picker, outlined for a moment
   function card(s) {
     const [frame, tb, lcd, on, list, text] = s.sw && s.sw.length === 6 ? s.sw : SKINS[0].sw;
-    return `<div class="sk-card${s.id === current ? ' cur' : ''}" data-skin="${esc(s.id)}" title="${esc(s.name)}">`
+    return `<div class="sk-card${s.id === current ? ' cur' : ''}${fresh.has(s.id) ? ' fresh' : ''}" data-skin="${esc(s.id)}" title="${esc(s.name)}">`
       + `<div class="sk-pv" style="background:${esc(frame)}"><div class="sk-tb" style="background:${esc(tb)}"></div><div class="sk-body">`
       + `<div class="sk-lcd" style="background:${esc(lcd)};color:${esc(on)};text-shadow:0 0 4px ${esc(on)}">0:42</div>`
       + `<div class="sk-list" style="background:${esc(list)}">${[80, 60, 70, 50].map((w, i) => `<i style="background:${esc(text)};width:${w}%;opacity:${1 - i * 0.15}"></i>`).join('')}</div>`
@@ -96,13 +97,16 @@
     m.innerHTML = `<div class="sk-head" title="Drag to move"><span>SKINS</span><small>click to switch · drag here to move</small><button type="button" class="sk-x" title="Close (Esc)">&#x2715;</button></div>`
       + `<div class="sk-sec">Colors</div><div class="sk-grid">${group('Colors')}</div>`
       + `<div class="sk-sec">Styles</div><div class="sk-grid">${group('Styles')}</div>`
-      + `<div class="sk-sec">Mine</div><div class="sk-grid">${USER.map(card).join('')}<button type="button" class="sk-new" title="Make your own skin, starting from the one you have on">+ New skin<small>Skin editor</small></button></div>`
+      + `<div class="sk-sec">Mine</div><div class="sk-grid">${USER.map(card).join('')}<button type="button" class="sk-new" title="Make your own skin, starting from the one you have on">+ New skin<small>Skin editor</small></button>`
+      + `<button type="button" class="sk-new sk-imp" title="Add a skin someone gave you (a .css file); it's copied into your skins folder">Import skin<small>a .css file</small></button></div>`
       + `<div class="sk-foot">Your skin is remembered. The lightning bolt resets the layout, never the skin. <button type="button" class="sk-ed">Skin editor…</button> <button type="button" class="sk-lib">Manage in Library</button></div>`;
   }
   // pos: { doc, x, y, flipY } like WM.popup. The picker is a small movable panel: it reopens where it
   // was last dragged to (remembered in the layout) and stays open until ✕, Esc or SKINS again.
+  let lastPos = null;
   function openPicker(pos) {
     const m = WM.$('#skinMenu');
+    lastPos = pos;
     renderPicker();
     WM.popup(m, { ...pos, remember: 'skins' });
   }
@@ -359,10 +363,33 @@
     get saved() { return ED.open && ED.prev ? ED.prev : current; }
   };
 
+  // Import (the editor's Import… button and, #24, the picker's Import skin tile): main.js copies each .css into
+  // Downloads\SlopAMP\skins (checks it, gives a taken name a free file name), then MINE and the Library update.
+  async function importSkins() {
+    const res = await P.skinImport();
+    if (!res || !res.length) return [];
+    const ok = res.filter(x => x.id), bad = res.filter(x => x.error);
+    fresh = new Set(ok.map(x => x.id));
+    await refresh();
+    window.toast(ok.length ? `Imported ${ok.map(x => `"${x.name}"`).join(', ')}${bad.length ? `; ${bad.length > 1 ? `${bad.length} files weren’t skins` : '1 file wasn’t a skin'}` : ''}.` : bad[0].error, 4000);
+    if (typeof window.skinLibChanged === 'function') window.skinLibChanged();
+    if (fresh.size) setTimeout(() => { fresh = new Set(); WM.$$('#skinMenu .sk-card.fresh').forEach(c => c.classList.remove('fresh')); }, 4000);
+    return ok;
+  }
+  // The file picker takes the focus, and the SKINS panel closes when SlopAMP loses it: open it again where it was
+  async function importFromPicker() {
+    const pos = lastPos;
+    await importSkins();
+    const m = WM.$('#skinMenu');
+    if (pos && m.classList.contains('hidden')) openPicker(pos); else renderPicker();
+    const f = m.querySelector('.sk-card.fresh'); if (f) f.scrollIntoView({ block: 'nearest' });
+  }
+
   // ---- wiring: picker
   const m = WM.$('#skinMenu');
   m.addEventListener('click', (e) => {
     if (e.target.closest('.sk-x')) { m.classList.add('hidden'); return; }
+    if (e.target.closest('.sk-imp')) { importFromPicker(); return; }
     if (e.target.closest('.sk-new, .sk-ed')) { m.classList.add('hidden'); openEditor(); return; }
     if (e.target.closest('.sk-lib')) { m.classList.add('hidden'); if (typeof window.openDownloadsManager === 'function') window.openDownloadsManager('skins'); return; }
     const c = e.target.closest('.sk-card');
@@ -429,14 +456,7 @@
     const r = await P.skinExport(ED.base);
     if (r && r.ok) window.toast(`Exported to ${r.file}`, 3500); else if (r && r.error) window.toast(`Couldn’t export: ${r.error}`);
   };
-  $e('#skedImport').onclick = async () => {
-    const res = await P.skinImport();
-    if (!res || !res.length) return;
-    await refresh();
-    const ok = res.filter(x => x.id), bad = res.filter(x => x.error);
-    window.toast(ok.length ? `Imported ${ok.map(x => `"${x.name}"`).join(', ')}${bad.length ? `; ${bad.length > 1 ? `${bad.length} files weren’t skins` : '1 file wasn’t a skin'}` : ''}.` : bad[0].error, 4000);
-    if (typeof window.skinLibChanged === 'function') window.skinLibChanged();
-  };
+  $e('#skedImport').onclick = () => importSkins();
   $e('#skedCloseBtn').onclick = () => closeEditor();
   $e('#skedMinBtn').onclick = () => { ED.shade = !ED.shade; if (typeof window.syncWindows === 'function') window.syncWindows(); };
 

@@ -83,7 +83,7 @@ input[type=range]:focus { outline: none; }
 #dlMenu .dm-item.rec small, #popMenu .dm-item.rec small, #wmMenu .dm-item.rec small { color: var(--ink-green-dim); }
 #dlMenu .dm-item.rec:hover, #popMenu .dm-item.rec:hover, #wmMenu .dm-item.rec:hover { background: var(--pl-sel); }
 #dlMenu .dm-item.off, #popMenu .dm-item.off, #wmMenu .dm-item.off { color: var(--ink-dim); cursor: default; background: none; }   /* greyed, but still readable in every skin */
-#dlMenu .dm-note, #popMenu .dm-note, #wmMenu .dm-note { padding: 4px 12px; color: var(--ink-muted); font-size: var(--fs-m); line-height: 1.45; word-break: break-all; }
+#dlMenu .dm-note, #popMenu .dm-note, #wmMenu .dm-note { padding: 4px 12px; color: var(--ink-muted); font-size: var(--fs-m); line-height: 1.45; word-break: normal; overflow-wrap: anywhere; }   /* bug #3 (2.5.2): words never split; only a word too long for the line (a folder path) breaks */
 #dlMenu .dm-warn, #popMenu .dm-warn, #wmMenu .dm-warn { padding: 4px 12px 2px; color: var(--warn-54); font-size: var(--fs-s2); }
 #dlMenu hr, #popMenu hr, #wmMenu hr { border: 0; border-top: 1px solid var(--vctl-line); margin: 3px 0; }
 #dlBar { position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%); width: min(460px, calc(100vw - 16px)); z-index: 58; background: var(--notice-bg); border: 1px solid var(--line-green); padding: 6px 10px 7px; box-shadow: 0 2px 14px var(--shadow); color: var(--ink-green); }
@@ -723,6 +723,7 @@ select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink);
 #skinMenu .sk-new small { color: var(--ink-dim); font-size: var(--fs-s); }
 #skinMenu .sk-new:hover { border-color: var(--ink-dim); background: var(--pl-sel); color: var(--list-sel-ink); }
 #skinMenu .sk-new:hover small { color: var(--list-sel-ink); }
+#skinMenu .sk-card.fresh { outline: 1px dashed var(--menu-accent); outline-offset: 1px; }   /* #24: just imported */
 #skinMenu .sk-foot button { background: var(--menu-bg); border: 1px solid var(--vctl-line); color: var(--ink-menu); font: var(--fs-s2) var(--font-ui); padding: 1px 7px; cursor: pointer; margin-left: 4px; }
 #skinMenu .sk-foot button:hover { border-color: var(--line-green); color: var(--menu-accent); }
 /* Library → SKINS */
@@ -771,7 +772,6 @@ select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink);
 .hist-bar button:hover { border-color: var(--line-green); color: var(--menu-accent); }
 .hist-bar .on-btn { border-color: var(--line-green); color: var(--menu-accent); }
 #list li .d.ago { min-width: 30px; text-align: right; }   /* when watched: same colour as a length, so it reads in every skin */
-#popMenu .dm-note.wrap { word-break: normal; }
 #histCapIn { display: block; width: 120px; margin: 8px 0 4px; background: var(--field-bg); color: var(--field-ink); border: 1px solid var(--field-line); padding: 4px 6px; font: var(--fs-base) var(--font-ui); color-scheme: var(--color-scheme); }
 
 /* ---------------------------------------------------------------- CLIP (2.3) */

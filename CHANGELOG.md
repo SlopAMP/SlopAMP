@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.2 — unreleased (made locally, not built yet)
+
+- **Import skin** in the SKINS picker (idea #24): a tile next to **+ New skin** in MINE. Pick a `.css` skin and it's copied into `Downloads\SlopAMP\skins` with the same checks as the Skin editor's Import… (a name you already have gets its own file, e.g. `sunset-gold-2.css`; a file that isn't a skin or is too big says so and adds nothing). The SKINS panel opens again with the new skin in MINE, outlined for a moment; click it to put it on. Library → SKINS updates too.
+- Fix: the DOWNLOAD ALL menu's note broke words in the middle ("one a t a time") (bug #3). "Downloads run one at a time." now has its own line, and menu notes never split a word any more: they wrap between words, and only something too long for a whole line (a folder path) is broken. This also fixes the same wrapping in the other menu notes (subtitles, downloads, live streams, keys).
+
 ## 2.5.1 — released Oct 30, 2026 (includes 2.5.0)
 
 - Fix (found in the 2.5.0 smoke test): the X ✓ / not for X tag could stay wrong when a video was downloaded again under the same file name (X-ready, deleted, then Best quality): SlopAMP remembered what the old file was. Every file is now read again when its size or date changes, and the tags in the playlist, History and Library are re-checked when a download finishes, after a delete and when you come back to SlopAMP (also after a file is replaced in Explorer).

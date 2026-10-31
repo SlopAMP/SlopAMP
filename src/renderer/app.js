@@ -1830,7 +1830,7 @@ function histMenu(anchor, k = histScreenKind() || 'yt') {
     add('dm-item', 'Clear history…', () => histClear(k));
     if (histIsDefault(k)) add('dm-item off', 'Restore default options', null, 'Already at the defaults');
     else add('dm-item', 'Restore default options', () => histSet({ ...HIST_DEF }, k), `Record on · newest at the top · ${K.replay.bump} · keep last 100 · synced copy on`);
-    add('dm-note wrap', K.note);
+    add('dm-note', K.note);
   }, anchor);
 }
 // the strip at the top of a History tab: what it does right now
@@ -2861,7 +2861,7 @@ function openDlAllMenu() {
     add('dm-item', '▶ All as video — 480p (X-ready)', () => downloadAll('video', '480'));
     add(`dm-item${def === 'best' ? ' cur' : ''}`, '▶ All as video — Best quality (may not post to X)', () => downloadAll('video', 'best'));
     hr();
-    add('dm-note', 'Skips live streams and items already saved. Downloads run one at a time.');
+    add('dm-note', 'Skips live streams and items already saved.').append(document.createElement('br'), 'Downloads run one at a time.');   // bug #3 (2.5.2): its own line
     add('dm-warn', 'Only download videos you have the right to save.');
   }, $('#pDlAll'), true);
 }
@@ -4118,7 +4118,7 @@ $('#ytwMore').onclick = (e) => {
       if (await confirmBox('Clear YouTube data?', 'This signs you out of YouTube in SlopAMP’s YOUTUBE window and clears its cookies and cache. Your playlists and downloads aren’t touched.', 'Clear')) { await P.ytwClear(); toast('YouTube data cleared.', 2000); }
     });
     hr();
-    add('dm-note', 'Only YouTube opens in this window; links to other sites open in your normal browser. SlopAMP doesn’t change YouTube’s pages. Drag the address (or a video’s thumbnail) onto a playlist to add it.').style.wordBreak = 'normal';
+    add('dm-note', 'Only YouTube opens in this window; links to other sites open in your normal browser. SlopAMP doesn’t change YouTube’s pages. Drag the address (or a video’s thumbnail) onto a playlist to add it.');
   }, anchor);
 };
 
