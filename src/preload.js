@@ -43,6 +43,9 @@ contextBridge.exposeInMainWorld('phosphor', {
   dlForget: (vid, kind) => ipcRenderer.send('dl:forget', vid, kind),
   filesExist: (paths) => ipcRenderer.invoke('files:exists', paths),
   trashFile: (p) => ipcRenderer.invoke('file:trash', p),
+  fileRename: (p, base, check) => ipcRenderer.invoke('file:rename', p, base, !!check),   // 2.6 Rename
+  plRename: (p, base, check) => ipcRenderer.invoke('pl:rename', p, base, !!check),
+  dlTitle: (vid, title) => ipcRenderer.send('dl:title', vid, title),
   listSubs: (file) => ipcRenderer.invoke('subs:list', file),
   openSubDialog: (near) => ipcRenderer.invoke('subs:open-dialog', near),
   onMediaKey: (cb) => ipcRenderer.on('media-key', (_e, a) => cb(a)),

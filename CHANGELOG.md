@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.6.0 — released Nov 4, 2026
+
+- **Rename** (right-click → **Rename…**, or **F2**) for playlist items (every tab, also YT History and X History) and in the Library for videos, MP3s and saved playlists (clips get the same box). A song, video, YouTube video or X post has one name everywhere it shows: every tab, YT / X History, the Library, and the same item added again later.
+  - From the playlist only the name SlopAMP shows changes, unless you tick **Also rename the file on disk** (off the first time; SlopAMP remembers your last choice). For a YouTube / X item with a downloaded copy it's **Also rename the downloaded copy**; the copy keeps its " [id]" tag, so SlopAMP still knows which video it is.
+  - A link with no file only gets a new display name. A renamed video keeps your name when SlopAMP refreshes titles, and **↺ Use YouTube's title** (or the post's title, or the file's own name) puts the original back.
+  - From the Library, Rename always renames the file (keeping a download's [id] tag); a saved playlist's open tab is renamed with it.
+  - When a file is renamed, every tab, the Library, CLIP's "Clip again", the X ✓ tag, "resume where you left off" and the saved playlists in Downloads\SlopAMP\Playlists follow it (playlist files saved elsewhere aren't changed). A file that's playing keeps playing from the same second.
+  - Clear errors (a name that's taken, characters Windows doesn't allow, names like CON, over 150 characters); nothing is ever overwritten. **Undo** on the "Renamed" message for 8 seconds puts the name and the file name back.
+- Fix (bug #4): in the Library a search carried over to the other sections, so CLIPS "jo" → SKINS showed an empty built-in list with no message. Each section (ALL, VIDEO, MP3, PLAYLISTS, CLIPS, SKINS) now keeps its own search until SlopAMP closes, and a small dot marks the other sections that have one. A section that comes up empty says why, e.g. "No clips match "jo"." with **✕ Clear search** and how many there are in all (CLIPS' MP3 / MP4 filter also offers **All clips**; SKINS says which list has no match). Esc, ✕ and Clear search clear only the section you're on. VIDEO and MP3 with nothing in them say how to get some.
+
 ## 2.5.2 — released Oct 31, 2026
 
 - **Import skin** in the SKINS picker (idea #24): a tile next to **+ New skin** in MINE. Pick a `.css` skin and it's copied into `Downloads\SlopAMP\skins` with the same checks as the Skin editor's Import… (a file that isn't a skin or is too big says so and adds nothing). The SKINS panel opens again with the new skin in MINE, outlined for a moment; click it to put it on. Library → SKINS updates too.

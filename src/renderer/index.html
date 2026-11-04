@@ -322,10 +322,15 @@
   </dialog>
   <dialog id="clRenDlg">
     <form method="dialog">
-      <div class="dlg-title">Rename clip</div>
-      <div class="dlg-note">The file in mp3clips / mp4clips gets the new name (the extension stays).</div>
-      <input type="text" id="clRenIn" maxlength="150" spellcheck="false">
-      <div class="dlg-btns"><button value="cancel">Cancel</button><button value="ok">Rename</button></div>
+      <!-- 2.6 Rename: one box for playlist items, Library rows and clips (renameBox in app.js) -->
+      <div class="dlg-title" id="renTitle">Rename</div>
+      <div class="dlg-note" id="renNote"></div>
+      <div class="ren-row"><input type="text" id="clRenIn" maxlength="150" spellcheck="false"><span class="ren-tail hidden" id="renTail"></span></div>
+      <label class="ren-chk hidden" id="renChkRow"><input type="checkbox" id="renChk"> <span id="renChkLbl">Also rename the file on disk</span></label>
+      <div class="dlg-note ren-hint" id="renHint"></div>
+      <div class="ren-err hidden" id="renErr"></div>
+      <button type="button" class="ren-reset hidden" id="renReset"></button>
+      <div class="dlg-btns"><button value="cancel">Cancel</button><button value="ok" id="renOk">Rename</button></div>
     </form>
   </dialog>
   <dialog id="urlDlg">

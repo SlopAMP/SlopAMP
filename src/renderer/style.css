@@ -874,3 +874,26 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .xf-row { font-size: var(--fs-s); color: var(--ink-muted); margin: 4px 0; word-break: normal; overflow-wrap: anywhere; } .xf-row b { color: var(--ink-menu); font-weight: 600; }
 .clip-x { margin-left: 6px; font: bold var(--fs-xs) var(--font-label); padding: 0 4px; border: 1px solid currentColor; border-radius: 2px; }
 .clip-xwarn { color: var(--warn-ink); }
+
+/* 2.6: Rename box (#clRenDlg), the Undo button on a toast, a Library section with a search (dot), "no matches" notes */
+#clRenDlg .ren-row { display: flex; align-items: center; margin: 8px 0 4px; }
+#clRenDlg .ren-row input { flex: 1; min-width: 0; margin: 0; }
+#clRenDlg .ren-tail { padding-left: 6px; color: var(--ink-dim); white-space: nowrap; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+#clRenDlg .ren-chk { display: flex; align-items: center; gap: 6px; margin: 8px 0 2px; color: var(--ink-menu); cursor: pointer; }
+#clRenDlg .ren-chk.off { color: var(--ink-dim); cursor: default; }
+#clRenDlg .ren-hint { margin: 4px 0 6px; overflow-wrap: anywhere; }
+#clRenDlg .ren-hint b { color: var(--ink-menu); font-weight: 600; }
+#clRenDlg .ren-err { color: var(--warn-54); font-size: var(--fs-m); margin: 2px 0 6px; overflow-wrap: anywhere; }
+#clRenDlg .ren-reset { display: block; background: none; border: 0; padding: 0; margin: 2px 0 4px; color: var(--menu-accent); font: var(--fs-s) var(--font-ui); cursor: pointer; text-align: left; overflow-wrap: anywhere; }
+#clRenDlg .ren-reset:hover { text-decoration: underline; }
+#clRenDlg .ren-reset.hidden { display: none; }
+#toast .toast-act { margin-left: 10px; background: none; border: 1px solid var(--line-green); color: var(--ink-green); font: var(--fs-m) var(--font-ui); padding: 1px 8px; cursor: pointer; }
+#toast .toast-act:hover { background: var(--btn-green); }
+#ctx div .k { float: right; margin-left: 28px; color: var(--ink-dim); }
+#dlmSeg button.hasq::after { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); margin-left: 5px; vertical-align: 2px; }
+.dlm-nomatch { padding: 22px 12px; text-align: center; color: var(--ink-dim); }
+.dlm-nomatch b { color: var(--ink-menu); font-weight: 600; }
+.dlm-nomatch .nm-btns { margin-top: 10px; display: flex; gap: 6px; justify-content: center; }
+.dlm-nomatch small { display: block; margin-top: 8px; color: var(--ink-dim); font-size: var(--fs-s); }
+.dlm-nomatch .nm-btns button { background: var(--menu-bg); border: 1px solid var(--vctl-line); color: var(--ink-menu); padding: 4px 10px; font: var(--fs-m) var(--font-ui); cursor: pointer; }
+.dlm-nomatch .nm-btns button:hover { background: var(--base-21); border-color: var(--line-green); }

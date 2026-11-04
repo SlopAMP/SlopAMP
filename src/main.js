@@ -524,6 +524,71 @@ function parsePlaylistFile(p) {
   return out;
 }
 
+// ---------- Rename (2.6): a file on disk gets a new name; SlopAMP's own records follow it
+const lowPath = (p) => path.resolve(String(p || '')).toLowerCase();
+const BAD_NAME_CH = /[\\/:*?"<>|\x00-\x1f]/;
+// base: the new name without the extension (and without a download's " [id]" tag, which is kept).
+// check: only say whether it would work. Returns { path, name, tail } or { error }.
+function renameFileCore(p, base, check) {
+  p = String(p || '');
+  let st; try { st = fs.statSync(p); } catch (_) { return { error: 'The file isn’t there any more.' }; }
+  if (!st.isFile()) return { error: 'That isn’t a file.' };
+  const dir = path.dirname(p), ext = path.extname(p), oldBase = path.basename(p, ext);
+  const tm = DL_FILE_RE_TAIL.exec(oldBase), tail = tm ? tm[0] : '';
+  let name = String(base || '').replace(/^\s+/, '').replace(/[\s.]+$/, '');
+  if (tail && name.endsWith(tail.trim())) name = name.slice(0, -tail.trim().length).replace(/[\s.]+$/, '');   // typed the tag too
+  if (ext && name.toLowerCase().endsWith(ext.toLowerCase())) name = name.slice(0, -ext.length).replace(/[\s.]+$/, '');
+  if (!name) return { error: 'Type a name.' };
+  if (BAD_NAME_CH.test(name)) return { error: 'A file name can’t have \\ / : * ? " < > |' };
+  if (/^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i.test(name)) return { error: 'Windows doesn’t allow that name.' };
+  if (name.length > 150) return { error: 'That name is too long (150 characters at most).' };
+  const to = path.join(dir, name + tail + ext);
+  if (to === p) return { path: p, name, tail, same: true };
+  const caseOnly = lowPath(to) === lowPath(p);
+  if (!caseOnly && fs.existsSync(to)) return { error: `There’s already a ${path.basename(to)} in that folder. Pick another name.` };
+  if (check) return { path: to, name, tail };
+  try {
+    if (caseOnly) { const tmp = `${p}.slopamp-rename`; fs.renameSync(p, tmp); fs.renameSync(tmp, to); } else fs.renameSync(p, to);
+  } catch (e) {
+    const busy = /EBUSY|EPERM|EACCES/.test(String(e.code || e.message));
+    return { busy, error: busy ? 'Windows says the file is in use by another program. Close it there and try again.' : `Couldn’t rename it: ${e.message}` };
+  }
+  log(`renamed: ${path.basename(p)} -> ${path.basename(to)}`);
+  return { path: to, name, tail };
+}
+// After a file was renamed: the downloads list, CLIP's list (and its "Clip again" originals) and the saved playlists
+// in Downloads\SlopAMP\Playlists point at the new name. Playlist files elsewhere aren't touched.
+function fileRenamed(from, to) {
+  const s = currentState || loadState(), lf = lowPath(from);
+  const idx = s.downloads || {}; let dlCh = false;
+  for (const e of Object.values(idx)) for (const k of ['video', 'audio']) if (e[k] && lowPath(e[k]) === lf) { e[k] = to; dlCh = true; }
+  if (dlCh) setMainState({ downloads: idx });
+  const c = s.clips && typeof s.clips === 'object' ? s.clips : null; let cCh = false;
+  if (c) {
+    for (const k of Object.keys(c)) if (lowPath(k) === lf) { c[to] = c[k]; delete c[k]; cCh = true; }
+    for (const e of Object.values(c)) if (e && e.src && lowPath(e.src) === lf) { e.src = to; cCh = true; }
+    if (cCh) setMainState({ clips: c });
+  }
+  let pls = 0;
+  const dir = playlistsDir(); let names = []; try { names = fs.readdirSync(dir); } catch (_) {}
+  for (const n of names) {
+    if (!PLAYLIST_RE.test(n)) continue;
+    const full = path.join(dir, n);
+    let text; try { text = fs.readFileSync(full, 'utf8'); } catch (_) { continue; }
+    let changed = false;
+    const out = text.split(/(\r?\n)/).map((line) => {
+      const pls1 = /^(File\d+=)(.*)$/i.exec(line), loc = pls1 ? pls1[2].trim() : line.trim();
+      if (!loc || loc.startsWith('#') || /^[a-z]+:\/\//i.test(loc) && !/^file:/i.test(loc)) return line;
+      let abs; try { abs = /^file:/i.test(loc) ? require('url').fileURLToPath(loc) : path.resolve(dir, loc); } catch (_) { return line; }
+      if (lowPath(abs) !== lf) return line;
+      changed = true;
+      return pls1 ? pls1[1] + to : to;
+    }).join('');
+    if (changed) { try { fs.writeFileSync(full, out); pls++; } catch (e) { log('playlist update failed', n, e.message); } }
+  }
+  return { playlists: pls };
+}
+
 function readPlaylistFile(p) {
   return parsePlaylistFile(p).map(e => e.loc)
     .filter(l => /^https?:/i.test(l) || (fs.existsSync(l) && isMediaFile(l)));
@@ -906,6 +971,24 @@ function registerIpc() {
     shell.openPath(d);
   });
   ipcMain.handle('files:exists', (_e, paths) => (Array.isArray(paths) ? paths.map(p => typeof p === 'string' && fs.existsSync(p)) : []));
+  // 2.6 Rename: a song / video / downloaded copy (check: only test the name); a saved playlist; a download's title
+  ipcMain.handle('file:rename', async (_e, p, base, check) => {
+    if (typeof p !== 'string' || !isMediaFile(p)) return { error: 'That isn’t a song or video file.' };
+    let r = renameFileCore(p, base, !!check);
+    for (let i = 0; i < 4 && r.busy; i++) { await new Promise(res => setTimeout(res, 300)); r = renameFileCore(p, base, false); }   // SlopAMP's own player lets go of a file a moment after it stops
+    if (r.error || check || r.same) return r;
+    return { ...r, ...fileRenamed(p, r.path) };
+  });
+  ipcMain.handle('pl:rename', (_e, p, base, check) => {
+    if (typeof p !== 'string' || !PLAYLIST_RE.test(p) || lowPath(path.dirname(p)) !== lowPath(playlistsDir())) return { error: 'Only saved playlists in Downloads\\SlopAMP\\Playlists can be renamed here.' };
+    return renameFileCore(p, base, !!check);
+  });
+  ipcMain.on('dl:title', (_e, vid, title) => {
+    const idx = (currentState || loadState()).downloads || {};
+    if (!idx[vid] || typeof title !== 'string') return;
+    idx[vid].title = title.slice(0, 300);
+    setMainState({ downloads: idx });
+  });
   ipcMain.handle('file:trash', async (_e, p) => {
     if (typeof p !== 'string' || !isMediaFile(p) || !fs.existsSync(p)) return { ok: false, error: 'File not found.' };
     try { await shell.trashItem(p); return { ok: true }; } catch (e) { return { ok: false, error: String(e.message || e) }; }

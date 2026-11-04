@@ -27,6 +27,8 @@ const S = {
   history: [],
   eq: { on: true, preamp: 0, gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], preset: 'Flat', panel: 'open' },   // panel: hidden | open | min
   resume: {},          // 'f:<path>' | 'y:<videoId>' -> { t: seconds, at: timestamp }
+  names: {},           // 2.6 Rename: the same keys -> { t: the name you gave it, o: its own title (↺ puts it back) }
+  renameFile: false,   // 2.6: the Rename box's "Also rename the file on disk" (your last choice)
   rate: 1,             // playback speed (this session only)
   subsOn: false,       // subtitles stay on for the next items once turned on
   lib: { w: 0, h: 0, view: 'grid' },   // the Library's size once resized (0: default); `view` was SLOP's (kept so old state reads)
@@ -57,8 +59,13 @@ function fmt(t) {
 }
 function fmtShort(t) { if (!t) return ''; const f = fmt(t); return f.replace(/^0(\d:)/, '$1'); }
 let toastTimer;
-function toast(msg, ms = 2600) {
+function toast(msg, ms = 2600, act) {
   const t = WM.host($('#toast'), WM.noticeDoc()); t.textContent = msg; t.classList.remove('hidden');
+  if (act) {      // 2.6: a button on the toast (Undo after a rename)
+    const b = t.ownerDocument.createElement('button'); b.type = 'button'; b.className = 'toast-act'; b.textContent = act.label;
+    b.onclick = () => { clearTimeout(toastTimer); t.classList.add('hidden'); act.fn(); };
+    t.appendChild(b);
+  }
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add('hidden'), ms);
 }
 function loadScript(src, doc = document) {
@@ -137,8 +144,9 @@ async function fillWebMeta(it) {
   const m = await P.webMeta(it.type === 'youtube' && it.vid ? `https://www.youtube.com/watch?v=${it.vid}` : it.url);
   if (!m) return;
   if (m.status === 200) {
-    if (it.type === 'youtube' && m.title) { it.title = m.author ? `${m.author} - ${m.title}` : m.title; if (typeof histFixTitle === 'function') histFixTitle(it); }
-    else if (it.type === 'x' && X_PLACEHOLDER.test(it.title) && (m.title || m.author)) it.title = [m.author, m.title].filter(Boolean).join(' - ');
+    const named = S.names[resumeKey(it)];          // 2.6: a video you renamed keeps your name; its own title is kept for ↺
+    if (it.type === 'youtube' && m.title) { const t = m.author ? `${m.author} - ${m.title}` : m.title; if (named) named.o = t; else { it.title = t; if (typeof histFixTitle === 'function') histFixTitle(it); } }
+    else if (it.type === 'x' && (m.title || m.author) && (named || X_PLACEHOLDER.test(it.title))) { const t = [m.author, m.title].filter(Boolean).join(' - '); if (named) named.o = t; else it.title = t; }
   } else if (it.type === 'youtube' && (m.status === 401 || m.status === 403)) {
     it.noEmbed = true;
   } else if (it.type === 'youtube' && m.status === 404) {
@@ -198,6 +206,7 @@ function addDescribed(res, at, autoplay = true) {
 
 function insertItems(items, at, autoplay = true) {
   if (!items.length) return;
+  applyNames(items);
   if (histOnScreen()) { toast(histNoAdd(), 3500); return; }
   const wasEmpty = S.items.length === 0;
   const idx = at == null || at < 0 || at > S.items.length ? S.items.length : at;
@@ -952,6 +961,7 @@ function drawBigVis() {
 // ------------------------------------------------------------------ playlist UI
 const list = $('#list');
 function renderList() {
+  applyNames(S.items);            // 2.6 Rename: one name per file / video, also in tabs opened from older playlist files
   const frag = document.createDocumentFragment();
   const inHist = histOnScreen();
   renderHistBar();
@@ -1116,7 +1126,7 @@ list.addEventListener('contextmenu', (e) => {
   const entries = [];
   if (it) {
     entries.push(['Play', () => playIndex(i)]);
-    if (it.type === 'file') entries.push(['Show in folder', () => P.showInFolder(it.path)]);
+    if (it.type === 'file') entries.push(['Show in folder', () => P.showInFolder(it.path)], ['Rename…\tF2', () => renameItem(it)]);
     else {
       const dl = DL.get(it.id);
       const busy = dl && ['queued', 'updating', 'downloading', 'processing'].includes(dl.status);
@@ -1124,7 +1134,7 @@ list.addEventListener('contextmenu', (e) => {
       else entries.push(['Download\u2026', () => openDlMenu(it, { doc: e.target.ownerDocument, x: e.clientX, y: e.clientY })]);
       const lp = it.localVideo || it.localAudio;
       if (lp) { entries.push(['Show local copy in folder', () => P.showInFolder(lp)], ['Delete local copy', () => deleteLocalCopy(it)]); }
-      entries.push(['Open in browser', () => P.openExternal(it.url)]);
+      entries.push(['Open in browser', () => P.openExternal(it.url)], ['Rename…\tF2', () => renameItem(it)]);
     }
     entries.push(...clipMenuEntries(it));                 // CLIP (2.3)
     { const files = S.items.filter(x => S.sel.has(x.id)).map(xVideoFile).filter(Boolean), own = xVideoFile(it);   // Fix for X (2.5)
@@ -1148,7 +1158,8 @@ function showCtxMenu(entries, x, y, doc) {
   ctx.innerHTML = '';
   for (const en of entries) {
     if (!en) { ctx.appendChild(document.createElement('hr')); continue; }
-    const d = document.createElement('div'); d.textContent = en[0];
+    const d = document.createElement('div'); const [lbl, key] = String(en[0]).split('\t'); d.textContent = lbl;
+    if (key) { const k = document.createElement('span'); k.className = 'k'; k.textContent = key; d.appendChild(k); }   // 2.6: a shortcut on the right
     if (en[2]) d.className = 'off'; else d.onclick = () => { hideCtx(); en[1](); };     // en[2]: greyed out
     ctx.appendChild(d);
   }
@@ -2256,6 +2267,7 @@ WM.onDocs('keydown', (e) => {
   else if (k === 'ArrowUp') { e.preventDefault(); if (e.ctrlKey || e.target !== list) setVolume(S.volume + 5); else selectRel(-1); }
   else if (k === 'ArrowDown') { e.preventDefault(); if (e.ctrlKey || e.target !== list) setVolume(S.volume - 5); else selectRel(1); }
   else if (k === 'Delete') removeSelected();
+  else if (k === 'F2') { e.preventDefault(); const a = S.items[S.anchor]; const it = a && S.sel.has(a.id) ? a : S.items.find(x => S.sel.has(x.id)); if (it) renameItem(it); }
   else if (k === 'Enter') { const i = S.items.findIndex(it => S.sel.has(it.id)); if (i >= 0) playIndex(i); }
   else if (k === 'Escape') { const popOpen = !$('#popMenu').classList.contains('hidden'); hidePop(); hideCtx(); if (!popOpen && WM.body.contains('fs')) toggleFullscreen(false); }
   else if (k === 'F11' || (k.toLowerCase() === 'f' && !e.ctrlKey)) { e.preventDefault(); toggleFullscreen(); }
@@ -2901,7 +2913,24 @@ function finishDlBatch() {
 }
 
 // ------------------------------------------------------------------ Downloads manager
-const DLM = { rows: [], sel: new Set(), filter: 'all', sort: 'mtime', dir: -1, anchor: -1 };
+const DLM = { rows: [], sel: new Set(), filter: 'all', sort: 'mtime', dir: -1, anchor: -1, q: {} };
+// Bug #4 (2.6): every section (ALL, VIDEO, MP3, PLAYLISTS, CLIPS, SKINS) has its own search, kept until SlopAMP closes
+const dlmQ = (f = DLM.filter) => String(DLM.q[f] || '').trim();
+function dlmSection(f) { DLM.filter = f; DLM.anchor = -1; const s = $('#dlmSearch'); s.value = DLM.q[f] || ''; }
+function dlmClearQ() { DLM.q[DLM.filter] = ''; $('#dlmSearch').value = ''; DLM.anchor = -1; dlmRender(); $('#dlmSearch').focus(); }
+function dlmDots() {     // a small dot on the other sections that have a search
+  for (const b of $('#dlmSeg').children) {
+    if (b.dataset.t0 == null) b.dataset.t0 = b.title || '';
+    const q = dlmQ(b.dataset.f), on = !!q && b.dataset.f !== DLM.filter;
+    b.classList.toggle('hasq', on);
+    b.title = on ? `Searching for "${q}"` : b.dataset.t0;
+  }
+}
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+// the note when a section comes up empty while searching: what matched nothing, Clear search, how many there are
+function dlmNoMatch(what, q, total, extra = '') {
+  return `<div class="dlm-nomatch"><b>No ${htmlEsc(what)} match “${htmlEsc(q)}”.</b><div class="nm-btns"><button type="button" data-a="clearq">✕ Clear search</button>${extra}</div>${total ? `<small>${htmlEsc(total)} in all.</small>` : ''}</div>`;
+}
 const DLM_HEAD = '<th class="c"><span class="dlm-cb" id="dlmAll" title="Select all"></span></th><th data-sort="title">Title</th><th data-sort="kind">Type</th><th data-sort="size" class="r">Size</th><th data-sort="mtime" class="r">Date</th><th></th>';
 const DLM_HEAD_CLIPS = '<th class="c"><span class="dlm-cb" id="dlmAll" title="Select all"></span></th><th data-sort="title">Title</th><th data-sort="kind">Type</th><th data-sort="dur" class="r">Length</th><th data-sort="from">From</th><th data-sort="size" class="r">Size</th><th data-sort="mtime" class="r">Date</th><th></th>';
 const dlmKey = (r) => `${r.kind}|${r.path}`;
@@ -2918,7 +2947,7 @@ function fmtDate(ms) {
 }
 async function openDownloadsManager(filter) {
   hideDlMenu(); hidePop();
-  if (typeof filter === 'string') DLM.filter = filter;
+  dlmSection(typeof filter === 'string' ? filter : DLM.filter);    // that section's own search (bug #4)
   DLM.sel.clear(); DLM.anchor = -1;
   await dlmRefresh();
   if (skinMode()) await sklRefresh();
@@ -2937,11 +2966,12 @@ async function dlmRefresh() {
   for (const k of [...DLM.sel]) if (!rows.some(r => dlmKey(r) === k)) DLM.sel.delete(k);
   dlmRender();
 }
+const dlmHit = (r, q) => !q || String(r.title).toLowerCase().includes(q) || String(r.path).toLowerCase().split(/[\\/]/).pop().includes(q) || (r.from && String(r.from).toLowerCase().includes(q));
 function dlmVisible() {
   const f = DLM.filter;
-  const q = ($('#dlmSearch').value || '').trim().toLowerCase();
+  const q = dlmQ().toLowerCase();
   const kindOk = (r) => f === 'all' || r.kind === f || (f === 'clips' && isClipRow(r) && (CLS.sub === 'all' || r.kind === CLS.sub));
-  const v = DLM.rows.filter(r => kindOk(r) && (!q || String(r.title).toLowerCase().includes(q) || String(r.path).toLowerCase().split(/[\\/]/).pop().includes(q) || (r.from && String(r.from).toLowerCase().includes(q))));
+  const v = DLM.rows.filter(r => kindOk(r) && dlmHit(r, q));
   const k = DLM.sort, dir = DLM.dir;
   v.sort((a, b) => {
     let x = a[k], y = b[k];
@@ -2954,6 +2984,7 @@ function dlmVisible() {
 }
 function dlmRender() {
   for (const b of $('#dlmSeg').children) b.classList.toggle('on', b.dataset.f === DLM.filter);
+  dlmDots();
   if (skinMode()) { sklRender(); return; }           // Library → SKINS
   $('#dlmDlg').classList.remove('skinmode');
   const cm = clipMode();                             // Library → CLIPS (2.3): own columns, bar and note
@@ -2989,11 +3020,8 @@ function dlmRender() {
     body.appendChild(tr);
   });
   $('#dlmEmpty').classList.toggle('hidden', vis.length > 0);
-  const q = ($('#dlmSearch').value || '').trim();
-  $('#dlmEmpty').textContent = q ? `Nothing matches "${q}".`
-    : cm ? 'No clips yet. Right-click a song or video in the playlist or here \u2192 Clip MP3\u2026 / Clip video\u2026, or open CLIP from the Layout menu.'
-    : DLM.filter === 'playlist' ? 'No saved playlists yet. Use SAVE under the playlist to save one here.'
-    : DLM.rows.length ? 'Nothing here for this filter.' : 'Nothing in your library yet. Use DOWNLOAD or DOWNLOAD ALL to save YouTube videos, and SAVE to keep playlists.';
+  const q = dlmQ();
+  if (!vis.length) $('#dlmEmpty').innerHTML = dlmEmptyHtml(q, cm);
   $('#dlmSearchX').classList.toggle('hidden', !q);
   const selCount = vis.filter(r => DLM.sel.has(dlmKey(r))).length;
   const all = $('#dlmAll');
@@ -3006,6 +3034,30 @@ function dlmRender() {
   $('#dlmDel').textContent = `🗑 Delete selected${selCount ? ` (${selCount})` : ''}`;
   if (cm) clipLibButtons();
 }
+// Why a section is empty (bug #4, 2.6): it names the section and the search, with Clear search (and All clips)
+function dlmEmptyHtml(q, cm) {
+  const f = DLM.filter, ql = q.toLowerCase();
+  if (cm) {
+    const sub = CLS.sub, noun = { all: 'clips', mp3clip: 'MP3 clips', mp4clip: 'MP4 clips' }[sub] || 'clips';
+    const clips = DLM.rows.filter(isClipRow), inSub = clips.filter(r => sub === 'all' || r.kind === sub);
+    const allBtn = '<button type="button" data-a="allclips">All clips</button>';
+    if (q) return dlmNoMatch(noun, q, inSub.length ? plural(inSub.length, noun.replace(/s$/, ''), noun) : '', sub !== 'all' && clips.some(r => dlmHit(r, ql)) ? allBtn : '');
+    if (sub !== 'all' && clips.length) return `<div class="dlm-nomatch"><b>No ${noun} yet.</b><div class="nm-btns">${allBtn}</div></div>`;
+    return htmlEsc('No clips yet. Right-click a song or video in the playlist or here \u2192 Clip MP3\u2026 / Clip video\u2026, or open CLIP from the Layout menu.');
+  }
+  const N = { all: ['item', 'files or playlists'], video: ['video', 'videos'], audio: ['MP3', 'MP3s'], playlist: ['saved playlist', 'saved playlists'] }[f] || ['item', 'items'];
+  const inF = DLM.rows.filter(r => f === 'all' || r.kind === f).length;
+  if (q) return dlmNoMatch(N[1], q, inF ? plural(inF, N[0], f === 'all' ? 'items' : N[1]) : '');
+  if (f === 'playlist') return 'No saved playlists yet. Use SAVE under the playlist to save one here.';
+  if (f === 'video') return 'No videos yet. DOWNLOAD saves YouTube videos and X posts here.';
+  if (f === 'audio') return 'No MP3s yet. DOWNLOAD \u2192 Audio only saves one here.';
+  return 'Nothing in your library yet. Use DOWNLOAD or DOWNLOAD ALL to save YouTube videos, and SAVE to keep playlists.';
+}
+$('#dlmEmpty').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-a]'); if (!b) return;
+  if (b.dataset.a === 'clearq') dlmClearQ();
+  else if (b.dataset.a === 'allclips') { CLS.sub = 'all'; DLM.anchor = -1; dlmRender(); }
+});
 $('#dlmBody').addEventListener('click', (e) => {
   const tr = e.target.closest('tr'); if (!tr) return;
   const vis = dlmVisible(); const i = +tr.dataset.i; const r = vis[i]; if (!r) return;
@@ -3047,12 +3099,12 @@ $('#dlmDlg thead').addEventListener('click', (e) => {
   const th = e.target.closest('th[data-sort]'); if (!th) return;
   const k = th.dataset.sort; if (DLM.sort === k) DLM.dir = -DLM.dir; else { DLM.sort = k; DLM.dir = k === 'title' || k === 'kind' || k === 'from' ? 1 : -1; } dlmRender();
 });
-for (const b of $('#dlmSeg').children) b.onclick = async () => { DLM.filter = b.dataset.f; DLM.anchor = -1; if (skinMode()) await sklRefresh(); dlmApplySize(); dlmRender(); };
+for (const b of $('#dlmSeg').children) b.onclick = async () => { dlmSection(b.dataset.f); if (skinMode()) await sklRefresh(); dlmApplySize(); dlmRender(); };
 $('#dlmX').onclick = () => $('#dlmDlg').close();
 $('#dlmOpen').onclick = () => clipMode() ? P.clipFolder(CLS.sub === 'mp4clip' ? 'mp4' : 'mp3') : P.dlOpenDir(DLM.filter === 'audio' ? 'audio' : DLM.filter === 'playlist' ? 'playlists' : 'video');
-$('#dlmSearch').addEventListener('input', () => { DLM.anchor = -1; dlmRender(); });
-$('#dlmSearch').addEventListener('keydown', (e) => { if (e.key === 'Escape' && e.target.value) { e.preventDefault(); e.stopPropagation(); e.target.value = ''; dlmRender(); } });
-$('#dlmSearchX').onclick = () => { $('#dlmSearch').value = ''; dlmRender(); $('#dlmSearch').focus(); };
+$('#dlmSearch').addEventListener('input', (e) => { DLM.q[DLM.filter] = e.target.value; DLM.anchor = -1; dlmRender(); });
+$('#dlmSearch').addEventListener('keydown', (e) => { if (e.key === 'Escape' && e.target.value) { e.preventDefault(); e.stopPropagation(); dlmClearQ(); } });
+$('#dlmSearchX').onclick = () => dlmClearQ();
 $('#dlmOpenTab').onclick = () => openPlaylistFiles(dlmVisible().filter(r => r.kind === 'playlist' && DLM.sel.has(dlmKey(r))));
 // ------------------------------------------------------------------ 2.4: Open with SlopAMP (#6) + Share playlist (#5)
 // Files handed to SlopAMP (double-click / Open with / command line / a second copy started): a playlist file opens
@@ -3161,7 +3213,8 @@ async function openPlaylistFiles(rows) {
   for (const r of rows) {
     const res = await P.plOpen(r.path);
     if (!res || !res.entries) continue;
-    newTab(r.title.slice(0, 40));
+    const k = newTab(r.title.slice(0, 40));
+    if (S.tabs[k]) S.tabs[k].src = r.path;       // 2.6: renaming the playlist in the Library renames this tab too
     if (res.entries.length) addDescribed(res.entries, undefined, false);
     opened++; last = r.title;
   }
@@ -3178,7 +3231,8 @@ $('#dlmDlg').addEventListener('keydown', (e) => {
     sklKey(e);
     return;
   }
-  if (e.key === 'Delete') { e.preventDefault(); $('#dlmDel').click(); }
+  if (e.key === 'F2') { e.preventDefault(); const vis = dlmVisible(), a = vis[DLM.anchor], r = a && DLM.sel.has(dlmKey(a)) ? a : vis.find(x => DLM.sel.has(dlmKey(x))); if (r && !r.missing) libRename(r); }
+  else if (e.key === 'Delete') { e.preventDefault(); $('#dlmDel').click(); }
   else if (e.ctrlKey && e.key.toLowerCase() === 'a') { e.preventDefault(); for (const r of dlmVisible()) DLM.sel.add(dlmKey(r)); dlmRender(); }
 });
 async function dlmDelete(allRows, all) {
@@ -3187,7 +3241,7 @@ async function dlmDelete(allRows, all) {
   const rows = allRows.filter(r => r.kind !== 'playlist' && !isClipRow(r));
   const files = rows.filter(r => !r.missing);
   const size = files.reduce((a, r) => a + r.size, 0) + plRows.reduce((a, r) => a + r.size, 0) + clRows.reduce((a, r) => a + r.size, 0);
-  const q = ($('#dlmSearch').value || '').trim();
+  const q = dlmQ();
   const what = DLM.filter === 'audio' ? 'MP3s' : DLM.filter === 'video' ? 'videos' : DLM.filter === 'playlist' ? 'saved playlists' : DLM.filter === 'clips' ? 'clips' : 'library items';
   const parts = [];
   if (files.length) parts.push(`${files.length} download${files.length === 1 ? '' : 's'}`);
@@ -3955,21 +4009,207 @@ $('#clAgain').onclick = () => { const s = clipLibSel(); if (s.length === 1) clip
 $('#clDel').onclick = () => { const rows = clipLibSel(); if (rows.length) dlmDelete(rows); };
 $('#clDir3').onclick = () => P.clipFolder('mp3');
 $('#clDir4').onclick = () => P.clipFolder('mp4');
-// Rename a clip (Library row menu)
-async function clipRenameRow(r) {
-  const d = $('#clRenDlg'), inp = $('#clRenIn');
-  inp.value = r.title;
-  d.returnValue = '';
-  d.showModal(); setTimeout(() => { inp.focus(); inp.select(); }, 0);
-  const ok = await new Promise((res) => d.addEventListener('close', () => res(d.returnValue === 'ok'), { once: true }));
-  if (!ok || !inp.value.trim() || inp.value.trim() === r.title) return;
-  const res = await P.clipRename(r.path, inp.value.trim());
-  if (!res || res.error) { toast((res && res.error) || 'Couldn’t rename it.'); return; }
-  for (const it of allItems()) if (it.type === 'file' && it.path === r.path) { it.path = res.path; it.title = res.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, ''); }
-  renderList(); saveSoon();
-  await dlmRefresh();
+// ------------------------------------------------------------------ 2.6: Rename (playlist items, Library rows, clips)
+// One name per file / video (S.names, keyed like "resume where you left off": 'f:<path>' / 'y:<id>'), the same in
+// every tab, YT / X History and the Library; ↺ puts its own title back. The file on disk is renamed only when asked:
+// from the playlist with "Also rename the file on disk" (your last choice is remembered), from the Library always.
+// A download keeps its " [id]" tag, which is how SlopAMP links the copy to its video. main.js "Rename (2.6)"
+// renames the file and points the downloads list, CLIP's list and the saved playlists in SlopAMP\Playlists at it.
+function applyNames(items) {
+  for (const it of items) { const n = S.names[resumeKey(it)]; if (n && it.title !== n.t) it.title = n.t; }
 }
-$('#clRenIn').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); $('#clRenDlg').close('ok'); } });
+const fileBase = (p) => String(p || '').split(/[\\/]/).pop();
+const DL_TAIL_RE = /\s*\[(?:[\w-]{11}|x\d{1,25}(?:-\d{1,2})?)\]$/;       // a download's " [id]" (main.js DL_FILE_RE_TAIL)
+function fileTail(p) {            // what stays when a file is renamed: " [id].mp4", ".mp3"
+  const b = fileBase(p), ext = (/\.[^.]+$/.exec(b) || [''])[0], stem = b.slice(0, b.length - ext.length), m = DL_TAIL_RE.exec(stem);
+  return (m ? m[0] : '') + ext;
+}
+const fileStem = (p) => { const b = fileBase(p); return b.slice(0, b.length - fileTail(p).length); };
+// The titles of everything with key k (all tabs, the History tabs and their synced copies, a download's Library row)
+function applyTitle(k, title, vid) {
+  const hk = new Set();
+  for (const t of S.tabs) for (const it of t.items) if (resumeKey(it) === k) { it.title = title; const h = histKind(t); if (h) hk.add(h); }
+  if (vid) P.dlTitle(vid, title);
+  for (const h of hk) histChanged(h, true);
+  renderList(); saveSoon();
+}
+// Name k `title` everywhere; orig: its own title (kept for ↺; a name equal to it just drops the rename)
+function setName(k, title, orig, vid) {
+  if (!k) return;
+  const n = S.names[k], o = n ? n.o : orig;
+  if (!title || title === o) delete S.names[k]; else S.names[k] = { t: title, o: o || '' };
+  applyTitle(k, title || o, vid);
+}
+function restoreName(k, prev, title, vid) {
+  if (prev) S.names[k] = { ...prev }; else delete S.names[k];
+  applyTitle(k, title, vid);
+}
+function moveKeys(from, to) {     // a renamed file keeps its name and its resume point
+  const a = 'f:' + String(from).toLowerCase(), b = 'f:' + String(to).toLowerCase();
+  if (a === b) return;
+  for (const m of [S.names, S.resume]) if (m[a]) { m[b] = m[a]; delete m[a]; }
+}
+// Windows won't rename a file that's open: the player lets go of it, and carries on from the same second after
+function releaseFile(p) {
+  const it = curItem();
+  if (!it || engine !== 'local' || !samePath(localPathOf(it), p)) return null;
+  const st = { item: it, t: currentTime(), playing: status === 'playing' };
+  stopEngines(); setStatus('stopped');
+  return st;
+}
+async function carryOn(st) {
+  if (!st) return;
+  const t = tabOf(st.item); if (!t) return;
+  const go = playIndex(t.items.indexOf(st.item), Math.max(0.01, st.t), { tab: S.tabs.indexOf(t), noResume: true });
+  histPending = null;              // not a new play for YouTube History
+  await go;
+  if (!st.playing) pause();
+}
+async function renameFileOnDisk(p, base, playlist) {
+  const st = playlist ? null : releaseFile(p);
+  const r = (await (playlist ? P.plRename(p, base) : P.fileRename(p, base))) || { error: 'Couldn’t rename it.' };
+  if (!r.error && !r.same) {
+    const np = r.path;
+    for (const it of allItems()) {
+      if (it.type === 'file' && samePath(it.path, p)) it.path = np;
+      if (it.localVideo && samePath(it.localVideo, p)) it.localVideo = np;
+      if (it.localAudio && samePath(it.localAudio, p)) it.localAudio = np;
+    }
+    if (playlist) for (const t of S.tabs) if (samePath(t.src, p)) t.src = np;
+    moveKeys(p, np);
+    XS.delete(p);
+    saveSoon(); renderList();
+    xsRecheck();
+  }
+  await carryOn(st);
+  return r;
+}
+// The Rename box (#clRenDlg). o: { title, note (html), value, mode: 'never' | 'optional' | 'always' (the file on disk),
+// chkLabel, chkOn, chkDisabled (why it can't), tail (" [id].mp4" / ".mp3": shown when the file is renamed),
+// hintOff / hintOn(name) (html), check(name) -> { error }, reset: { label, value } }. -> { name, file } or null
+function renameBox(o) {
+  const d = $('#clRenDlg'), inp = $('#clRenIn'), chk = $('#renChk'), ok = $('#renOk'), err = $('#renErr'), rs = $('#renReset');
+  const opt = o.mode === 'optional';
+  $('#renTitle').textContent = o.title || 'Rename';
+  $('#renNote').innerHTML = o.note || ''; $('#renNote').classList.toggle('hidden', !o.note);
+  inp.value = o.value || '';
+  $('#renChkRow').classList.toggle('hidden', !opt);
+  $('#renChkRow').classList.toggle('off', !!o.chkDisabled);
+  chk.disabled = !!o.chkDisabled;
+  chk.checked = opt && !o.chkDisabled && !!o.chkOn;
+  $('#renChkLbl').textContent = o.chkDisabled || o.chkLabel || 'Also rename the file on disk';
+  rs.classList.toggle('hidden', !o.reset);
+  const fileOn = () => o.mode === 'always' || (opt && chk.checked);
+  let tok = 0;
+  async function upd() {
+    const name = inp.value.trim(), f = fileOn();
+    $('#renTail').textContent = o.tail || '';
+    $('#renTail').classList.toggle('hidden', !f || !o.tail);
+    $('#renHint').innerHTML = f ? (o.hintOn ? o.hintOn(name) : '') : (o.hintOff || '');
+    $('#renHint').classList.toggle('hidden', !$('#renHint').innerHTML);
+    const my = ++tok;
+    if (!name || !f || !o.check) { err.classList.add('hidden'); ok.disabled = !name; return; }
+    ok.disabled = true;
+    const r = await o.check(name);
+    if (my !== tok) return;
+    const e = r && r.error ? r.error : '';
+    err.textContent = e; err.classList.toggle('hidden', !e); ok.disabled = !!e;
+  }
+  if (o.reset) { rs.textContent = o.reset.label; rs.onclick = () => { inp.value = o.reset.value; upd(); inp.focus(); }; }
+  inp.oninput = upd; chk.onchange = upd;
+  d.returnValue = '';
+  upd();
+  d.showModal(); setTimeout(() => { inp.focus(); inp.select(); }, 0);
+  return new Promise((res) => d.addEventListener('close', () => {
+    const name = inp.value.trim();
+    res(d.returnValue === 'ok' && name ? { name, file: fileOn() } : null);
+  }, { once: true }));
+}
+$('#clRenIn').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); if (!$('#renOk').disabled) $('#clRenDlg').close('ok'); } });
+const renUndoToast = (msg, undo) => toast(msg, 8000, { label: 'Undo', fn: async () => { for (const f of undo) await f(); dlmOpenRefresh(); toast('Rename undone.', 1800); } });
+const dlmOpenRefresh = () => { if ($('#dlmDlg').open) return dlmRefresh(); };
+// Rename a playlist item (right-click → Rename… / F2): a song or video on your PC, or a YouTube / X link
+async function renameItem(it) {
+  const k = resumeKey(it); if (!it || !k) return;
+  const n = S.names[k], web = it.type !== 'file', site = it.type === 'x' ? 'X' : 'YouTube';
+  const orig = n ? n.o : it.title;
+  const copies = web ? [it.localVideo, it.localAudio].filter(Boolean) : [it.path];
+  const there = copies.length ? await P.filesExist(copies) : [];
+  const live = copies.filter((c, i) => there[i]);
+  const o = { title: 'Rename', value: it.title, mode: 'never' };
+  if (!web) {
+    Object.assign(o, { note: `${it.hasVideo ? 'A video' : 'A song'} on your PC: <b>${htmlEsc(fileBase(it.path))}</b>`, mode: 'optional', chkOn: S.renameFile,
+      chkDisabled: live.length ? '' : 'The file isn’t there any more, so only the name SlopAMP shows can change.', tail: fileTail(it.path),
+      hintOff: 'Off: only the name SlopAMP shows changes; the file keeps its name.' });
+    o.hintOn = (nm) => `The file becomes <b>${htmlEsc(nm + o.tail)}</b>; every playlist, History and the Library follow it.`;
+    o.check = (nm) => P.fileRename(it.path, nm, true);
+  } else if (live.length) {
+    const tag = fileTail(live[0]).replace(/\.[^.]+$/, '').trim();
+    Object.assign(o, { note: `${it.type === 'x' ? 'An X post' : 'A YouTube video'} · you have ${live.length > 1 ? 'downloaded copies' : 'a downloaded copy'}`, mode: 'optional', chkOn: S.renameFile,
+      chkLabel: `Also rename the downloaded ${live.length > 1 ? 'copies' : 'copy'}`, tail: fileTail(live[0]),
+      hintOff: `Only the name SlopAMP shows changes; the ${live.length > 1 ? 'copies keep their' : 'copy keeps its'} file name.`,
+      hintOn: () => `The ${htmlEsc(tag)} tag stays, so SlopAMP still knows the copy belongs to this ${it.type === 'x' ? 'post' : 'video'}.` });
+    o.check = async (nm) => { const rs = await Promise.all(live.map(c => P.fileRename(c, nm, true))); return rs.find(r => r && r.error) || rs[0]; };
+  } else {
+    Object.assign(o, { note: `${it.type === 'x' ? 'An X post' : 'A YouTube video'} · a link (no file on your PC)`,
+      hintOff: `Only the name SlopAMP shows changes. The ${it.type === 'x' ? 'post on X' : 'video on YouTube'} stays as it is.` });
+  }
+  if (n && n.o) o.reset = { label: `↺ Use ${web ? (it.type === 'x' ? 'the post’s title' : `${site}’s title`) : 'its own name'} (${n.o})`, value: n.o };
+  const res = await renameBox(o); if (!res) return;
+  if (o.mode === 'optional' && !o.chkDisabled) { S.renameFile = res.file; saveSoon(); }   // remembered for next time
+  const prev = n ? { ...n } : null, prevTitle = it.title, undo = [];
+  if (res.file) {
+    for (const c of live) {
+      const back = fileStem(c);
+      const r = await renameFileOnDisk(c, res.name);
+      if (r.error) { toast(r.error, 5000); for (const f of undo) await f(); return; }
+      if (!r.same) undo.unshift(async () => { await renameFileOnDisk(r.path, back); });
+    }
+  }
+  const k2 = resumeKey(it);
+  if (res.name === prevTitle && !undo.length) return;
+  setName(k2, res.name, orig, web ? it.vid : null);
+  undo.unshift(async () => restoreName(resumeKey(it), prev, prevTitle, web ? it.vid : null));
+  await dlmOpenRefresh();
+  renUndoToast(`Renamed to "${res.name}"${undo.length > 1 ? (web ? ` (and the downloaded cop${live.length > 1 ? 'ies' : 'y'})` : ' (and the file)') : ''}.`, undo);
+}
+// Rename from the Library (right-click → Rename… / F2): the Library is your files, so the file is renamed
+async function libRename(r) {
+  if (!r || r.missing) return;
+  const dirTail = String(r.path).split(/[\\/]/).slice(-3, -1).join('\\');
+  const o = { mode: 'always', value: r.title, tail: fileTail(r.path) };
+  if (r.kind === 'playlist') {
+    Object.assign(o, { title: 'Rename playlist', note: 'The playlist file in Downloads\\SlopAMP\\Playlists gets the new name.', hintOn: () => 'An open tab that came from it is renamed with it.' });
+    o.check = (nm) => P.plRename(r.path, nm, true);
+  } else {
+    const clip = isClipRow(r);
+    Object.assign(o, { title: clip ? 'Rename clip' : r.kind === 'audio' ? 'Rename MP3' : 'Rename video', note: `The file in ${htmlEsc(dirTail)} gets the new name.`,
+      hintOn: () => (clip ? 'Playlists that use this clip follow it, and “Clip again” still works.' : `Playlists, ${r.vid && /^x/.test(r.vid) ? 'X' : 'YT'} History and saved playlists in SlopAMP\\Playlists that use this file follow it.`) });
+    o.check = (nm) => P.fileRename(r.path, nm, true);
+  }
+  const res = await renameBox(o); if (!res || res.name === r.title) return;
+  const back = r.kind === 'playlist' ? fileBase(r.path).replace(/\.[^.]+$/, '') : fileStem(r.path);
+  const fr = await renameFileOnDisk(r.path, res.name, r.kind === 'playlist');
+  if (fr.error) { toast(fr.error, 5000); return; }
+  const undo = [async () => { await renameFileOnDisk(fr.path, back, r.kind === 'playlist'); }];
+  if (r.kind === 'playlist') {
+    const named = S.tabs.filter(t => samePath(t.src, fr.path) && t.name === r.title);
+    for (const t of named) t.name = res.name.slice(0, 40);
+    if (named.length) { renderTabs(); saveSoon(); undo.unshift(async () => { for (const t of named) t.name = r.title.slice(0, 40); renderTabs(); saveSoon(); }); }
+  } else if (r.vid) {               // a download: the video gets this name everywhere
+    const k = 'y:' + r.vid, sample = allItems().find(it => resumeKey(it) === k), prev = S.names[k] ? { ...S.names[k] } : null;
+    const prevTitle = sample ? sample.title : r.title;
+    setName(k, res.name, prev ? prev.o : prevTitle, r.vid);
+    undo.unshift(async () => restoreName(k, prev, prevTitle, r.vid));
+  } else {                          // a clip: its name is its file name
+    const k = resumeKey({ type: 'file', path: fr.path });
+    if (S.names[k]) setName(k, res.name); else applyTitle(k, res.name);
+    undo.unshift(async () => { const k0 = resumeKey({ type: 'file', path: fr.path }); if (S.names[k0]) setName(k0, r.title); else applyTitle(k0, r.title); });
+  }
+  await dlmRefresh();
+  renUndoToast(`Renamed to "${res.name}".`, undo);
+}
+
 // Right-click a Library row (2.3: the Library had no row menu before)
 $('#dlmBody').addEventListener('contextmenu', (e) => {
   const tr = e.target.closest('tr'); if (!tr) return;
@@ -3989,7 +4229,7 @@ $('#dlmBody').addEventListener('contextmenu', (e) => {
       en.push(null, [r.srcExists ? '✂ Clip again…  (same In/Out)' : '✂ Clip again…  (the original is gone)', () => clipAgain(r), !r.srcExists]);
       if (r.srcExists) en.push(['Show original', () => P.showInFolder(r.src)]);
       if (r.kind === 'mp4clip') en.push(['𝕏 Fix for X…', () => { $('#dlmDlg').close(); xFixOpen([r.path]); }]);
-      en.push(null, ['Rename…', () => clipRenameRow(r)]);
+      en.push(null, ['Rename…\tF2', () => libRename(r)]);
     } else {
       const fake = { type: 'file', path: r.path, hasVideo: r.kind === 'video' };
       en.push(null, ['✂ Clip MP3…', () => { $('#dlmDlg').close(); clipOpen(r.path, { kind: 'mp3', title: r.title }); }]);
@@ -3999,6 +4239,7 @@ $('#dlmBody').addEventListener('contextmenu', (e) => {
     }
   }
   if (!r.missing) en.push(['Show in folder', () => P.showInFolder(r.path)]);
+  if (!r.missing && !isClipRow(r)) en.push(['Rename…\tF2', () => libRename(r)]);    // 2.6 (clips have it above)
   en.push([`Delete${sel.length > 1 ? ` (${sel.length})` : ''}`, () => dlmDelete(sel)]);
   showCtxMenu(en, e.clientX, e.clientY, e.target.ownerDocument);
 });
@@ -4131,7 +4372,7 @@ const SKL = { sel: new Set(), anchor: -1, renaming: null };
 const skinMode = () => DLM.filter === 'skins';
 const sklUser = (id) => /^user:/.test(String(id));
 function sklRows() {
-  const q = ($('#dlmSearch').value || '').trim().toLowerCase();
+  const q = dlmQ('skins').toLowerCase();
   const hit = (s) => !q || String(s.name).toLowerCase().includes(q) || String(s.baseName || '').toLowerCase().includes(q) || String(s.slug || s.id).includes(q);
   return { mine: WM.skins.user.filter(hit), built: WM.skins.list.filter(hit) };
 }
@@ -4142,6 +4383,7 @@ async function sklRefresh() {
   if (SKL.renaming && !ids.has(SKL.renaming)) SKL.renaming = null;
   sklRender();
 }
+$('#sklList').addEventListener('click', (e) => { if (e.target.closest('.dlm-nomatch button[data-a=clearq]')) dlmClearQ(); });
 window.skinLibChanged = () => { if ($('#dlmDlg').open && skinMode()) sklRefresh(); };
 function sklRender() {
   const dlg = $('#dlmDlg');
@@ -4153,7 +4395,8 @@ function sklRender() {
   $('#dlmCount').textContent = `${all.length} SKIN${all.length === 1 ? '' : 'S'} OF YOURS · ${total ? fmtSize(total).toUpperCase() : '0 KB'} · ${WM.skins.list.length} BUILT-IN`;
   $('#dlmMiss').textContent = '';
   $('#dlmSearch').placeholder = 'Search skins…';
-  $('#dlmSearchX').classList.toggle('hidden', !($('#dlmSearch').value || '').trim());
+  const q = dlmQ('skins');
+  $('#dlmSearchX').classList.toggle('hidden', !q);
   const sw = (s) => `<span class="skl-sw">${(s.sw && s.sw.length === 6 ? s.sw : WM.skins.list[0].sw).map(c => `<i style="background:${htmlEsc(c)}"></i>`).join('')}</span>`;
   const btns = (s, user) => `<span class="skl-btns">`
     + (s.id === on ? '<button type="button" class="skl-on" disabled title="The skin you have on">&#10003; ON</button>'
@@ -4170,9 +4413,12 @@ function sklRender() {
       : `<span class="skl-n">${htmlEsc(s.name)}${user ? (s.baseName ? `<small>from ${htmlEsc(s.baseName)}</small>` : '') : `<small>built-in · ${htmlEsc(s.group)}</small>`}</span>`)
     + (user ? `<span class="skl-f">${htmlEsc(s.slug)}.css</span><span class="skl-sz">${fmtSize(s.size)}</span><span class="skl-dt">${fmtDate(s.mtime)}</span>` : '')   // built-ins: the name gets the room
     + btns(s, user) + '</div>';
-  $('#sklList').innerHTML = `<div class="skl-sec"><span>Mine (${all.length})</span><span class="skl-now">On now: ${htmlEsc(WM.skins.nameOf(on))}</span></div>`
-    + (mine.length ? mine.map(s => row(s, true)).join('') : `<div class="skl-empty">${WM.skins.user.length ? 'None of your skins match.' : 'No skins of your own yet. <b>+ New skin</b> opens the Skin Editor on the skin you have on; <b>Import…</b> adds a .css someone shared; <b>Edit a copy</b> on a built-in starts from that one.'}</div>`)
-    + `<div class="skl-sec"><span>Built-in (${WM.skins.list.length}) · can’t be changed or deleted</span></div>` + built.map(s => row(s, false)).join('');
+  // bug #4 (2.6): a search that matches nothing says so (one note when neither list has a match)
+  $('#sklList').innerHTML = q && !mine.length && !built.length
+    ? dlmNoMatch('skins', q, '').replace('</div></div>', `</div><small>Searched ${plural(all.length, 'skin', 'skins')} of yours and the ${WM.skins.list.length} built-in ones (names, and the skin each one was made from).</small></div>`)
+    : `<div class="skl-sec"><span>Mine (${all.length})</span><span class="skl-now">On now: ${htmlEsc(WM.skins.nameOf(on))}</span></div>`
+    + (mine.length ? mine.map(s => row(s, true)).join('') : `<div class="skl-empty">${all.length ? `None of your skins match “${htmlEsc(q)}”.` : 'No skins of your own yet. <b>+ New skin</b> opens the Skin Editor on the skin you have on; <b>Import…</b> adds a .css someone shared; <b>Edit a copy</b> on a built-in starts from that one.'}</div>`)
+    + `<div class="skl-sec"><span>Built-in (${WM.skins.list.length}) · can’t be changed or deleted</span></div>` + (built.length ? built.map(s => row(s, false)).join('') : `<div class="skl-empty">No built-in skins match “${htmlEsc(q)}”.</div>`);
   const del = [...SKL.sel].filter(sklUser);
   $('#sklDel').disabled = !del.length;
   $('#sklDel').innerHTML = `&#x1F5D1; Delete selected${del.length ? ` (${del.length})` : ''}`;
@@ -4265,6 +4511,7 @@ function sklKey(e) {
   const sel = [...SKL.sel];
   if (e.key === 'Enter' && sel.length === 1) { e.preventDefault(); sklApply(sel[0]); return true; }
   if (e.key === 'Delete' && sel.some(sklUser)) { e.preventDefault(); sklDelete(sel); return true; }
+  if (e.key === 'F2' && sel.length === 1 && sklUser(sel[0])) { e.preventDefault(); sklRename(sel[0]); return true; }   // 2.6
   return false;
 }
 $('#sklNew').onclick = async () => { $('#dlmDlg').close(); await WM.skins.openEditor(); };
@@ -4335,7 +4582,7 @@ function stateSnapshot() {
     tabs: S.tabs.map(t => ({ id: t.id, name: t.name, current: t.current, src: t.src || undefined, items: t.items.map(({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at }) => ({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at })) })),
     tab: S.tab, playTab: S.playTab, vis: S.vis, volume: S.volume, muted: S.muted, shuffle: S.shuffle, repeat: S.repeat,
     showVideo: S.showVideo, showPlaylist: S.showPlaylist, plShade: S.plShade, vidShade: S.vidShade, remaining: S.remaining, plHeight: S.plHeight, visMode, eq: S.eq,
-    resume: S.resume, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, hist: S.hist, xhist: S.xhist
+    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, hist: S.hist, xhist: S.xhist
   };
 }
 function saveSoon() {
@@ -4404,6 +4651,8 @@ setInterval(() => { blink = !blink; }, 500);
     // the equalizer always shows at launch (minimized stays minimized), except with Layout → Classic (stacked, No EQ)
     if (S.eq.panel === 'hidden' && (WM.info.lastPreset || WM.info.preset) !== 'classic-noeq') S.eq.panel = 'open';
     if (st.resume && typeof st.resume === 'object') S.resume = st.resume;
+    if (st.names && typeof st.names === 'object') for (const [k, v] of Object.entries(st.names)) if (v && typeof v.t === 'string') S.names[k] = { t: v.t, o: String(v.o || '') };
+    S.renameFile = st.renameFile === true;
     S.subsOn = !!st.subsOn;
     S.dlFormat = st.dlFormat === 'best' ? 'best' : 'xready';
     if (st.lib && typeof st.lib === 'object') S.lib = { w: Number(st.lib.w) || 0, h: Number(st.lib.h) || 0, view: st.lib.view === 'list' ? 'list' : 'grid' };

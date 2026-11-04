@@ -137,6 +137,7 @@ KEYS
   Media keys  Play/Pause, Next, Previous and Stop keys on your keyboard work
               even when SlopAMP is in the background
   Ctrl+O      open files   Ctrl+U  add link   Alt+Up/Down  move item
+  F2          rename the selected item (playlist or Library)
   Click the time display to switch between elapsed and remaining time.
   Click the small spectrum to cycle bars / oscilloscope / off.
 
@@ -349,11 +350,23 @@ POSTING VIDEOS TO X
   * MANAGE LIBRARY (bottom bar, or "Manage library..." in the download menu)
     shows everything SlopAMP has downloaded plus your saved playlists, with
     size, date and total space used. Filter by Video / MP3 / Playlists,
-    type in the search box to find things fast, sort by any column, tick
+    type in the search box to find things fast (each section keeps its own
+    search until SlopAMP closes; a dot marks a section that has one, and a
+    search that finds nothing says so, with Clear search), sort by any column, tick
     items and "Delete selected" or "Delete all" (Recycle Bin). Double-click
     a playlist (or "Open in new tab") to open it. Files you deleted yourself
     show as MISSING; "Clean up missing" clears them. SlopAMP re-checks its
     downloads whenever you switch back to it.
+  * RENAME (right-click -> Rename..., or F2): a song, video, YouTube video or
+    X post gets the new name everywhere it shows: every tab, YT / X History
+    and the Library. From the playlist only the name SlopAMP shows changes,
+    unless you tick "Also rename the file on disk" (SlopAMP remembers your
+    choice). A downloaded copy keeps its [id] tag, so SlopAMP still knows
+    which video it is. For a link with no file, "Use YouTube's title" puts
+    the original name back. From the Library, Rename always renames the file
+    (videos, MP3s, saved playlists and clips). Saved playlists in
+    Downloads\SlopAMP\Playlists follow a renamed file; a file that's
+    playing keeps playing. Undo on the message puts it all back.
   * QUICK SAVE (or Ctrl+Shift+S) saves the tab you're looking at straight
     to Downloads\SlopAMP\Playlists\<tab name>.m3u8 with no questions,
     replacing the older copy.
