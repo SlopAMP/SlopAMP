@@ -124,7 +124,7 @@ const N_BIG = +(process.env.N_BIG || 1000);
   const sk = await ev(() => ({ n: WM.$$('#sklList .skl-tile').length, on: WM.$$('#sklList .skl-tile .skt-on').length, onId: WM.$('#sklList .skt-on').closest('.skl-tile').dataset.id }));
   ok(sk.n === 11 && sk.on === 1 && sk.onId === 'classic', 'SKINS: 11 skin tiles, ✓ ON on Classic ' + JSON.stringify(sk));
   await (await dw()).screenshot({ path: `${O}/skins.png` });
-  await ev(() => WM.$('#sklList .skl-tile[data-id="red"]').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))); await sleep(800);
+  { const sw = await dw(); const rb = await ev(() => { const r = WM.$('#sklList .skl-tile[data-id="red"] .skt-pv').getBoundingClientRect(); return { x: r.left + 12, y: r.top + 12 }; }); await sw.mouse.dblclick(rb.x, rb.y); await sleep(800); }
   ok((await ev(() => WM.skins.current)) === 'red', 'double-click a skin tile puts it on');
   await ev(() => WM.skins.apply('classic')); await sleep(400);
   // ================= a big Library: only what's on screen is made

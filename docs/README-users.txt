@@ -144,7 +144,8 @@ KEYS
 PLAYLIST TABS
   * Keep several playlists as tabs above the list. "+" (or Ctrl+T) adds a
     tab; double-click a tab to rename it; right-click for Rename, Duplicate,
-    Save as playlist file, Share playlist (.zip), Move left/right and Close.
+    Save as playlist file, Share playlist (.zip), Move left/right, Move to
+    front / end and Close.
     Ctrl+Tab switches tabs.
   * YT History and X History shrink to "YT" and "X" (with their clock) when
     you're not looking at them; hover for the full name and count.

@@ -1,6 +1,11 @@
 # Changelog
 
-## 2.7.0 — unreleased
+## 2.7.1 — unreleased
+
+- Fix: double-clicking a skin in Library → SKINS (a row in Classic or a tile in Preview) now puts it on, the same as Apply. The first click redrew the list, so the double-click was lost.
+- Playlist tab menu: **Move to front** and **Move to end**, next to Move left / Move right. They're greyed when the tab is already first or last; History tabs stay at the front.
+
+## 2.7.0 — released Nov 4, 2026
 
 - **Library → Preview view**: a **☰ Classic | ▦ Preview** switch next to the search box shows a section as pictures instead of the list. Classic is the default, a one-time "New: Preview view" tip points at the switch, and each section remembers its own choice.
   - **VIDEO**: a frame from about 10% in, the length and the X ✓ tag. Rest the mouse on a tile and move across it to look through the video (10 frames, made on the first hover).

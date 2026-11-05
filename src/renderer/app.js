@@ -1543,6 +1543,8 @@ $('#tabStrip').addEventListener('contextmenu', (e) => {
     ['New tab', () => { const n = newTab(); renameTab(n); }],
     ...(i > 0 && !isHist(S.tabs[i - 1]) ? [['Move left', () => moveTab(i, -1)]] : []),
     ...(i < S.tabs.length - 1 ? [['Move right', () => moveTab(i, 1)]] : []),
+    ['Move to front', () => moveTabTo(i, 'front'), i <= tabFront()],          // 2.7.1: greyed when it's already first / last
+    ['Move to end', () => moveTabTo(i, 'end'), i >= S.tabs.length - 1],
     null,
     [S.tabs.filter(x => !isHist(x)).length > 1 ? 'Close tab' : 'Clear and reset tab', () => closeTab(i)]
   ];
@@ -1555,6 +1557,17 @@ function moveTab(i, d) {
   const mapIdx = (k) => (k === i ? j : k === j ? i : k);
   [S.tabs[i], S.tabs[j]] = [S.tabs[j], S.tabs[i]];
   S.tab = mapIdx(S.tab); S.playTab = mapIdx(S.playTab);
+  renderTabs(); saveSoon();
+}
+// 2.7.1: Move to front (right after the History tabs, which stay first) / Move to end
+const tabFront = () => { let k = 0; while (k < S.tabs.length && isHist(S.tabs[k])) k++; return k; };
+function moveTabTo(i, where) {
+  if (isHist(S.tabs[i])) return;
+  const j = where === 'front' ? tabFront() : S.tabs.length - 1;
+  if (j === i) return;
+  const shown = S.tabs[S.tab], playing = S.tabs[S.playTab];
+  const [t] = S.tabs.splice(i, 1); S.tabs.splice(j, 0, t);
+  S.tab = S.tabs.indexOf(shown); S.playTab = S.tabs.indexOf(playing);
   renderTabs(); saveSoon();
 }
 // Drag playlist rows onto a tab: move (hold Ctrl to copy).
@@ -4615,7 +4628,14 @@ $('#sklList').addEventListener('click', (e) => {
   if (SKL.renaming && SKL.renaming !== id) SKL.renaming = null;
   sklRender();
 });
-$('#sklList').addEventListener('dblclick', (e) => { const r = e.target.closest('.skl-row'); if (r && !e.target.closest('input, button')) sklApply(r.dataset.id); });
+// Double-click a skin (row or Preview tile) puts it on. The first click re-renders the list, so the browser's own
+// dblclick gets lost (2.7.1 fix); the second press of a double-click is caught here instead, as for the Library rows.
+$('#sklList').addEventListener('mousedown', (e) => {
+  if (e.button !== 0 || e.detail !== 2 || e.shiftKey || e.ctrlKey) return;
+  const r = e.target.closest('.skl-row'); if (!r || e.target.closest('input, button, .dlm-cb')) return;
+  e.preventDefault(); sklApply(r.dataset.id);
+});
+$('#sklList').addEventListener('dblclick', (e) => { const r = e.target.closest('.skl-row'); if (r && !e.target.closest('input, button, .dlm-cb')) sklApply(r.dataset.id); });   // when the browser's own dblclick does arrive (sklApply does nothing for the skin already on)
 $('#sklList').addEventListener('contextmenu', (e) => {
   const r = e.target.closest('.skl-row'); if (!r || e.target.closest('input')) return;
   e.preventDefault(); e.stopPropagation();
