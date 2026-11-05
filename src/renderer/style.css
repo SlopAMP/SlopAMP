@@ -522,9 +522,9 @@ select option:checked { background: var(--pl-sel); color: var(--menu-hover-ink);
 #skinMenu .sk-name span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }   /* 2.5.2: a long name ends in … (full name in the tooltip) */
 #skinMenu .sk-foot { margin: 7px 2px 0; color: var(--ink-dim); font-size: var(--fs-s2); }
 
-#clipPanel, #ytwPanel { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--dialog-bg); color: var(--ink-menu); font: var(--fs-base)/1.35 var(--font-ui); }
-#clipPanel .hidden, #ytwPanel .hidden { display: none !important; }
-#clipPanel .dim, #ytwPanel .dim { color: var(--ink-dim); }  
+#clipPanel, #ytwPanel, #xwPanel { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--dialog-bg); color: var(--ink-menu); font: var(--fs-base)/1.35 var(--font-ui); }
+#clipPanel .hidden, #ytwPanel .hidden, #xwPanel .hidden { display: none !important; }
+#clipPanel .dim, #ytwPanel .dim, #xwPanel .dim { color: var(--ink-dim); }  
 #clipPanel kbd { font: bold var(--fs-s) var(--font-lcd); color: var(--menu-accent); margin-left: 4px; border: 1px solid var(--line-green); padding: 0 3px; }
 .sb { background: var(--btn-green); border: 1px solid var(--line-green); color: var(--ink-green); padding: 3px 9px; font-size: var(--fs-m); white-space: nowrap; cursor: pointer; }
 .sb:hover:not(:disabled) { background: var(--btn-green-hover); }
@@ -955,3 +955,12 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .skl-tile .skl-n input { width: 100%; }
 .ptab.hist.compact { gap: 3px; padding-left: 7px; padding-right: 7px; }
 .ptab.hist.compact .ct { display: none; }
+
+/* ---- 2.8: X posts stream in the player: the corner tag, the "Getting the video" spinner, the X PLAYER window */
+.x-tag { position: absolute; left: 8px; top: 8px; z-index: 6; pointer-events: none; background: rgba(0, 0, 0, .65); color: var(--ink-green, #3dff6e); border: 1px solid var(--line-green); font: var(--fs-s) var(--font-ui); padding: 1px 6px; opacity: 1; transition: opacity .8s; }
+.x-tag.fade { opacity: 0; }
+#overlay.x-getting #ovTitle::before { content: '\25D0'; display: inline-block; margin-right: 6px; animation: x-spin 1s linear infinite; }
+@keyframes x-spin { to { transform: rotate(360deg); } }
+.xw-view { display: flex; justify-content: center; overflow: auto; background: #000; }
+.xw-view iframe { border: 0; width: 100%; max-width: 560px; height: 100%; min-height: 360px; background: #000; color-scheme: dark; }
+.xw-view .xw-none { align-self: center; color: #aaa; font-size: var(--fs-m); }

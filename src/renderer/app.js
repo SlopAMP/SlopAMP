@@ -31,6 +31,7 @@ const S = {
   renameFile: false,   // 2.6: the Rename box's "Also rename the file on disk" (your last choice)
   rate: 1,             // playback speed (this session only)
   subsOn: false,       // subtitles stay on for the next items once turned on
+  xPlay: 'stream',     // 2.8: an X post that isn't downloaded plays right away ('stream') or asks first ('ask'), set in "?"
   lib: { w: 0, h: 0, view: 'grid', modes: {}, tip: 0 },   // the Library's size once resized (0: default); `view` was SLOP's (kept so old state reads); 2.7: modes = Classic / Preview per section, tip = the "New: Preview view" tip was seen
   vis: { mode: 'milkdrop', preset: '', cycle: true, panel: 'open', showTitle: false, showPreset: true, showTrack: false, favs: [], favOnly: false }   // audio visualizer: milkdrop (Butterchurn) | bars; panel: open | min | hidden
 };
@@ -220,7 +221,7 @@ function insertItems(items, at, autoplay = true) {
 
 // ------------------------------------------------------------------ engines
 const video = $('#video');
-const L = { prep: null, offset: 0, token: 0, duration: 0, triedStream: false, triedTranscode: false, pendingSeek: 0 };
+const L = { prep: null, offset: 0, token: 0, duration: 0, triedStream: false, triedTranscode: false, pendingSeek: 0, x: null };   // x: the X post streaming (2.8)
 let yt = null, ytApi = null, ytPendingItem = null, ytDuration = 0;
 
 function showLayer(name) {
@@ -243,6 +244,7 @@ function cdStop(keepLabel) {
   CD.btn = null; CD.itemId = null;
 }
 function showOverlay(title, text, buttons = [], opts = {}) {
+  $('#overlay').classList.remove('x-getting');
   cdStop(); sheet = opts.reshow && opts.item ? { itemId: opts.item.id, show: opts.reshow } : null;
   $('#ovTitle').textContent = title; $('#ovText').textContent = text;
   const b = $('#ovBtns'); b.innerHTML = '';
@@ -283,7 +285,7 @@ function showBusy(on) { $('#busy').classList.toggle('hidden', !on); }
 
 function stopEngines(keep) {
   if (keep !== 'local') {
-    L.token++;
+    L.token++; L.x = null; video.loop = false; xTagHide();
     video.pause(); video.removeAttribute('src'); video.load();
   }
   if (keep !== 'youtube' && yt && yt.stopVideo) { try { yt.stopVideo(); } catch (_) {} }
@@ -304,6 +306,7 @@ function localPathOf(item) {
 }
 async function loadLocal(item, startAt = 0, opts = {}) {
   const token = ++L.token;
+  L.x = null; video.loop = false; xTagHide();
   showBusy(true);
   const lp = localPathOf(item);
   const prep = await P.prepare(lp, opts);
@@ -312,6 +315,7 @@ async function loadLocal(item, startAt = 0, opts = {}) {
     if (item.localVideo === lp) delete item.localVideo; else delete item.localAudio;
     renderList(); saveSoon();
     if (localPathOf(item)) { await loadLocal(item, startAt, opts); return; }
+    if (xStreamOn()) { showBusy(false); toast('The downloaded copy is missing — playing it from X.'); await loadXStream(item, startAt); return; }   // 2.8
     showBusy(false);
     engine = null; setStatus('stopped');
     showXSheet(item, 'The downloaded copy is missing.');
@@ -367,12 +371,13 @@ function localSeek(t) {
 }
 video.addEventListener('loadedmetadata', () => {
   if (L.pendingSeek) { video.currentTime = L.pendingSeek; L.pendingSeek = 0; }
+  if (L.x && !L.duration && Number.isFinite(video.duration) && video.duration > 0) { L.duration = video.duration; const it = L.x.item; if (!it.duration) { it.duration = Math.round(video.duration); renderList(); saveSoon(); } }
   // A direct-played video file whose codec Chromium can't decode shows 0x0 — fall back to FFmpeg.
   const item = curItem();
   const expectVideo = L.prep && L.prep.info ? L.prep.info.hasVideo : (item && item.hasVideo);
   if (engine === 'local' && L.prep && L.prep.mode === 'direct' && item && expectVideo && video.videoWidth === 0) fallbackLocal('novideo');
 });
-video.addEventListener('playing', () => { showBusy(false); if (engine === 'local') { if (video.playbackRate !== S.rate) applyRate(); setStatus('playing'); histStarted(curItem()); } });
+video.addEventListener('playing', () => { showBusy(false); if (engine === 'local') { if (video.playbackRate !== S.rate) applyRate(); setStatus('playing'); histStarted(curItem()); if (L.x) xTagShow(); xPrefetchNext(); } });
 video.addEventListener('waiting', () => { if (engine === 'local') showBusy(true); });
 video.addEventListener('canplay', () => showBusy(false));
 video.addEventListener('pause', () => { if (engine === 'local' && status === 'playing' && !video.ended) setStatus('paused'); });
@@ -385,6 +390,7 @@ video.addEventListener('dblclick', () => toggleFullscreen());
 function fallbackLocal(reason) {
   const item = curItem();
   if (!item || !L.prep) return;
+  if (L.x) { xPlayFailed(reason); return; }          // 2.8: an X stream: ask X again, then the error box
   const at = localTime();
   if (L.prep.mode === 'direct' && !L.triedStream) { L.triedStream = true; loadLocal(item, at, { forceStream: true }); return; }
   if (!L.triedTranscode) { L.triedTranscode = true; loadLocal(item, at, { forceStream: true, forceTranscode: true }); return; }
@@ -495,7 +501,7 @@ async function playIndex(i, startAt = 0, opts = {}) {
   tab.current = i;
   hideOverlay();
   L.triedStream = false; L.triedTranscode = false;
-  if (xNeedsDownload(item)) {     // X: nothing plays until it's downloaded; offer the choice
+  if (xNeedsDownload(item) && !xStreamOn()) {     // X with "?" → X posts: Ask me: nothing plays until it's downloaded; offer the choice
     engine = null; stopEngines();
     setMarquee(item); setStatus('stopped');
     renderList(); if (S.tab === S.playTab) scrollToCurrent(); saveSoon();
@@ -503,11 +509,13 @@ async function playIndex(i, startAt = 0, opts = {}) {
     updateControlsEnabled(); updateDlButton(); renderEq(); renderSpeed(); renderCc();
     return;
   }
-  engine = item.type === 'file' || localPathOf(item) ? 'local' : item.type;
+  const xs = xNeedsDownload(item);           // 2.8: an X post that isn't downloaded streams in the same player
+  engine = item.type === 'file' || localPathOf(item) || xs ? 'local' : item.type;
   stopEngines(engine);
   setMarquee(item);
   renderList(); if (S.tab === S.playTab) scrollToCurrent(); saveSoon();
-  if (engine === 'local') await loadLocal(item, startAt);
+  if (xs) await loadXStream(item, startAt);
+  else if (engine === 'local') await loadLocal(item, startAt);
   else if (engine === 'youtube') await loadYouTube(item, startAt);
   updateControlsEnabled();
   updateDlButton();
@@ -574,11 +582,117 @@ let xSheetFor = null;
 function showXSheet(item, why) {
   xSheetFor = item.id;
   const d = DL.get(item.id), busy = d && DL_BUSY.includes(d.status);
-  showOverlay('This X post plays after you download it', `${why ? why + ' ' : ''}${busy ? 'It’s downloading now and plays when it’s done.' : 'SlopAMP can’t stream X videos. Download it to play it here, or watch it on X.'}`, [
+  // 2.8: only with "?" → X posts: Ask me (or a downloaded copy that went missing)
+  showOverlay('Play this X post?', `${why ? why + ' ' : ''}${busy ? 'It’s downloading now and plays when it’s done.' : 'Play it here now (nothing is saved), download it, or watch it on X.'}`, [
+    { label: '\u25b6 Play here', action: () => { xSheetFor = null; xPlayHere(item); } },
     { label: 'Play on X', action: () => { xSheetFor = null; P.openExternal(item.url); } },
     { label: '\u21e9 Download', keepOpen: true, action: (r) => openDlMenu(item, { doc: $('#overlay').ownerDocument, x: r.left, y: r.bottom + 6, flipY: r.top }) },
     { label: 'Skip', countdown: true, action: () => { xSheetFor = null; skipItem(); } }
   ], { item, reshow: (w) => showXSheet(item, w) });
+}
+// ---- 2.8: X posts stream in SlopAMP's own player (main.js xstream.js). The post's video link comes from yt-dlp
+// (about 2 s; the "Getting the video from X…" box shows while it takes longer than a moment, with Cancel), then
+// plays through SlopAMP's media server like a file: same controls, EQ, visualizer, speed, seeking. Links are kept
+// for the session; the next X item's link is fetched while this one plays. If X refuses, SlopAMP asks once more;
+// then the error box offers X's own player (the X PLAYER window), Download, Play on X and Skip. A downloaded copy
+// still plays first. Streamed posts don't go into X History; GIF posts loop. "?" → X posts: Ask me = the 2.1 sheet.
+const xStreamOn = () => S.xPlay !== 'ask';
+const X_WHY = {
+  novideo: 'This X post has no video.',
+  signin: 'X only shows this video to signed-in accounts (it may be marked sensitive).',
+  gone: 'This post was deleted, is private, or isn’t available.',
+  limit: 'X is limiting requests right now. Try again in a few minutes.',
+  network: 'SlopAMP couldn’t reach X. Check your internet connection.',
+  other: 'X didn’t hand over the video, even on a second try.'
+};
+const X_FINAL = new Set(['novideo', 'signin', 'gone']);   // X's answer won't change by asking again
+const X_GET_DELAY = 350;                                   // a link SlopAMP already has plays without the box
+async function loadXStream(item, startAt = 0, o = {}) {
+  const token = ++L.token;
+  L.x = null; L.prep = null; L.duration = item.duration || 0; video.loop = false; xTagHide();
+  video.pause(); video.removeAttribute('src'); video.load();
+  showBusy(true); showLayer('video');
+  if (status !== 'stopped') setStatus('stopped');     // nothing plays until X hands over the link
+  updateInfo(null, 'X');
+  const cover = $('#cover'); cover.removeAttribute('src'); cover.classList.remove('has');
+  const gone = () => token !== L.token || curItem() !== item;
+  let boxed = false;
+  const boxT = setTimeout(() => {
+    if (gone()) return;
+    boxed = true; showBusy(false);
+    showOverlay('Getting the video from X…', `${item.title}  ·  usually 2–4 seconds`, [{ label: 'Cancel', action: () => { L.token++; stopEngines(); engine = null; setStatus('stopped'); updateControlsEnabled(); updateDlButton(); } }]);
+    $('#overlay').classList.add('x-getting');
+  }, X_GET_DELAY);
+  const ask = (fresh) => P.xResolve(item.url, { fresh }).catch((e) => ({ ok: false, code: 'other', error: String(e && e.message || e) }));
+  let r = await ask(!!o.fresh), again = !!o.again;
+  if (!r.ok && !again && !gone() && !X_FINAL.has(r.code)) { again = true; r = await ask(true); }   // ask X once more
+  clearTimeout(boxT);
+  if (gone()) return;
+  if (boxed) { $('#overlay').classList.remove('x-getting'); hideOverlay(); }
+  if (!r.ok) { xStreamFailed(item, r.code); return; }
+  L.x = { item, again, cached: !!r.cached, gif: !!r.gif, height: r.height || 0, tagged: false };
+  L.prep = { ok: true, mode: 'direct', directUrl: r.url, info: { hasVideo: true, duration: r.duration || 0 }, coverUrl: null };
+  L.duration = r.duration || item.duration || 0;
+  if (r.duration && !item.duration) item.duration = Math.round(r.duration);
+  if (r.title && placeholderTitle(item)) { item.title = r.title.slice(0, 200); setMarquee(item); }
+  renderList(); saveSoon();
+  updateInfo({ bitrate: (r.tbr || 0) * 1000, hasVideo: true, audio: r.gif ? null : { sampleRate: r.asr || 44100, channels: 2 } }, 'X');
+  ensureAudioGraph();
+  video.loop = !!r.gif;
+  L.offset = 0; L.pendingSeek = startAt > 0 ? startAt : 0;
+  video.src = r.url;
+  video.volume = S.volume / 100; video.muted = S.muted;
+  applyRate();
+  loadSubsFor(item);
+  try { await video.play(); } catch (_) { /* the error event handles it */ }
+}
+// the stream broke (X refused the link, or it expired mid-way): a link from earlier in the session is simply
+// fetched again; a fresh one gets one more try; then the error box
+function xPlayFailed() {
+  const x = L.x; if (!x) return;
+  const at = localTime();
+  L.x = null;
+  if (x.cached) { loadXStream(x.item, at, { fresh: true, again: x.again }); return; }
+  if (!x.again) { loadXStream(x.item, at, { fresh: true, again: true }); return; }
+  xStreamFailed(x.item, 'other');
+}
+function xStreamFailed(item, code, why) {
+  L.token++; L.x = null; L.prep = null; video.loop = false; xTagHide();
+  video.pause(); video.removeAttribute('src'); video.load();
+  engine = null; showBusy(false); setStatus('stopped');
+  xSheetFor = item.id;              // a download started here plays when it's done (linkDownload)
+  const text = `${item.title}  ·  ${X_WHY[code] || X_WHY.other}`;
+  showOverlay('Couldn’t play this X post', why ? `${why} ${text}` : text, [
+    { label: '▶ X’s player', action: () => { xSheetFor = null; xwOpen(item); } },
+    { label: '⇩ Download', keepOpen: true, action: (r) => openDlMenu(item, { doc: $('#overlay').ownerDocument, x: r.left, y: r.bottom + 6, flipY: r.top }) },
+    { label: 'Play on X', action: () => { xSheetFor = null; P.openExternal(item.url); } },
+    { label: 'Skip', countdown: true, action: () => { xSheetFor = null; skipItem(); } }
+  ], { item, reshow: (w) => xStreamFailed(item, code, w) });
+  updateControlsEnabled(); updateDlButton();
+}
+// the corner tag ("𝕏 streaming · 720p"), shown once the video starts and faded after 3 s
+let xTagT = 0;
+function xTagShow() {
+  if (!L.x || L.x.tagged) return;
+  L.x.tagged = true;
+  const t = $('#xTag'); if (!t) return;
+  t.textContent = `𝕏 streaming · ${L.x.gif ? 'GIF' : L.x.height ? `${L.x.height}p` : 'MP4'}`;
+  t.classList.remove('hidden', 'fade'); clearTimeout(xTagT);
+  xTagT = setTimeout(() => t.classList.add('fade'), 3000);
+}
+function xTagHide() { clearTimeout(xTagT); const t = $('#xTag'); if (t) t.classList.add('hidden'); }
+// while something plays: the next X item's link, so next / a playlist run doesn't wait for it
+function xPrefetchNext() {
+  if (!xStreamOn() || S.shuffle) return;
+  const t = PT(), i = nextIndex(true); if (i < 0) return;
+  const it = t.items[i];
+  if (it && it !== curItem() && xNeedsDownload(it)) P.xResolve(it.url, {}).catch(() => {});
+}
+// "▶ Play here" on the Ask-me sheet: stream this one post
+function xPlayHere(item) {
+  if (curItem() !== item) return;
+  engine = 'local'; stopEngines('local');
+  loadXStream(item, 0).then(() => { updateControlsEnabled(); updateDlButton(); renderEq(); renderSpeed(); renderCc(); });
 }
 function prev() {
   if (currentTime() > 4) { seekTo(0); return; }
@@ -731,7 +845,8 @@ function syncWindows(opts = {}) {
     playlist: { visible: !mini && S.showPlaylist, shade: S.plShade },
     skined: { visible: !mini && !!(WM.skins && WM.skins.editorOpen), shade: !!(WM.skins && WM.skins.editorShade) },
     clip: { visible: !mini && !!clipVisible, shade: !!clipShade },          // CLIP (2.3)
-    ytweb: { visible: !mini && !!ytwVisible, shade: !!ytwShade }            // YOUTUBE window (2.3)
+    ytweb: { visible: !mini && !!ytwVisible, shade: !!ytwShade },           // YOUTUBE window (2.3)
+    xweb: { visible: !mini && !!(XW && XW.visible), shade: !!(XW && XW.shade) }              // X PLAYER (2.8)
   }, { reflow: opts.reflow !== false && !mini });
   const btn = (id, min, what) => { const b = $(id); if (!b) return; b.innerHTML = min ? '&#x25A1;' : '&#x2013;'; b.title = `${min ? 'Expand' : 'Minimize'} ${what}`; };
   btn('#visMinBtn', vidShade, audvis ? 'visualizer' : 'video');
@@ -739,6 +854,7 @@ function syncWindows(opts = {}) {
   btn('#skedMinBtn', !!(WM.skins && WM.skins.editorShade), 'the skin editor');
   btn('#clipMinBtn', !!clipShade, 'CLIP');
   btn('#ytwMinBtn', !!ytwShade, 'YOUTUBE');
+  btn('#xwMinBtn', !!(XW && XW.shade), 'X PLAYER');
   $('#visCloseBtn').title = audvis ? 'Close visualizer' : 'Close video';
 }
 function updateControlsEnabled() {
@@ -1706,7 +1822,7 @@ function histAdd(k, item) {
 function histStarted(item) {      // playback really started (YouTube playing / a local copy playing)
   if (!item || item !== histPending) return;
   histPending = null;
-  if (item.type === 'x') { histXPlayed(item); return; }
+  if (item.type === 'x') { if (!L.x) histXPlayed(item); return; }    // 2.8: a streamed post never touches X History
   if (item.type !== 'youtube' || !item.vid) return;
   const t = histTab('yt');
   if (t && t.items.includes(item)) { item.at = Date.now(); histChanged('yt', false); return; }   // played from History itself: only the time
@@ -1952,6 +2068,7 @@ async function openAbout() {
   $('#aboutEnc').textContent = info.hasFfmpeg ? `FFmpeg ready · video converter: ${info.encoder || 'detecting…'}` : 'FFmpeg not found — only natively supported formats will play.';
   $('#assocRow').classList.toggle('hidden', info.platform !== 'win32');
   $('#dlFmtSel').value = dlDefault();
+  $('#xPlaySel').value = xStreamOn() ? 'stream' : 'ask';
   $('#aboutDlg').showModal();
 }
 $('#aboutLic').onclick = () => {
@@ -2325,7 +2442,7 @@ const DL_BUSY = ['queued', 'updating', 'downloading', 'processing'];
 
 function dlTarget() {
   const cur = curItem();
-  if (isWeb(cur) && status !== 'stopped') return cur;
+  if (isWeb(cur) && (status !== 'stopped' || (cur.type === 'x' && engine === 'local'))) return cur;   // 2.8: also an X post while its link is fetched
   const sel = S.items.find(i => S.sel.has(i.id) && isWeb(i));
   if (sel) return sel;
   return isWeb(cur) ? cur : null;
@@ -2385,6 +2502,7 @@ async function openDlMenu(item, pos) {
 // "?" → Video downloads (2.5, #22): what DOWNLOAD's ✓ item, DOWNLOAD ALL and EDIT's download use by default
 $('#dlFmtSel').onchange = (e) => { S.dlFormat = e.target.value === 'best' ? 'best' : 'xready'; saveSoon(); toast(S.dlFormat === 'best' ? 'Video downloads: Best quality (4K / AV1; may not post to X).' : 'Video downloads: X-ready (H.264 + AAC, up to 1080p).', 3000); };
 const dlDefault = () => (S.dlFormat === 'best' ? 'best' : 'xready');
+$('#xPlaySel').onchange = (e) => { S.xPlay = e.target.value === 'ask' ? 'ask' : 'stream'; saveSoon(); toast(S.xPlay === 'ask' ? 'X posts: SlopAMP asks first (play here, download or open on X).' : 'X posts: play right away in SlopAMP (nothing is saved).', 3000); };
 async function startDownload(item, kind, quality, quiet) {
   // If the YouTube player already knows this is a live stream, don't even start yt-dlp.
   try {
@@ -4407,6 +4525,34 @@ for (const host of [$('#dlmBody'), $('#dlmGrid')]) host.addEventListener('contex
   showCtxMenu(en, e.clientX, e.clientY, e.target.ownerDocument);
 });
 
+// ------------------------------------------------------------------ X PLAYER (2.8)
+// X's own post card (platform.twitter.com's embed: dark, no tracking, no thread) in a small SlopAMP window, for a
+// post SlopAMP's own player couldn't stream. Opened only from that error box (▶ X's player). X's own controls:
+// SlopAMP's EQ, visualizer, next / previous and progress don't reach it. Closing the window removes the card
+// (and its sound). Links on the card open in the normal browser.
+var XW = { visible: false, shade: false, item: null };     // var: syncWindows() reads it
+const xPostId = (it) => { const m = /\/status\/(\d{1,25})/.exec((it && it.url) || ''); return m ? m[1] : ''; };
+function xwOpen(item) {
+  const id = xPostId(item); if (!id) return;
+  if (status === 'playing') pause();
+  XW.item = item; XW.visible = true; XW.shade = false;
+  syncWindows();
+  const v = $('#xwView'), doc = v.ownerDocument;
+  $('#xwUrl').value = item.url;
+  const f = doc.createElement('iframe');
+  f.title = 'X post'; f.allow = 'autoplay; fullscreen; encrypted-media; picture-in-picture'; f.referrerPolicy = 'no-referrer-when-downgrade';
+  f.src = `https://platform.twitter.com/embed/Tweet.html?id=${id}&theme=dark&dnt=true&hideThread=true`;
+  v.replaceChildren(f);
+  const fr = WM.frame('xweb'); if (fr) { const n = fr.querySelector('.frame-name'); if (n) n.textContent = 'X PLAYER'; }
+  $('#xwSum').textContent = item.title.length > 40 ? `${item.title.slice(0, 39)}…` : item.title;
+}
+function xwClose() { XW.visible = false; XW.item = null; $('#xwView').replaceChildren(); syncWindows(); }
+WM.xweb = { open: xwOpen, close: xwClose, get item() { return XW.item; } };
+$('#xwCloseBtn').onclick = () => xwClose();
+$('#xwMinBtn').onclick = () => { XW.shade = !XW.shade; syncWindows(); };
+$('#xwOpen').onclick = () => { if (XW.item) P.openExternal(XW.item.url); };
+$('#xwDl').onclick = (e) => { if (!XW.item) return; const r = e.currentTarget.getBoundingClientRect(); openDlMenu(XW.item, { doc: e.currentTarget.ownerDocument, x: r.left, y: r.bottom + 6, flipY: r.top }); };
+
 // ------------------------------------------------------------------ YOUTUBE window (2.3)
 // youtube.com in a SlopAMP window: the YOUTUBE button on the playlist (or Layout → YOUTUBE). Opening it moves
 // the player's windows to the left edge and the YOUTUBE window fills the rest of the screen (windows.js
@@ -4762,7 +4908,7 @@ function stateSnapshot() {
     tabs: S.tabs.map(t => ({ id: t.id, name: t.name, current: t.current, src: t.src || undefined, items: t.items.map(({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at }) => ({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at })) })),
     tab: S.tab, playTab: S.playTab, vis: S.vis, volume: S.volume, muted: S.muted, shuffle: S.shuffle, repeat: S.repeat,
     showVideo: S.showVideo, showPlaylist: S.showPlaylist, plShade: S.plShade, vidShade: S.vidShade, remaining: S.remaining, plHeight: S.plHeight, visMode, eq: S.eq,
-    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, hist: S.hist, xhist: S.xhist
+    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, xPlay: S.xPlay, hist: S.hist, xhist: S.xhist
   };
 }
 function saveSoon() {
@@ -4835,6 +4981,7 @@ setInterval(() => { blink = !blink; }, 500);
     S.renameFile = st.renameFile === true;
     S.subsOn = !!st.subsOn;
     S.dlFormat = st.dlFormat === 'best' ? 'best' : 'xready';
+    S.xPlay = st.xPlay === 'ask' ? 'ask' : 'stream';
     if (st.lib && typeof st.lib === 'object') {
       const modes = {};      // 2.7: Classic / Preview per Library section
       if (st.lib.modes && typeof st.lib.modes === 'object') for (const [k, v] of Object.entries(st.lib.modes)) if (['all', 'video', 'audio', 'playlist', 'clips', 'skins'].includes(k) && (v === 'preview' || v === 'classic')) modes[k] = v;

@@ -88,6 +88,7 @@ contextBridge.exposeInMainWorld('phosphor', {
   onUpd: (cb) => ipcRenderer.on('upd:event', (_e, st) => cb(st)),
   // user skins (main.js "user skins (1.7)")
   resolveUrls: (urls) => ipcRenderer.invoke('web:resolve', urls),   // t.co short links (X)
+  xResolve: (url, opts) => ipcRenderer.invoke('x:resolve', url, opts),   // 2.8: an X post's video link (streamed in the player)
   skinList: () => ipcRenderer.invoke('skin:list'),
   skinCss: (id) => ipcRenderer.invoke('skin:css', id),
   skinSave: (o) => ipcRenderer.invoke('skin:save', o),

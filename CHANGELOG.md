@@ -1,6 +1,20 @@
 # Changelog
 
-## 2.7.1 — unreleased
+## 2.8.0 — unreleased
+
+- **X videos play inside SlopAMP** without downloading first, from X History, a playlist or a pasted x.com link. They play in SlopAMP's own player with the same controls as a file: seek, pause, next / previous, speed, fullscreen, EQ and the visualizer.
+  - SlopAMP's yt-dlp asks X for the post's video link only (nothing is saved), the best MP4 up to 720p. The video goes through SlopAMP's own local server, so seeking and the EQ work.
+  - While the link is fetched (usually 2–4 seconds) the video window says **Getting the video from X…**, with **Cancel**.
+  - The source light reads **X**, and a **𝕏 streaming · 720p** tag shows in the corner for 3 seconds.
+  - Links are kept for the session, so playing a post again or going back is instant. While one item plays, SlopAMP fetches the next X item's link, so a run of X posts doesn't wait each time.
+  - If X refuses a link (or it runs out mid-video), SlopAMP asks once more and carries on from the same spot. If that fails too, **Couldn't play this X post** says why (deleted or private, sign-in only / sensitive, no video, X limiting requests, no connection) and offers **▶ X's player**, **⇩ Download**, **Play on X** and **Skip** (with the usual countdown). A clear answer from X (deleted, sign-in only, no video) isn't asked twice.
+  - **▶ X's player** opens the new **X PLAYER** window with X's own post card (dark, no tracking, no sign-in). It has X's own controls; SlopAMP's EQ, visualizer and transport don't reach it.
+  - GIF posts loop. A post with several videos plays the first one, or the one its link names (".../video/2").
+  - A post you've downloaded still plays its file. Streamed posts don't go into X History (it stays for downloads).
+- **"?" → X posts**: **Play right away** (the default) or **Ask me**. Ask me brings back the choice before an X post plays, now with **▶ Play here** next to Play on X / ⇩ Download / Skip.
+- The 2.8 tests are in `tests/x-streaming.js` (with a stand-in yt-dlp, `tests/fake-ytdlp.js`).
+
+## 2.7.1 — released Nov 4, 2026
 
 - Fix: double-clicking a skin in Library → SKINS (a row in Classic or a tile in Preview) now puts it on, the same as Apply. The first click redrew the list, so the double-click was lost.
 - Playlist tab menu: **Move to front** and **Move to end**, next to Move left / Move right. They're greyed when the tab is already first or last; History tabs stay at the front.

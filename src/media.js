@@ -33,6 +33,8 @@ class MediaServer {
     this.procs = new Set();
     this.encoder = null;        // chosen video encoder
     this.port = 0;
+    this.remote = new Map();    // 2.8: key -> { url, headers } (an X post's video, passed through by /x/<key>)
+    this.fetch = null;          // set by main.js: Electron's net.fetch (Chromium's network stack and proxy settings)
   }
 
   start() {
@@ -75,6 +77,46 @@ class MediaServer {
       this.byPath.set(file, k);
     }
     return k;
+  }
+
+  // ---------- 2.8: X videos, passed through (xstream.js) ----------
+  registerRemote(url, headers) {
+    const k = crypto.randomBytes(16).toString('hex');
+    this.remote.set(k, { url, headers: headers || {} });
+    return k;
+  }
+  unregisterRemote(k) { this.remote.delete(k); }
+  // The player asks 127.0.0.1 for the video; this asks X with the same Range and hands the answer back
+  // (status, length, range), so seeking works and X's own refusals (403 / 404 once a link expires) reach the player.
+  async serveRemote(req, res, k) {
+    const r = this.remote.get(k);
+    const fetcher = this.fetch || (typeof fetch === 'function' ? fetch : null);
+    if (!r || !fetcher) { res.writeHead(404); return res.end(); }
+    const ac = new AbortController();
+    res.on('close', () => ac.abort());
+    const headers = { ...r.headers };
+    if (req.headers.range) headers.Range = String(req.headers.range);
+    let up;
+    try { up = await fetcher(r.url, { method: req.method === 'HEAD' ? 'HEAD' : 'GET', headers, signal: ac.signal, redirect: 'follow', cache: 'no-store' }); } catch (e) {
+      if (!ac.signal.aborted) this.log('X video: no answer', e && e.message);
+      if (!res.headersSent) res.writeHead(502);
+      return res.end();
+    }
+    const out = { 'Cache-Control': 'no-store' };
+    for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified', 'etag']) { const v = up.headers.get(h); if (v) out[h] = v; }
+    if (up.headers.get('content-encoding')) delete out['content-length'];
+    if (up.status === 206 && !out['accept-ranges']) out['accept-ranges'] = 'bytes';
+    if (up.status >= 400) {
+      this.log('X video: X answered', up.status);
+      try { await up.body?.cancel(); } catch (_) {}
+      res.writeHead(up.status, { 'Cache-Control': 'no-store' }); return res.end();
+    }
+    res.writeHead(up.status, out);
+    if (req.method === 'HEAD' || !up.body) return res.end();
+    const { Readable } = require('stream');
+    const body = Readable.fromWeb(up.body);
+    body.on('error', () => res.destroy());
+    body.pipe(res);
   }
 
   // ---------- probing ----------
@@ -144,6 +186,7 @@ class MediaServer {
     const parts = url.pathname.split('/').filter(Boolean);
     const route = parts[0];
     if (route === 'app') return this.serveStatic(res, parts.slice(1));
+    if (route === 'x') return this.serveRemote(req, res, parts[1] || '');
     const key = (parts[1] || '').split('.')[0];
     const file = this.keys.get(key);
     if (!file) { res.writeHead(404); return res.end(); }

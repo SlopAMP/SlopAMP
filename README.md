@@ -10,6 +10,7 @@ A free, retro-styled media player for Windows 10/11. It has the classic late-'90
 
 - **Plays almost anything:** MP4, MKV, AVI, MOV, WMV, WebM, MP3, FLAC, WAV, OGG, M4A and more. Formats Chromium can't play natively are converted live by the bundled FFmpeg, using the GPU encoder when available.
 - **YouTube links** in the same playlist, through YouTube's official embedded player.
+- **X video posts** play right in SlopAMP's own player without downloading first (up to 720p, with the EQ and visualizer); a post that can't be streamed opens X's own post card instead.
 - **Downloads (optional):** save a YouTube video (Best/1080p/720p/480p MP4) or MP3 with the bundled [yt-dlp](https://github.com/yt-dlp/yt-dlp), or download a whole playlist tab at once. Saved copies play offline. *Only download videos you have the right to save.*
 - **Playlist tabs**, plus SAVE / LOAD / QUICK SAVE of `.m3u8` playlists.
 - **Manage Library:** search, sort, open and delete downloads and saved playlists.

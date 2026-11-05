@@ -8,6 +8,7 @@ const { Clipper } = require('./clip');
 const share = require('./share');
 const { YtWeb } = require('./ytweb');
 const { Downloader } = require('./downloader');
+const { XStream } = require('./xstream');
 const { Updater } = require('./updater');
 const { WindowManager, PANELS, HOSTS } = require('./windows');
 
@@ -40,6 +41,7 @@ function log(...a) {
 let win = null;
 let server = null;
 let downloader = null;
+let xstream = null;    // 2.8: X posts streamed in the player (xstream.js)
 let updater = null;
 let wm = null;        // movable windows (see windows.js)
 let clipper = null;   // CLIP (2.3, clip.js)
@@ -165,7 +167,7 @@ function createWindow() {
   // The YOUTUBE window's page appears / goes with its panel (2.3)
   ytweb = new YtWeb({ wm, log, send: (ch, v) => { if (win && !win.isDestroyed()) win.webContents.send(ch, v); } });
   wm.onPanel = (id, shown) => { if (id === 'ytweb') { if (shown) ytweb.show(); else ytweb.hide(); } };
-  if (isDev) global.__slopamp = { wm, ytweb, get clipper() { return clipper; }, get thumbs() { return thumbs; }, sys: { toTray: () => toTray(), fromTray: () => fromTray(), get inTray() { return inTray; }, get tray() { return tray; }, get title() { return trayTitle; }, menu: () => trayMenu().items.map(i => i.label), mediaKeys: () => Object.keys(MEDIA_KEYS).filter(a => globalShortcut.isRegistered(a)) } };   // for the test scripts
+  if (isDev) global.__slopamp = { wm, ytweb, get clipper() { return clipper; }, get thumbs() { return thumbs; }, get xstream() { return xstream; }, get server() { return server; }, sys: { toTray: () => toTray(), fromTray: () => fromTray(), get inTray() { return inTray; }, get tray() { return tray; }, get title() { return trayTitle; }, menu: () => trayMenu().items.map(i => i.label), mediaKeys: () => Object.keys(MEDIA_KEYS).filter(a => globalShortcut.isRegistered(a)) } };   // for the test scripts
   Menu.setApplicationMenu(null);
 
   const panelUrl = `${server.base}/app/panel.html`;
@@ -1032,6 +1034,8 @@ function registerIpc() {
     if (closing || s.flush) { delete s.flush; flushState(); }
   });
   ipcMain.handle('web:meta', (_e, url) => fetchMeta(url));
+  // 2.8: an X post's video link for the player (opts: fresh = ask X again, prefetch = the next item, early)
+  ipcMain.handle('x:resolve', (_e, url, opts) => (xstream ? xstream.resolve(url, opts && typeof opts === 'object' ? { fresh: !!opts.fresh } : {}) : { ok: false, code: 'other', error: 'not ready' }));
   ipcMain.handle('web:resolve', async (_e, urls) => {
     const list = (Array.isArray(urls) ? urls : []).filter(u => typeof u === 'string' && /^https?:\/\/t\.co\/\w{1,30}\/?$/i.test(u)).slice(0, 100);
     const out = {};
@@ -1179,6 +1183,9 @@ app.whenReady().then(async () => {
     getState: () => currentState || loadState(),
     setState: setMainState
   });
+  // 2.8: X posts play without downloading: yt-dlp gives the video link, the media server passes the video through
+  server.fetch = (u, o) => net.fetch(u, o);
+  xstream = new XStream({ downloader, server, log });
   // Only the installed Windows build updates itself; the portable exe and dev runs just open the download page.
   const portable = !!(PORTABLE_DIR || process.env.SLOPAMP_PORTABLE) || /-portable$/i.test(path.basename(path.dirname(process.execPath)));
   const testFeed = process.env.SLOPAMP_UPDATE_TEST ? path.resolve(process.env.SLOPAMP_UPDATE_TEST) : null;

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' data: blob: https:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; font-src 'self' data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://platform.twitter.com; img-src 'self' data: blob: https:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; font-src 'self' data:">
 <title>SlopAMP</title>
 <!-- skins/classic.css: every colour, font and size (the chosen skin is added after style.css by skins.js)
      frame.css: window frames · style.css: the player itself -->
@@ -103,6 +103,7 @@
   <section id="screen">
     <div id="stage">
       <video id="video" preload="auto"></video>
+      <div id="xTag" class="x-tag hidden"></div>
       <div id="ytWrap" class="layer"><div id="ytHost"></div></div>
       <div id="artWrap" class="layer">
         <canvas id="bigVis"></canvas>
@@ -283,6 +284,17 @@
     <div class="ytw-stat"><span id="ytwStatL"></span><span class="ed-sp"></span><span id="ytwStatR">links to other sites open in your normal browser</span></div>
   </section>
 
+  <!-- X PLAYER (2.8): X's own post card, for a post SlopAMP couldn't stream (app.js "X PLAYER"; opened from that error box) -->
+  <section id="xwPanel">
+    <div class="ytw-bar">
+      <div class="ytw-addr"><input type="text" id="xwUrl" readonly spellcheck="false" title="The post"></div>
+      <button type="button" class="sb go" id="xwDl" title="Download this post (it then plays in SlopAMP)">&#8681; Download</button>
+      <button type="button" class="sb" id="xwOpen" title="Open the post on X in your normal browser">Open on X</button>
+    </div>
+    <div class="ytw-view xw-view" id="xwView"></div>
+    <div class="ytw-stat"><span>&#120143; embed &#183; no sign-in</span><span class="ed-sp"></span><span>X&#8217;s own player: SlopAMP&#8217;s EQ, visualizer and controls don&#8217;t apply here</span></div>
+  </section>
+
   <!-- Skin Editor (1.7): its own window (winmgr.js), run by skins.js "Skin Editor" -->
   <section id="skinEdPanel">
     <div class="sked-top"><label class="dim" for="skedBase">Start from</label><select id="skedBase" title="The skin you start from"></select><span class="ed-sp"></span><button type="button" class="sb dim" id="skedReset" title="Undo every change since you opened or saved">Reset all</button></div>
@@ -426,7 +438,7 @@
         <div class="about-links"><a href="#" data-url="https://slopamp.com">slopamp.com</a><span>&#183;</span><a href="#" data-url="https://github.com/SlopAMP/SlopAMP">GitHub</a></div>
       </div>
       <div class="about-body">
-        <p>A retro-styled player for your own media files plus YouTube videos through YouTube’s official embedded player. The DOWNLOAD button saves a copy with yt-dlp — only download videos you have the right to save.</p>
+        <p>A retro-styled player for your own media files plus YouTube videos through YouTube’s official embedded player, and X video posts streamed in its own player. The DOWNLOAD button saves a copy with yt-dlp — only download videos you have the right to save.</p>
         <p id="aboutEnc"></p>
         <p>SlopAMP is free software (MIT). It bundles Electron/Chromium and FFmpeg (LGPL v3). It includes the Butterchurn visualizer (MIT) and its preset collection. Not affiliated with or endorsed by Winamp, VideoLAN, or YouTube/Google.</p>
         <iframe id="licFrame" title="Licenses" class="hidden"></iframe>
@@ -441,6 +453,9 @@
       <div class="upd sys" id="aboutSys">
         <label class="upd-mode" for="dlFmtSel" title="X-ready: H.264 + AAC (posts to X), the best H.264 up to 1080p. Best quality: the largest picture (4K / 1440p, often VP9 / AV1), may not post to X.">Video downloads
           <select id="dlFmtSel"><option value="xready">X-ready (H.264, up to 1080p)</option><option value="best">Best quality (4K / AV1)</option></select>
+        </label>
+        <label class="upd-mode" for="xPlaySel" title="Play right away: an X post that isn&#8217;t downloaded plays in SlopAMP&#8217;s own player (up to 720p, nothing is saved). Ask me: SlopAMP asks first: play here, download or open it on X.">X posts
+          <select id="xPlaySel"><option value="stream">Play right away</option><option value="ask">Ask me</option></select>
         </label>
         <div class="upd-head"><span class="upd-lbl">Windows &amp; keys</span></div>
         <label class="sys-ck" title="The &#8211; button (and the taskbar) hides SlopAMP next to the clock instead; click its icon to bring it back. &#10005; still quits."><input type="checkbox" id="sysTray"><span>Minimize to the tray <small>(click its icon to come back)</small></span></label>

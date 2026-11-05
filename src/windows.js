@@ -18,14 +18,14 @@
 const { BrowserWindow, screen } = require('electron');
 
 // (2.3.1: SLOP's window is gone; a 'slop' entry in an older saved layout is simply ignored)
-const PANELS = ['main', 'eq', 'video', 'playlist', 'skined', 'clip', 'ytweb'];
+const PANELS = ['main', 'eq', 'video', 'playlist', 'skined', 'clip', 'ytweb', 'xweb'];   // xweb: X PLAYER (2.8)
 const STACK = ['main', 'eq', 'video', 'playlist'];   // the column the layout presets arrange
 // the Skin Editor (1.7), CLIP and YOUTUBE (2.3) float beside it
-const FLOAT = ['skined', 'clip', 'ytweb'];
+const FLOAT = ['skined', 'clip', 'ytweb', 'xweb'];
 const HOSTS = ['popup', 'dialog'];
 const FIT = new Set(['main', 'eq']);            // height follows the content
-const MIN = { main: [420, 60], eq: [420, 40], video: [320, 180], playlist: [300, 150], skined: [460, 420], clip: [600, 420], ytweb: [800, 400] };
-const DEF = { w: 420, main: 190, eq: 160, video: 240, playlist: 300, skined: 680, skinedW: 540, clip: 640, clipW: 780, ytweb: 800, ytwebW: 1100 };
+const MIN = { main: [420, 60], eq: [420, 40], video: [320, 180], playlist: [300, 150], skined: [460, 420], clip: [600, 420], ytweb: [800, 400], xweb: [420, 360] };
+const DEF = { w: 420, main: 190, eq: 160, video: 240, playlist: 300, skined: 680, skinedW: 540, clip: 640, clipW: 780, ytweb: 800, ytwebW: 1100, xweb: 640, xwebW: 620 };
 const MINI_W = 480;       // mini mode (2.4): the player window becomes a bar this wide
 const YT_MIN_W = 800;     // the YOUTUBE window is never narrower: on a small screen it overlaps the stack instead
 const SNAP = 10;          // px: how close an edge must be to snap
@@ -42,7 +42,7 @@ class WindowManager {
     this.version = version || '';
     this.saveLayout = saveLayout;
     this.wins = new Map();          // id -> BrowserWindow (panels and hosts)
-    this.visible = { main: true, eq: false, video: false, playlist: false, skined: false, clip: false, ytweb: false };
+    this.visible = { main: true, eq: false, video: false, playlist: false, skined: false, clip: false, ytweb: false, xweb: false };
     this.onPanel = null;            // (id, shown) for windows with their own content (the YOUTUBE window's web page)
     this.shade = {};
     this.fitH = {};

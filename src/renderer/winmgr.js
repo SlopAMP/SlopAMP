@@ -16,7 +16,7 @@
 'use strict';
 (() => {
   const P = window.phosphor;
-  const PANELS = ['main', 'eq', 'video', 'playlist', 'skined', 'clip', 'ytweb'];
+  const PANELS = ['main', 'eq', 'video', 'playlist', 'skined', 'clip', 'ytweb', 'xweb'];
 
   // ---------------------------------------------------------------- frames
   // Each window's frame: title, extra title slot, buttons (ids are what app.js wires up) and content.
@@ -37,7 +37,10 @@
       buttons: [['clipMinBtn', '&#x2013;', 'Minimize CLIP'], ['clipCloseBtn', '&#x2715;', 'Close CLIP']] },
     // YOUTUBE (2.3): youtube.com in a SlopAMP window (app.js "YOUTUBE window", main.js ytweb.js)
     ytweb: { title: 'YOUTUBE', tbId: 'ytwTitle', sumId: 'ytwSum', grip: true, content: ['#ytwPanel'],
-      buttons: [['ytwMinBtn', '&#x2013;', 'Minimize YOUTUBE'], ['ytwCloseBtn', '&#x2715;', 'Close YOUTUBE']] }
+      buttons: [['ytwMinBtn', '&#x2013;', 'Minimize YOUTUBE'], ['ytwCloseBtn', '&#x2715;', 'Close YOUTUBE']] },
+    // X PLAYER (2.8): X's own post card, for a post SlopAMP couldn't stream (app.js "X PLAYER")
+    xweb: { title: 'X PLAYER', tbId: 'xwTitle', sumId: 'xwSum', grip: true, content: ['#xwPanel'],
+      buttons: [['xwMinBtn', '&#x2013;', 'Minimize X PLAYER'], ['xwCloseBtn', '&#x2715;', 'Close X PLAYER']] }
   };
   function buildFrame(id) {
     const f = FRAMES[id];
@@ -69,7 +72,7 @@
     wins: { main: window },        // id -> window object
     docs: [document],             // every document we own (panels + helper windows)
     activeDoc: document,          // where the user last clicked or typed
-    state: { main: { visible: true }, eq: {}, video: {}, playlist: {}, skined: {}, clip: {}, ytweb: {} },
+    state: { main: { visible: true }, eq: {}, video: {}, playlist: {}, skined: {}, clip: {}, ytweb: {}, xweb: {} },
     info: { preset: 'classic', snap: true, onTop: false, skin: 'default' },
     onReset: null, onClose: null  // set by app.js
   };
@@ -343,7 +346,7 @@
     for (const id of PANELS) frames[id] = buildFrame(id);
     document.body.prepend(frames.main);
     document.body.classList.add('win-main', 'fit');
-    const ids = ['eq', 'video', 'playlist', 'skined', 'clip', 'ytweb', 'popup', 'dialog'];
+    const ids = ['eq', 'video', 'playlist', 'skined', 'clip', 'ytweb', 'xweb', 'popup', 'dialog'];
     const opened = await Promise.all(ids.map(openWindow));
     ids.forEach((id, i) => {
       const w = opened[i];

@@ -7,6 +7,8 @@ End-to-end tests that start SlopAMP in Electron and drive it with Playwright. Th
 |---|---|
 | `library-preview.js` | 2.7.0: Library Preview view, picture cache and lazy loading (1,000 files), hover look-through, playlist mosaics, clip In → Out bars, skin tiles, compact History tabs, tab contrast in all 10 skins, MP3 cover art from downloads |
 | `skins-and-tabs.js` | 2.7.1: double-clicking a skin (row or tile) puts it on; tab menu Move to front / Move to end |
+| `x-streaming.js` | 2.8.0: X posts streamed in SlopAMP's player ("Getting the video" box and Cancel, the media server pass-through with Range, sound through the EQ, the corner tag, session links, the next item's link fetched early, asking once more, the error box and the X PLAYER window, an expired link mid-video, GIF loop, /video/2, a downloaded copy first, "?" → X posts: Ask me, nothing in X History). Needs ffmpeg on PATH |
+| `fake-ytdlp.js` | a stand-in yt-dlp for `x-streaming.js` (X can't be reached from the test machine) |
 | `lib.js` | the shared launcher |
 | `make-media.sh` | makes the sample videos and songs the tests use (`tests/media`, not committed) |
 
