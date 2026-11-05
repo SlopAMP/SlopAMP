@@ -1,6 +1,17 @@
 # Changelog
 
-## 2.8.0 — unreleased
+## 2.9.0 — unreleased
+
+Bug fixes only.
+
+- Fix (bug #5): the History playlist tabs always read **YT** and **X**, selected or not; they used to say "YT History" / "X History" while selected. The selected one still shows its count. Tooltips, the ⚙ settings heading, the Layout menu, messages and the synced playlist file names haven't changed.
+- Fix (bug #6): an X post that plays in SlopAMP now goes into **X History**, whether it streams or plays from a downloaded copy, the same way YouTube History works. (2.8 kept streamed posts out on purpose; the captain reversed that.)
+  - It's added once it really starts playing. A post that couldn't play, Cancel, Skip and the Ask-me sheet on its own add nothing.
+  - A post has one entry whichever way it played: it keeps the post's link and any downloaded file, and the ⚙ "When a post plays or downloads again" setting decides what a replay does (move up by default). Played from X History itself, only its time changes.
+  - Finished X downloads are still added too. X History's ⚙ settings and tips now say "plays and downloads".
+- Tests: `tests/history-29.js` (both fixes); `tests/x-streaming.js` and `tests/library-preview.js` updated for them.
+
+## 2.8.0 — released Nov 5, 2026
 
 - **X videos play inside SlopAMP** without downloading first, from X History, a playlist or a pasted x.com link. They play in SlopAMP's own player with the same controls as a file: seek, pause, next / previous, speed, fullscreen, EQ and the visualizer.
   - SlopAMP's yt-dlp asks X for the post's video link only (nothing is saved), the best MP4 up to 720p. The video goes through SlopAMP's own local server, so seeking and the EQ work.

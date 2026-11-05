@@ -595,7 +595,7 @@ function showXSheet(item, why) {
 // plays through SlopAMP's media server like a file: same controls, EQ, visualizer, speed, seeking. Links are kept
 // for the session; the next X item's link is fetched while this one plays. If X refuses, SlopAMP asks once more;
 // then the error box offers X's own player (the X PLAYER window), Download, Play on X and Skip. A downloaded copy
-// still plays first. Streamed posts don't go into X History; GIF posts loop. "?" → X posts: Ask me = the 2.1 sheet.
+// still plays first. A post that really plays goes into X History (2.9, #6); GIF posts loop. "?" → X posts: Ask me = the 2.1 sheet.
 const xStreamOn = () => S.xPlay !== 'ask';
 const X_WHY = {
   novideo: 'This X post has no video.',
@@ -1578,8 +1578,8 @@ function renderTabs() {
         el.title = `${K.full} — ${t.items.length} ${t.items.length === 1 ? K.one : K.many}\n${hs(histKind(t)).on ? K.tipOn : `${K.full} is off: nothing new is added.`} Right-click or \u2699 for settings.`;
         pl.className = 'clk'; pl.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.5V8l2.6 1.7"/></svg>';
       }
-      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = t.name;
-      if (isHist(t) && i !== S.tab) { el.classList.add('compact'); nm.textContent = HK[histKind(t)].short; }   // 2.7: just "YT" / "X" when not selected (name and count in the tooltip)
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = isHist(t) ? HK[histKind(t)].short : t.name;   // 2.9 (#5): History tabs always read "YT" / "X"
+      if (isHist(t) && i !== S.tab) el.classList.add('compact');   // 2.7: not selected: no count (name and count in the tooltip)
       const ct = document.createElement('span'); ct.className = 'ct'; ct.textContent = t.items.length;
       el.append(pl, nm, ct);
     }
@@ -1724,9 +1724,10 @@ $('#tabStrip').addEventListener('drop', (e) => {
 // Built-in playlist tabs that fill themselves, pinned first in the tab strip (YT History, then X History).
 //  - YouTube History (id "history"): every YouTube video whose playback really starts (also a downloaded
 //    copy of one; never files or X; a blocked or unreachable video didn't play, so it isn't added).
-//  - X History (id "xhistory"): every X post whose download FINISHES (video or MP3). Play on X, Skip, a
-//    failed or canceled download, or an X post that isn't downloaded never add anything. Playing a
-//    downloaded post later only touches its existing entry (see histXPlayed).
+//  - X History (id "xhistory"): every X post whose playback really starts in SlopAMP (2.9, #6: streamed or a
+//    downloaded copy, like YouTube History) and every X post whose download FINISHES (video or MP3). Play on X,
+//    Skip, Cancel, a post that couldn't play, or a failed or canceled download never add anything. A post is
+//    one entry whichever way it played (its key "x<post id>"; the entry keeps the post's link and its files).
 // Entries are copies of the item plus `at` (when it was watched / downloaded). Each kind has its own
 // settings (S.hist / S.xhist), changed from the ⚙ menu on the tab's strip or a right-click on the tab;
 // both are saved silently with the session, and (setting, default on) mirrored to Playlists\<name>.m3u8.
@@ -1740,11 +1741,11 @@ const HK = {
     empty: 'YouTube History is empty. YouTube videos you play show up here.',
     note: 'Saved automatically, no pop-ups. Only YouTube videos are recorded (not your files or X posts).' },
   x: { id: 'xhistory', label: 'X History', short: 'X', full: 'X History', type: 'x', file: 'X History.m3u8', state: 'xhist',
-    record: 'Record X downloads', again: 'When a post is downloaded again', one: 'post', many: 'posts', when: 'Downloaded or last played',
-    replay: { bump: 're-downloads move up', keep: 're-downloads stay put', dup: 're-downloads added again' },
-    offRest: '· new X downloads aren’t added', tipOn: 'Every X post you download is added here.',
-    empty: 'X History is empty. X posts you download show up here.',
-    note: 'Saved automatically, no pop-ups. Only finished X downloads are recorded (not Play on X, skips or failed downloads).' }
+    record: 'Record X plays and downloads', again: 'When a post plays or downloads again', one: 'post', many: 'posts', when: 'Played or downloaded',
+    replay: { bump: 'replays move up', keep: 'replays stay put', dup: 'replays added again' },
+    offRest: '· new X plays and downloads aren’t added', tipOn: 'Every X post you play or download is added here.',
+    empty: 'X History is empty. X posts you play or download show up here.',
+    note: 'Saved automatically, no pop-ups. X posts that really play in SlopAMP (streamed or downloaded) and finished X downloads are recorded (not Play on X, skips or posts that couldn’t play).' }
 };
 const HIST_KINDS = ['yt', 'x'];
 S.hist = { ...HIST_DEF }; S.xhist = { ...HIST_DEF };
@@ -1756,7 +1757,7 @@ const histTab = (k = 'yt') => S.tabs.find(t => t.id === HK[k].id) || null;
 const histScreenKind = () => histKind(S.tabs[S.tab]);
 const histOnScreen = () => !!histScreenKind();
 const histIsDefault = (k = 'yt') => Object.keys(HIST_DEF).every(key => hs(k)[key] === HIST_DEF[key]);
-const histNoAdd = (k = histScreenKind() || 'yt') => `${HK[k].full} fills itself${k === 'x' ? ' when X downloads finish' : ' as you watch'}. Add things to another tab.`;
+const histNoAdd = (k = histScreenKind() || 'yt') => `${HK[k].full} fills itself${k === 'x' ? ' as you play or download X posts' : ' as you watch'}. Add things to another tab.`;
 const histOrderMsg = (k = histScreenKind() || 'yt') => `${HK[k].full} keeps its own order (⚙ Settings → Order).`;
 let histPending = null;   // the item of the current play, until its playback really starts
 let histDirs = null;
@@ -1808,7 +1809,10 @@ function histAdd(k, item) {
   if (!h.on || !t) return;
   const items = t.items, cur = items[t.current];
   const same = items.find(i => i.vid === item.vid);
-  if (same && h.replay === 'keep') { histChanged(k, true); return; }       // "Leave it where it is" (its file links are already updated)
+  if (same && h.replay === 'keep') {      // "Leave it where it is" (its file links are already updated)
+    if (k === 'x' && placeholderTitle(same) && !placeholderTitle(item)) same.title = item.title;   // 2.9: the post's real title, once known
+    histChanged(k, true); return;
+  }
   const copy = histCopy(item);
   if (same) for (const key of ['localVideo', 'localAudio']) if (!copy[key] && same[key]) copy[key] = same[key];   // keep every download of it
   if (same && h.replay === 'bump') items.splice(items.indexOf(same), 1);
@@ -1819,14 +1823,14 @@ function histAdd(k, item) {
 }
 
 // ---- recording
-function histStarted(item) {      // playback really started (YouTube playing / a local copy playing)
+function histStarted(item) {      // playback really started (YouTube playing / a local copy playing / 2.9: an X post streaming)
   if (!item || item !== histPending) return;
   histPending = null;
-  if (item.type === 'x') { if (!L.x) histXPlayed(item); return; }    // 2.8: a streamed post never touches X History
-  if (item.type !== 'youtube' || !item.vid) return;
-  const t = histTab('yt');
-  if (t && t.items.includes(item)) { item.at = Date.now(); histChanged('yt', false); return; }   // played from History itself: only the time
-  histAdd('yt', item);
+  const k = item.type === 'youtube' ? 'yt' : item.type === 'x' ? 'x' : null;    // 2.9 (#6): X posts too, streamed or downloaded
+  if (!k || !item.vid) return;
+  const t = histTab(k);
+  if (t && t.items.includes(item)) { item.at = Date.now(); histChanged(k, false); return; }   // played from History itself: only the time
+  histAdd(k, item);
 }
 // X History: a finished X download (called by linkDownload once the item has its file)
 function histXDownloaded(item) {
@@ -1834,24 +1838,6 @@ function histXDownloaded(item) {
   const t = histTab('x');
   if (t && t.items.includes(item)) { item.at = Date.now(); histChanged('x', true); return; }   // downloaded again from X History itself
   histAdd('x', item);
-}
-// X History: a downloaded X post played. Plays never add entries; under "Move it up" its entry moves up
-// to newest with the new time, under "Add it again" only the time changes, under "Leave it" nothing does.
-// Played from inside X History: only the time (no reshuffle), like YouTube History.
-function histXPlayed(item) {
-  const t = histTab('x'); if (!t || !item.vid) return;
-  if (t.items.includes(item)) { item.at = Date.now(); histChanged('x', false); return; }
-  const h = hs('x'); if (!h.on || h.replay === 'keep') return;
-  const same = t.items.filter(i => i.vid === item.vid); if (!same.length) return;
-  const e = h.order === 'newest' ? same[0] : same[same.length - 1];
-  e.at = Date.now();
-  if (h.replay === 'bump') {
-    const cur = t.items[t.current];
-    t.items.splice(t.items.indexOf(e), 1);
-    if (h.order === 'newest') t.items.unshift(e); else t.items.push(e);
-    t.current = cur ? t.items.indexOf(cur) : -1;
-  }
-  histChanged('x', h.replay === 'bump');
 }
 // drop the oldest entries beyond Keep. The entry playing right now is never dropped (it goes on the
 // next change instead), so a History can briefly hold one more than Keep. Returns how many went.

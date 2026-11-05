@@ -9,7 +9,7 @@
 //   3. Links (and X's final answers: no video, sign-in only, gone) are kept for the session; a link is asked for
 //      again when X refuses it. A link being asked for already
 //      isn't asked twice (playing an item while its link is fetched early).
-// Nothing is saved to disk; the post doesn't go into X History.
+// Nothing is saved to disk. (Once it really plays, the renderer adds the post to X History, 2.9 #6.)
 const { execFile } = require('child_process');
 const crypto = require('crypto');
 

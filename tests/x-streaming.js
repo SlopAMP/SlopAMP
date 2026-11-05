@@ -6,7 +6,7 @@
 // session; the next X item's link fetched early; asking X once more on a failure; X's final answers not asked
 // twice; the error box (X's player / Download / Play on X / Skip) and the X PLAYER window; an expired link
 // mid-video; GIF posts loop; /video/2 picks the 2nd video; 720p cap; a downloaded copy still plays first;
-// "?" → X posts: Ask me (with ▶ Play here); nothing goes into X History; next / previous.
+// "?" → X posts: Ask me (with ▶ Play here); next / previous. (2.9: posts that played are in X History, see history-29.js.)
 // Run: xvfb-run -a node tests/x-streaming.js   (needs ffmpeg on PATH to make its two sample videos)
 const { launch, sleep, docWin } = require('./lib');
 const fs = require('fs'), path = require('path'), os = require('os'), http = require('http');
@@ -179,8 +179,10 @@ const VID = path.join(os.tmpdir(), 'slopamp-test-280-media');
   await ev(() => [...$('#ovBtns').children][0].click()); s = await waitFor(playing);
   ok(playing(s) && s.x && s.cur.endsWith('/1002'), '▶ Play here streams it');
   await ev(() => { S.xPlay = 'stream'; });
-  // ================= 10. X History and downloads untouched
-  ok(await ev(() => !histTab('x') || histTab('x').items.length === 0), 'streamed posts don’t go into X History');
+  // ================= 10. X History (2.9, #6: the posts that really played, once each) and downloads untouched
+  const xh = await ev(() => (histTab('x') ? histTab('x').items.map(i => i.vid) : []));
+  ok(['x1001', 'x1002', 'x1003', 'x1006', 'x1007', 'x1008-2', 'x1010'].every(v => xh.includes(v)) && !['x1004', 'x1005', 'x1009', 'x1011'].some(v => xh.includes(v)) && new Set(xh).size === xh.length,
+    `X History holds the posts that played, once each, and none that failed or were cancelled ${JSON.stringify(xh)}`);
   const dl = path.join(H, 'SlopAMP');
   const files = fs.existsSync(dl) ? execFileSync('find', [dl, '-type', 'f', '-name', '*1001*']).toString().trim() : '';
   ok(!files, 'nothing was saved to the downloads folders');
