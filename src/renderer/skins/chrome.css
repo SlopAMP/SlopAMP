@@ -32,6 +32,7 @@
   --vctl: #c7ccd4;
   --vctl-ink: #1f2633;
   --vctl-line: #9aa1ad;
+  --tab-count: #6b7385;
   --lcd-glow: rgba(95,208,255,.7);
   --spectrum-low: #2fa0d8;
   --spectrum-mid: #3dbeff;
@@ -141,6 +142,7 @@
   --lit-ink: #075a8a;
   --btn-on-ink: #075a8a;
   --tab-count-on: #4f9fd0;
+  --tab-ink: #5a6578;
   --menu-accent: #075a8a;
   --menu-hover-ink: #ffffff;
   --hint-ink: #596173;
@@ -163,4 +165,3 @@
 .vb, .vtime, .vpct { color: #075a8a; text-shadow: none; }
 .vis-seg button.on { background: rgba(10,40,60,.92); color: #8fdcff; }
 .tog.on .led, .eqbtn.on .led { background: #29a3e6; box-shadow: 0 0 4px #29a3e6; }
-.ptab { color: #9fb0c4; }

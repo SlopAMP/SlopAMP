@@ -149,7 +149,8 @@ class Downloader {
       '--match-filter', '!is_live & live_status!=?is_upcoming'
     ];
     if (job.kind === 'audio') {
-      a.push('-f', 'ba/b', '-x', '--audio-format', 'mp3', '--audio-quality', '0', '--embed-metadata');
+      // 2.7: the video's thumbnail goes into the MP3 as its cover art (shown in Library → Preview and in other players)
+      a.push('-f', 'ba/b', '-x', '--audio-format', 'mp3', '--audio-quality', '0', '--embed-metadata', '--embed-thumbnail', '--convert-thumbnails', 'jpg');
     } else {
       // 2.5 (#22): X-ready by default = H.264 first (best H.264 up to the height, AAC audio), so the .mp4 posts to X;
       // a video with no H.264 falls back to its best format (SlopAMP then labels it "not for X"). 'best' = the

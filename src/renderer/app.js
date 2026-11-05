@@ -31,7 +31,7 @@ const S = {
   renameFile: false,   // 2.6: the Rename box's "Also rename the file on disk" (your last choice)
   rate: 1,             // playback speed (this session only)
   subsOn: false,       // subtitles stay on for the next items once turned on
-  lib: { w: 0, h: 0, view: 'grid' },   // the Library's size once resized (0: default); `view` was SLOP's (kept so old state reads)
+  lib: { w: 0, h: 0, view: 'grid', modes: {}, tip: 0 },   // the Library's size once resized (0: default); `view` was SLOP's (kept so old state reads); 2.7: modes = Classic / Preview per section, tip = the "New: Preview view" tip was seen
   vis: { mode: 'milkdrop', preset: '', cycle: true, panel: 'open', showTitle: false, showPreset: true, showTrack: false, favs: [], favOnly: false }   // audio visualizer: milkdrop (Butterchurn) | bars; panel: open | min | hidden
 };
 // S.items / S.current always mean the tab that's on screen.
@@ -1463,6 +1463,7 @@ function renderTabs() {
         pl.className = 'clk'; pl.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.5V8l2.6 1.7"/></svg>';
       }
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = t.name;
+      if (isHist(t) && i !== S.tab) { el.classList.add('compact'); nm.textContent = HK[histKind(t)].short; }   // 2.7: just "YT" / "X" when not selected (name and count in the tooltip)
       const ct = document.createElement('span'); ct.className = 'ct'; ct.textContent = t.items.length;
       el.append(pl, nm, ct);
     }
@@ -1603,13 +1604,13 @@ $('#tabStrip').addEventListener('drop', (e) => {
 const HIST_DEF = { on: true, mirror: true, order: 'newest', replay: 'bump', cap: 100 };
 const HIST_CAPS = [50, 100, 250, 500];
 const HK = {
-  yt: { id: 'history', label: 'YT History', full: 'YouTube History', type: 'youtube', file: 'YouTube History.m3u8', state: 'hist',
+  yt: { id: 'history', label: 'YT History', short: 'YT', full: 'YouTube History', type: 'youtube', file: 'YouTube History.m3u8', state: 'hist',
     record: 'Record YouTube plays', again: 'When a video plays again', one: 'video', many: 'videos', when: 'Watched',
     replay: { bump: 'replays move up', keep: 'replays stay put', dup: 'replays added again' },
     offRest: '· new YouTube plays aren’t added', tipOn: 'Every YouTube video you play is added here.',
     empty: 'YouTube History is empty. YouTube videos you play show up here.',
     note: 'Saved automatically, no pop-ups. Only YouTube videos are recorded (not your files or X posts).' },
-  x: { id: 'xhistory', label: 'X History', full: 'X History', type: 'x', file: 'X History.m3u8', state: 'xhist',
+  x: { id: 'xhistory', label: 'X History', short: 'X', full: 'X History', type: 'x', file: 'X History.m3u8', state: 'xhist',
     record: 'Record X downloads', again: 'When a post is downloaded again', one: 'post', many: 'posts', when: 'Downloaded or last played',
     replay: { bump: 're-downloads move up', keep: 're-downloads stay put', dup: 're-downloads added again' },
     offRest: '· new X downloads aren’t added', tipOn: 'Every X post you download is added here.',
@@ -3004,8 +3005,11 @@ function dlmRender() {
   $('#dlmDelAll').disabled = !vis.some(r => !r.missing);
   for (const b of $('#dlmSeg').children) b.classList.toggle('on', b.dataset.f === DLM.filter);
   for (const th of $$('#dlmDlg th[data-sort]')) { th.classList.toggle('asc', th.dataset.sort === DLM.sort && DLM.dir > 0); th.classList.toggle('desc', th.dataset.sort === DLM.sort && DLM.dir < 0); }
+  const pv = lpOn();                                 // 2.7: Preview view (tiles) instead of the rows
+  $('#dlmDlg').classList.toggle('lpmode', pv); $('#dlmGrid').classList.toggle('hidden', !pv);
+  lpToggleUI();
   const body = $('#dlmBody'); body.innerHTML = '';
-  vis.forEach((r, i) => {
+  if (pv) lpRender(vis); else vis.forEach((r, i) => {
     const tr = document.createElement('tr');
     const on = DLM.sel.has(dlmKey(r));
     tr.className = (on ? 'sel' : '') + (r.missing ? ' miss' : '');
@@ -3053,13 +3057,159 @@ function dlmEmptyHtml(q, cm) {
   if (f === 'audio') return 'No MP3s yet. DOWNLOAD \u2192 Audio only saves one here.';
   return 'Nothing in your library yet. Use DOWNLOAD or DOWNLOAD ALL to save YouTube videos, and SAVE to keep playlists.';
 }
+// ------------------------------------------------------------------ 2.7: Library → Preview view
+// Classic (the list) or Preview (a tile with a picture per item), chosen per section and remembered (S.lib.modes);
+// Classic is the default, with a one-time "New: Preview view" tip. The pictures come from main.js thumbs.js (made
+// with SlopAMP's FFmpeg on this PC, cached on disk): a video frame, an MP3's cover art or its waveform, a playlist's
+// first four, a clip's picture with where it came from (In → Out). Only tiles on screen ask for one, two at a time,
+// newest first; a tile scrolled past before its turn is skipped (asked again when it's seen). Moving the mouse over
+// a video tile looks through it (10 frames, made on the first hover). Tiles are kept between renders (selection
+// changes don't reload pictures). Clicks, ticks, Ctrl / Shift, double-click and right-click work as on the rows.
+const LP = { tiles: new Map(), pics: new Map(), q: [], running: 0, io: null };
+const lpMode = (f = DLM.filter) => (S.lib.modes && S.lib.modes[f] === 'preview' ? 'preview' : 'classic');
+const lpOn = (f) => lpMode(f) === 'preview';
+function lpTipDone() { if (!S.lib.tip) { S.lib.tip = 1; saveSoon(); } $('#dlmTip').classList.add('hidden'); }
+function lpToggleUI() {
+  for (const b of $('#dlmView').children) b.classList.toggle('on', b.dataset.v === lpMode());
+  $('#dlmTip').classList.toggle('hidden', !!S.lib.tip);
+}
+$('#dlmView').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]'); if (!b) return;
+  S.lib.modes = { ...(S.lib.modes || {}), [DLM.filter]: b.dataset.v };
+  lpTipDone(); saveSoon(); DLM.anchor = -1; dlmRender();
+});
+$('#dlmTipX').onclick = () => lpTipDone();
+$('#dlmDlg').addEventListener('close', () => { if (!$('#dlmTip').classList.contains('hidden')) lpTipDone(); });   // shown once: gone after the Library it appeared in is closed
+const lpKey = (r) => `${dlmKey(r)}|${r.size || 0}|${Math.round(r.mtime || 0)}`;
+function lpTile(r, doc) {
+  const t = doc.createElement('div');
+  t.className = 'lt' + (r.missing ? ' miss' : '');
+  const tag = r.missing ? 'MISSING' : { audio: 'MP3', playlist: 'PLAYLIST', mp3clip: 'MP3 CLIP', mp4clip: 'MP4 CLIP' }[r.kind] || 'VIDEO';
+  const ph = r.missing ? '?' : r.kind === 'playlist' ? '☰' : /audio|mp3clip/.test(r.kind) ? '♫' : '▶';
+  const showKind = DLM.filter === 'all' || (DLM.filter === 'clips' && CLS.sub === 'all') || r.missing;
+  t.innerHTML = `<div class="lt-im"><span class="lt-ph">${ph}</span><span class="lt-spr"></span><span class="lt-scrub"><i></i></span>${showKind ? `<span class="lt-kd">${tag}</span>` : ''}<span class="dlm-cb"></span><span class="lt-du hidden"></span>${isClipRow(r) ? '<span class="lt-io hidden"><i></i></span>' : ''}</div><div class="lt-n"></div><div class="lt-s"></div>`;
+  t.querySelector('.lt-n').textContent = r.title;
+  t.title = `${r.title}\n${r.path}`;
+  const s = t.querySelector('.lt-s');
+  s.textContent = r.kind === 'playlist' ? `${r.count} item${r.count === 1 ? '' : 's'}` : r.missing ? 'The file isn’t there any more'
+    : isClipRow(r) && r.from ? `from ${r.from}` : `${fmtSize(r.size)} · ${fmtDate(r.mtime)}`;
+  if ((r.kind === 'video' || r.kind === 'mp4clip') && !r.missing) { const x = xOf(r.path); if (x) s.appendChild(xTag(x, 'dlm-tag')); }
+  t._row = r;
+  return t;
+}
+function lpRender(vis) {
+  const g = $('#dlmGrid'), doc = g.ownerDocument, keep = new Map(), order = [];
+  if (!LP.io || LP.io._doc !== doc) {
+    if (LP.io) LP.io.disconnect();
+    LP.io = new doc.defaultView.IntersectionObserver((en) => { for (const x of en) if (x.isIntersecting) lpWant(x.target); }, { root: g.parentElement, rootMargin: '150px' });
+    LP.io._doc = doc;
+  }
+  vis.forEach((r, i) => {
+    const k = lpKey(r);
+    let t = LP.tiles.get(k) || keep.get(k);
+    if (!t) { t = lpTile(r, doc); const pic = LP.pics.get(k); if (pic) lpApply(t, pic); }
+    t._row = r; t.dataset.i = i;
+    const on = DLM.sel.has(dlmKey(r));
+    t.classList.toggle('sel', on); t.querySelector('.dlm-cb').classList.toggle('on', on);
+    keep.set(k, t); order.push(t);
+  });
+  for (const [k, t] of LP.tiles) if (!keep.has(k)) LP.io.unobserve(t);
+  LP.tiles = keep;
+  g.replaceChildren(...order);
+  for (const t of order) LP.io.observe(t);
+}
+function lpWant(t) { if (t._want || t._done) return; t._want = 1; LP.q.push(t); lpPump(); }
+function lpSeenNow(t) {
+  if (!t.isConnected) return false;
+  const sc = t.closest('.dlm-scroll') || t.parentElement; if (!sc) return false;
+  const a = t.getBoundingClientRect(), b = sc.getBoundingClientRect();
+  return a.bottom >= b.top - 150 && a.top <= b.bottom + 150;
+}
+function lpPump() {
+  while (LP.running < 2 && LP.q.length) {
+    const t = LP.q.pop();                          // newest first: what's on screen now
+    if (!lpSeenNow(t)) { t._want = 0; continue; }  // scrolled past before its turn: asked again when it's seen
+    LP.running++;
+    lpLoad(t).catch(() => {}).finally(() => { LP.running--; t._done = 1; lpPump(); });
+  }
+}
+async function lpPic(path, opts) {
+  const r = await P.thumbGet(path, 'pic', opts || {});
+  return r || { none: true };
+}
+async function lpLoad(t) {
+  const r = t._row, k = lpKey(r);
+  if (LP.pics.has(k)) { lpApply(t, LP.pics.get(k)); return; }
+  let pic;
+  if (r.missing) pic = { none: true };
+  else if (r.kind === 'playlist') {
+    const pk = await P.plPeek(r.path);
+    const cells = [];
+    for (const it of (pk && pk.items) || []) cells.push(it.path ? { ...(await lpPic(it.path)), label: '' } : { none: true, label: it.x ? 'X' : 'YT' });
+    pic = { mosaic: cells };
+  } else pic = await lpPic(r.path, isClipRow(r) && r.srcExists ? { src: r.src } : {});
+  LP.pics.set(k, pic);
+  lpApply(t, pic);
+}
+function lpWave(el, peaks) {
+  const doc = el.ownerDocument, c = doc.createElement('canvas'), W = 200, Hh = 60;
+  c.width = W; c.height = Hh;
+  const g = c.getContext('2d'), col = getComputedStyle(el).getPropertyValue('--green').trim() || '#3dff6e';
+  g.fillStyle = col;
+  const n = peaks.length, bw = W / n;
+  peaks.forEach((v, i) => { const h = Math.max(1, v / 100 * Hh); g.fillRect(i * bw, (Hh - h) / 2, Math.max(1, bw - 0.6), h); });
+  el.appendChild(c); el.classList.add('wave');
+}
+function lpApply(t, pic) {
+  const im = t.querySelector('.lt-im'), r = t._row;
+  if (pic.mosaic) {
+    const mo = t.ownerDocument.createElement('div'); mo.className = 'lt-mo';
+    for (let i = 0; i < 4; i++) {
+      const c = pic.mosaic[i], b = t.ownerDocument.createElement('b');
+      if (c && c.url) { b.style.backgroundImage = `url("${c.url}")`; if (c.cover) { b.style.backgroundSize = 'contain'; b.style.backgroundColor = 'var(--lcd)'; } }
+      else if (c && c.peaks) lpWave(b, c.peaks);
+      else if (c && c.label) b.textContent = c.label;
+      mo.appendChild(b);
+    }
+    im.appendChild(mo); im.classList.add('got');
+    return;
+  }
+  if (pic.url) { im.style.backgroundImage = `url("${pic.url}")`; im.classList.add('got'); im.classList.toggle('cover', !!pic.cover); }
+  else if (pic.peaks) { lpWave(im, pic.peaks); im.classList.add('got'); }
+  const d = isClipRow(r) && r.dur ? r.dur : pic.dur;
+  if (d) { const du = t.querySelector('.lt-du'); du.textContent = fmtShort(d) || '0:00'; du.classList.remove('hidden'); }
+  const io = t.querySelector('.lt-io');
+  if (io && pic.srcDur && Number.isFinite(r.in) && Number.isFinite(r.out) && r.out > r.in) {
+    const a = Math.max(0, Math.min(100, r.in / pic.srcDur * 100)), b = Math.max(a + 1, Math.min(100, r.out / pic.srcDur * 100));
+    io.firstChild.style.left = `${a}%`; io.firstChild.style.width = `${b - a}%`; io.classList.remove('hidden');
+    io.title = `In ${fmt(r.in)} → Out ${fmt(r.out)} of ${fmt(pic.srcDur)}`;
+  }
+}
+// hover look-through: 10 frames of the video (made on the first hover, then cached)
+$('#dlmGrid').addEventListener('mousemove', (e) => {
+  const im = e.target.closest('.lt-im'), t = im && im.closest('.lt'); if (!t) return;
+  const r = t._row; if (!r || r.missing || !(r.kind === 'video' || r.kind === 'mp4clip')) return;
+  if (!t._spr) {        // made only when the mouse rests on a tile (not for every tile it passes over)
+    clearTimeout(t._sprT);
+    t._sprT = setTimeout(() => { if (t._spr) return; t._spr = 'wait'; P.thumbGet(r.path, 'sprite').then((s) => { t._spr = s && s.url ? s : 'none'; if (s && s.url) t.querySelector('.lt-spr').style.backgroundImage = `url("${s.url}")`; }); }, 350);
+    return;
+  }
+  if (!t._spr.url) return;
+  const b = im.getBoundingClientRect(), f = Math.max(0, Math.min(t._spr.frames - 1, Math.floor((e.clientX - b.left) / b.width * t._spr.frames)));
+  t.querySelector('.lt-spr').style.backgroundPosition = `${f / (t._spr.frames - 1) * 100}% 0`;
+  t.querySelector('.lt-scrub i').style.width = `${(f + 1) / t._spr.frames * 100}%`;
+  im.classList.add('look');
+});
+$('#dlmGrid').addEventListener('mouseout', (e) => {
+  const im = e.target.closest('.lt-im'); if (im && !im.contains(e.relatedTarget)) { im.classList.remove('look'); const t = im.closest('.lt'); if (t) clearTimeout(t._sprT); }
+});
 $('#dlmEmpty').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-a]'); if (!b) return;
   if (b.dataset.a === 'clearq') dlmClearQ();
   else if (b.dataset.a === 'allclips') { CLS.sub = 'all'; DLM.anchor = -1; dlmRender(); }
 });
-$('#dlmBody').addEventListener('click', (e) => {
-  const tr = e.target.closest('tr'); if (!tr) return;
+for (const host of [$('#dlmBody'), $('#dlmGrid')]) host.addEventListener('click', (e) => {     // rows, and Preview tiles (2.7)
+  const tr = e.target.closest('tr, .lt'); if (!tr) return;
   const vis = dlmVisible(); const i = +tr.dataset.i; const r = vis[i]; if (!r) return;
   if (e.target.closest('.dlm-show')) { P.showInFolder(r.path); return; }
   if (e.detail >= 2) return;   // the double-click is handled on mousedown below
@@ -3080,9 +3230,9 @@ $('#dlmBody').addEventListener('click', (e) => {
 });
 // Double-click a row: open a playlist / show a file. Rows are rebuilt on each click, so the browser's
 // own dblclick event gets lost; the second press of a double-click is caught here instead.
-$('#dlmBody').addEventListener('mousedown', (e) => {
+for (const host of [$('#dlmBody'), $('#dlmGrid')]) host.addEventListener('mousedown', (e) => {
   if (e.button !== 0 || e.detail !== 2 || e.shiftKey || e.ctrlKey || e.target.closest('.dlm-show')) return;
-  const tr = e.target.closest('tr'); if (!tr) return;
+  const tr = e.target.closest('tr, .lt'); if (!tr) return;
   const r = dlmVisible()[+tr.dataset.i]; if (!r || r.missing) return;
   e.preventDefault();
   DLM.sel = new Set([dlmKey(r)]); DLM.anchor = +tr.dataset.i; dlmRender();
@@ -4211,8 +4361,8 @@ async function libRename(r) {
 }
 
 // Right-click a Library row (2.3: the Library had no row menu before)
-$('#dlmBody').addEventListener('contextmenu', (e) => {
-  const tr = e.target.closest('tr'); if (!tr) return;
+for (const host of [$('#dlmBody'), $('#dlmGrid')]) host.addEventListener('contextmenu', (e) => {
+  const tr = e.target.closest('tr, .lt'); if (!tr) return;
   e.preventDefault();
   const vis = dlmVisible(), r = vis[+tr.dataset.i]; if (!r) return;
   if (!DLM.sel.has(dlmKey(r))) { DLM.sel = new Set([dlmKey(r)]); DLM.anchor = +tr.dataset.i; dlmRender(); }
@@ -4395,6 +4545,7 @@ function sklRender() {
   $('#dlmCount').textContent = `${all.length} SKIN${all.length === 1 ? '' : 'S'} OF YOURS · ${total ? fmtSize(total).toUpperCase() : '0 KB'} · ${WM.skins.list.length} BUILT-IN`;
   $('#dlmMiss').textContent = '';
   $('#dlmSearch').placeholder = 'Search skins…';
+  lpToggleUI();
   const q = dlmQ('skins');
   $('#dlmSearchX').classList.toggle('hidden', !q);
   const sw = (s) => `<span class="skl-sw">${(s.sw && s.sw.length === 6 ? s.sw : WM.skins.list[0].sw).map(c => `<i style="background:${htmlEsc(c)}"></i>`).join('')}</span>`;
@@ -4406,6 +4557,15 @@ function sklRender() {
     + (user ? '<button type="button" class="skl-b red" data-a="del" title="Move this skin to the Recycle Bin">&#x1F5D1; Delete</button>'
       : '<span class="skl-lock" title="Built-in skins can’t be deleted">&#x1F512; built-in</span>')
     + `<button type="button" class="skl-b dim skl-more" data-a="more" title="More: ${user ? 'Rename, Export, Show in Explorer' : 'Export'}">&#8943;</button></span>`;
+  // 2.7 Preview: a tile per skin (a big mini-player in its colours); the same buttons, shown on hover
+  const pvS = lpOn('skins');
+  const skPv = (s) => { const [fr, tb, lc, onc, li, tx] = s.sw && s.sw.length === 6 ? s.sw : WM.skins.list[0].sw; return `<div class="skt-pv" style="background:${htmlEsc(fr)}"><div class="tb" style="background:${htmlEsc(tb)}"></div><div class="bd"><div class="lcd" style="background:${htmlEsc(lc)};color:${htmlEsc(onc)};text-shadow:0 0 5px ${htmlEsc(onc)}">0:42</div><div class="ls" style="background:${htmlEsc(li)}">${[85, 60, 72, 50, 66].map((x, k) => `<i style="width:${x}%;background:${htmlEsc(tx)};opacity:${1 - k * 0.14}"></i>`).join('')}</div></div></div>`; };
+  const tile = (s, user) => `<div class="skl-row skl-tile${SKL.sel.has(s.id) ? ' on' : ''}${s.id === on ? ' cur' : ''}" data-id="${htmlEsc(s.id)}" title="${htmlEsc(s.name)}">${skPv(s)}${s.id === on ? '<span class="skt-on">&#10003; ON</span>' : ''}`
+    + (user ? `<span class="dlm-cb${SKL.sel.has(s.id) ? ' on' : ''}"></span>` : '')
+    + (SKL.renaming === s.id ? `<span class="skl-n"><input type="text" id="sklRenIn" maxlength="60" value="${htmlEsc(s.name)}" spellcheck="false"></span>`
+      : `<span class="skl-n">${htmlEsc(s.name)}<small>${user ? (s.baseName ? `from ${htmlEsc(s.baseName)}` : `${htmlEsc(s.slug)}.css`) : `built-in · ${htmlEsc(s.group)}`}</small></span>`)
+    + btns(s, user) + '</div>';
+  const list = (arr, user) => (pvS ? `<div class="lp-grid">${arr.map(s => tile(s, user)).join('')}</div>` : arr.map(s => row(s, user)).join(''));
   const row = (s, user) => `<div class="skl-row${SKL.sel.has(s.id) ? ' on' : ''}${s.id === on ? ' cur' : ''}" data-id="${htmlEsc(s.id)}">`
     + (user ? `<span class="dlm-cb${SKL.sel.has(s.id) ? ' on' : ''}"></span>` : '<span class="dlm-cb" style="visibility:hidden"></span>')
     + sw(s)
@@ -4417,8 +4577,8 @@ function sklRender() {
   $('#sklList').innerHTML = q && !mine.length && !built.length
     ? dlmNoMatch('skins', q, '').replace('</div></div>', `</div><small>Searched ${plural(all.length, 'skin', 'skins')} of yours and the ${WM.skins.list.length} built-in ones (names, and the skin each one was made from).</small></div>`)
     : `<div class="skl-sec"><span>Mine (${all.length})</span><span class="skl-now">On now: ${htmlEsc(WM.skins.nameOf(on))}</span></div>`
-    + (mine.length ? mine.map(s => row(s, true)).join('') : `<div class="skl-empty">${all.length ? `None of your skins match “${htmlEsc(q)}”.` : 'No skins of your own yet. <b>+ New skin</b> opens the Skin Editor on the skin you have on; <b>Import…</b> adds a .css someone shared; <b>Edit a copy</b> on a built-in starts from that one.'}</div>`)
-    + `<div class="skl-sec"><span>Built-in (${WM.skins.list.length}) · can’t be changed or deleted</span></div>` + (built.length ? built.map(s => row(s, false)).join('') : `<div class="skl-empty">No built-in skins match “${htmlEsc(q)}”.</div>`);
+    + (mine.length ? list(mine, true) : `<div class="skl-empty">${all.length ? `None of your skins match “${htmlEsc(q)}”.` : 'No skins of your own yet. <b>+ New skin</b> opens the Skin Editor on the skin you have on; <b>Import…</b> adds a .css someone shared; <b>Edit a copy</b> on a built-in starts from that one.'}</div>`)
+    + `<div class="skl-sec"><span>Built-in (${WM.skins.list.length}) · can’t be changed or deleted</span></div>` + (built.length ? list(built, false) : `<div class="skl-empty">No built-in skins match “${htmlEsc(q)}”.</div>`);
   const del = [...SKL.sel].filter(sklUser);
   $('#sklDel').disabled = !del.length;
   $('#sklDel').innerHTML = `&#x1F5D1; Delete selected${del.length ? ` (${del.length})` : ''}`;
@@ -4655,7 +4815,11 @@ setInterval(() => { blink = !blink; }, 500);
     S.renameFile = st.renameFile === true;
     S.subsOn = !!st.subsOn;
     S.dlFormat = st.dlFormat === 'best' ? 'best' : 'xready';
-    if (st.lib && typeof st.lib === 'object') S.lib = { w: Number(st.lib.w) || 0, h: Number(st.lib.h) || 0, view: st.lib.view === 'list' ? 'list' : 'grid' };
+    if (st.lib && typeof st.lib === 'object') {
+      const modes = {};      // 2.7: Classic / Preview per Library section
+      if (st.lib.modes && typeof st.lib.modes === 'object') for (const [k, v] of Object.entries(st.lib.modes)) if (['all', 'video', 'audio', 'playlist', 'clips', 'skins'].includes(k) && (v === 'preview' || v === 'classic')) modes[k] = v;
+      S.lib = { w: Number(st.lib.w) || 0, h: Number(st.lib.h) || 0, view: st.lib.view === 'list' ? 'list' : 'grid', modes, tip: st.lib.tip ? 1 : 0 };
+    }
     for (const k of HIST_KINDS) {
       const h = st[HK[k].state]; if (!h || typeof h !== 'object') continue;
       S[HK[k].state] = { on: h.on !== false, mirror: h.mirror !== false, order: h.order === 'oldest' ? 'oldest' : 'newest', replay: ['bump', 'keep', 'dup'].includes(h.replay) ? h.replay : 'bump',

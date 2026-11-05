@@ -23,3 +23,9 @@ docs/IDEAS-AND-BUGS.md
 /notes/
 /ideas/
 docs/private/
+
+# The website lives with RR (slopamp.com), not in this repo (2.7.0)
+website/
+
+# test sample media (made by tests/make-media.sh)
+tests/media/

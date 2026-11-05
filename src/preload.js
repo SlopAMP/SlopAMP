@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('phosphor', {
   fileRename: (p, base, check) => ipcRenderer.invoke('file:rename', p, base, !!check),   // 2.6 Rename
   plRename: (p, base, check) => ipcRenderer.invoke('pl:rename', p, base, !!check),
   dlTitle: (vid, title) => ipcRenderer.send('dl:title', vid, title),
+  thumbGet: (file, kind, opts) => ipcRenderer.invoke('thumb:get', file, kind, opts),   // 2.7 Library preview
+  plPeek: (p) => ipcRenderer.invoke('pl:peek', p),
   listSubs: (file) => ipcRenderer.invoke('subs:list', file),
   openSubDialog: (near) => ipcRenderer.invoke('subs:open-dialog', near),
   onMediaKey: (cb) => ipcRenderer.on('media-key', (_e, a) => cb(a)),

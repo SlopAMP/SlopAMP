@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, net, screen, Menu, globalSho
 const path = require('path');
 const fs = require('fs');
 const { MediaServer, isMediaFile, encoderArgs } = require('./media');
+const { Thumbs } = require('./thumbs');
 const { Clipper } = require('./clip');
 const share = require('./share');
 const { YtWeb } = require('./ytweb');
@@ -42,6 +43,7 @@ let downloader = null;
 let updater = null;
 let wm = null;        // movable windows (see windows.js)
 let clipper = null;   // CLIP (2.3, clip.js)
+let thumbs = null;   // Library preview pictures (2.7, thumbs.js)
 let ytweb = null;     // the YOUTUBE window's page (2.3, ytweb.js)
 // Keys owned by the main process; the renderer's state saves must not wipe them.
 const MAIN_KEYS = ['window', 'layout', 'playlistDir', 'dlVideoDir', 'dlAudioDir', 'ytdlpUpdatedAt', 'downloads', 'update', 'clips', 'sys'];
@@ -163,7 +165,7 @@ function createWindow() {
   // The YOUTUBE window's page appears / goes with its panel (2.3)
   ytweb = new YtWeb({ wm, log, send: (ch, v) => { if (win && !win.isDestroyed()) win.webContents.send(ch, v); } });
   wm.onPanel = (id, shown) => { if (id === 'ytweb') { if (shown) ytweb.show(); else ytweb.hide(); } };
-  if (isDev) global.__slopamp = { wm, ytweb, get clipper() { return clipper; }, sys: { toTray: () => toTray(), fromTray: () => fromTray(), get inTray() { return inTray; }, get tray() { return tray; }, get title() { return trayTitle; }, menu: () => trayMenu().items.map(i => i.label), mediaKeys: () => Object.keys(MEDIA_KEYS).filter(a => globalShortcut.isRegistered(a)) } };   // for the test scripts
+  if (isDev) global.__slopamp = { wm, ytweb, get clipper() { return clipper; }, get thumbs() { return thumbs; }, sys: { toTray: () => toTray(), fromTray: () => fromTray(), get inTray() { return inTray; }, get tray() { return tray; }, get title() { return trayTitle; }, menu: () => trayMenu().items.map(i => i.label), mediaKeys: () => Object.keys(MEDIA_KEYS).filter(a => globalShortcut.isRegistered(a)) } };   // for the test scripts
   Menu.setApplicationMenu(null);
 
   const panelUrl = `${server.base}/app/panel.html`;
@@ -989,6 +991,21 @@ function registerIpc() {
     idx[vid].title = title.slice(0, 300);
     setMainState({ downloads: idx });
   });
+  // 2.7 Library preview: a tile's picture (kind 'pic' | 'sprite'); a saved playlist's first items (for its mosaic)
+  ipcMain.handle('thumb:get', (_e, file, kind, opts) => (thumbs && typeof file === 'string' ? thumbs.get(file, kind === 'sprite' ? 'sprite' : 'pic', opts && typeof opts === 'object' ? { src: typeof opts.src === 'string' ? opts.src : '' } : {}).catch((e) => { log('thumb failed', e); return { none: true }; }) : { none: true }));
+  ipcMain.handle('pl:peek', (_e, p) => {
+    if (typeof p !== 'string' || !PLAYLIST_RE.test(p)) return null;
+    const entries = parsePlaylistFile(p), idx = (currentState || loadState()).downloads || {};
+    const vidOf = (u) => { const m = /(?:v=|youtu\.be\/|shorts\/)([\w-]{11})/.exec(u) || /status\/(\d+)/.exec(u); return m ? (/^\d+$/.test(m[1]) ? 'x' + m[1] : m[1]) : null; };
+    const items = entries.slice(0, 4).map(e => {
+      if (!/^https?:/i.test(e.loc)) return { path: e.loc, video: VIDEO_EXT_RE.test(e.loc) };
+      const v = vidOf(e.loc), d = v && idx[v];
+      const local = d && (d.video || d.audio);
+      return { url: e.loc, x: /x\.com|twitter\.com/i.test(e.loc), path: local && fs.existsSync(local) ? local : null, video: !!(d && d.video) };
+    });
+    const vids = entries.filter(e => /^https?:/i.test(e.loc) || VIDEO_EXT_RE.test(e.loc)).length;
+    return { count: entries.length, items, videos: entries.filter(e => !/^https?:/i.test(e.loc) && VIDEO_EXT_RE.test(e.loc)).length, links: entries.filter(e => /^https?:/i.test(e.loc)).length, songs: entries.length - vids };
+  });
   ipcMain.handle('file:trash', async (_e, p) => {
     if (typeof p !== 'string' || !isMediaFile(p) || !fs.existsSync(p)) return { ok: false, error: 'File not found.' };
     try { await shell.trashItem(p); return { ok: true }; } catch (e) { return { ok: false, error: String(e.message || e) }; }
@@ -1125,6 +1142,9 @@ app.whenReady().then(async () => {
   });
   await server.start();
   log(`${APP_NAME} ${app.getVersion()} started on ${server.base}; ffmpeg=${server.hasFfmpeg()}`);
+  // 2.7 Library preview: the pictures, cached in <userData>\thumbs; old ones cleaned up a minute after start
+  thumbs = new Thumbs({ dir: path.join(app.getPath('userData'), 'thumbs'), ffmpeg: ffmpegExe, server, urlOf: (f) => fileUrl(f), log });
+  setTimeout(() => { try { thumbs.prune(); } catch (e) { log('thumbs prune failed', e); } }, 60000);
   server.detectEncoder().catch(e => log('encoder detect failed', e));
   // Safety net: YouTube's embed refuses to play without a Referer (error 153).
   const { session } = require('electron');

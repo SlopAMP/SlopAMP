@@ -146,6 +146,8 @@ PLAYLIST TABS
     tab; double-click a tab to rename it; right-click for Rename, Duplicate,
     Save as playlist file, Share playlist (.zip), Move left/right and Close.
     Ctrl+Tab switches tabs.
+  * YT History and X History shrink to "YT" and "X" (with their clock) when
+    you're not looking at them; hover for the full name and count.
   * Music keeps playing from its own tab (marked with a green arrow) while
     you browse others; Next/Previous stay in that tab.
   * Drag items onto a tab to move them there (hold Ctrl to copy), or
@@ -357,6 +359,15 @@ POSTING VIDEOS TO X
     a playlist (or "Open in new tab") to open it. Files you deleted yourself
     show as MISSING; "Clean up missing" clears them. SlopAMP re-checks its
     downloads whenever you switch back to it.
+  * PREVIEW VIEW: the "Classic | Preview" switch next to the Library's search
+    box shows each section as pictures instead of the list: a frame of every
+    video (move the mouse over it to look through the video), an MP3's cover
+    art or its waveform, a playlist's first four items, a clip with the part
+    of the original it came from, and each skin as a little player. Each
+    section remembers its own choice. The pictures are made on your PC and
+    kept, so they only take a moment the first time. Ticking, Ctrl / Shift
+    click, double-click, right-click, Del and F2 work the same as in the list.
+  * New MP3 downloads get the video's thumbnail as their cover art.
   * RENAME (right-click -> Rename..., or F2): a song, video, YouTube video or
     X post gets the new name everywhere it shows: every tab, YT / X History
     and the Library. From the playlist only the name SlopAMP shows changes,

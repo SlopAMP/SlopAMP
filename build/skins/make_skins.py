@@ -112,7 +112,7 @@ chrome.update({
     '--tb-bg': 'linear-gradient(180deg, #f6f8fa, #c9ced6)', '--tb-ink': '#1d2430', '--tb-glow': 'rgba(255,255,255,.9)', '--tb-rule': '#8a919e', '--grip': '#5d6572',
     '--badge': '#111418', '--badge-glow': 'rgba(255,255,255,.7)', '--badge-glow-hover': 'rgba(95,208,255,.9)',
     '--ver-ink': '#1d2430', '--ver-opacity': '.7', '--close-hover': '#d0414c',
-    '--lit-ink': '#075a8a', '--btn-on-ink': '#075a8a', '--tab-count-on': '#4f9fd0',
+    '--lit-ink': '#075a8a', '--btn-on-ink': '#075a8a', '--tab-count-on': '#4f9fd0', '--tab-ink': '#5a6578', '--tab-count': '#6b7385',   # 2.7: readable tab names / counts on the light tab strip
     '--menu-accent': '#075a8a', '--menu-hover-ink': '#ffffff', '--hint-ink': '#596173', '--warn-ink': '#8a5a00', '--list-sel-ink': '#ffffff', '--ov-title': '#075a8a', '--ov-text': '#1f2633',
     '--field-bg': '#ffffff', '--field-ink': '#1f2633', '--field-line': '#8a919e', '--color-scheme': 'light', '--doc-bg': '#ffffff',
 })
@@ -125,7 +125,6 @@ write('chrome', 'Chrome', 'light brushed-metal frames; the screens stay dark.', 
 .vb, .vtime, .vpct { color: #075a8a; text-shadow: none; }
 .vis-seg button.on { background: rgba(10,40,60,.92); color: #8fdcff; }
 .tog.on .led, .eqbtn.on .led { background: #29a3e6; box-shadow: 0 0 4px #29a3e6; }
-.ptab { color: #9fb0c4; }
 ''')
 
 # Walnut Hi-Fi: wood-grain cabinet, bronze buttons, warm orange displays.
@@ -204,7 +203,7 @@ pocket.update({
     '--btn-top': G[3], '--btn-bottom': G[2], '--btn-ink': G[0], '--btn-green': G[2], '--btn-green-hover': G[3], '--bevel-hi': G[3], '--bevel-lo': G[0],
     '--line-green': G[0], '--line-dim': G[1], '--edge': G[0], '--frame': G[0], '--frame-2': G[0],
     '--deck-bg': G[0], '--eq-bg': G[0], '--vctl-bg': G[2], '--plbar-bg': G[2], '--plbar2-bg': G[2],
-    '--lit-ink': G[3], '--btn-on-ink': G[0], '--tab-count-on': G[1], '--menu-hover-ink': G[3], '--hint-ink': G[0], '--warn-ink': G[0],
+    '--lit-ink': G[3], '--btn-on-ink': G[0], '--tab-count-on': G[1], '--tab-count': G[1], '--menu-hover-ink': G[3], '--hint-ink': G[0], '--warn-ink': G[0],
     '--list-sel-ink': G[3], '--list-cur-sel': G[3], '--ind-off': G[1],
     '--field-bg': G[3], '--field-ink': G[0], '--field-line': G[0], '--color-scheme': 'light', '--doc-bg': '#ffffff',
     '--menu-bg': G[3], '--dialog-bg': G[3], '--notice-bg': G[3], '--vctl': G[2], '--vctl-ink': G[0], '--vctl-line': G[1],

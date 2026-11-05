@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.7.0 — unreleased
+
+- **Library → Preview view**: a **☰ Classic | ▦ Preview** switch next to the search box shows a section as pictures instead of the list. Classic is the default, a one-time "New: Preview view" tip points at the switch, and each section remembers its own choice.
+  - **VIDEO**: a frame from about 10% in, the length and the X ✓ tag. Rest the mouse on a tile and move across it to look through the video (10 frames, made on the first hover).
+  - **MP3**: the song's cover art, or its waveform in the skin's colour when it has none.
+  - **PLAYLISTS**: the first four items as a 2×2 mosaic (YT / X for links with no downloaded copy).
+  - **CLIPS**: the clip's picture or waveform, with an amber bar showing which part of the original it is (In → Out).
+  - **SKINS**: a little player in each skin's colours, ✓ ON on the one you have on; Apply / Edit / ⋯ on hover.
+  - **ALL**: a mix, with a label on every tile.
+  - Clicking, ticking (the box in a tile's corner), Ctrl / Shift click, double-click, right-click, Del and F2 work as in the list.
+  - The pictures are made on your PC with SlopAMP's FFmpeg (nothing is fetched from YouTube or X) and kept in SlopAMP's data folder, keyed by the file, its size and its date. Only tiles on screen ask for one, two at a time; a 1,000-file Library opens in about a second, and pictures of files that are gone or changed are cleaned up. Classic view never makes pictures.
+- New **MP3 downloads** get the video's thumbnail as their cover art (also shown by other players).
+- **Compact History tabs**: YT History and X History show just the clock and **YT** / **X** when you're not looking at them (the full name and count are in the tooltip), and their full name when selected.
+- Readable tab names and counts: the other playlist tabs' names and counts were faint in Chrome and Pocket LCD; they're now at least 4.5:1 (names) and 3:1 (counts) in all 10 skins.
+- The website is no longer in this repository (slopamp.com is kept separately). The 2.7.0 tests are in `tests/`.
+
 ## 2.6.0 — released Nov 4, 2026
 
 - **Rename** (right-click → **Rename…**, or **F2**) for playlist items (every tab, also YT History and X History) and in the Library for videos, MP3s and saved playlists (clips get the same box). A song, video, YouTube video or X post has one name everywhere it shows: every tab, YT / X History, the Library, and the same item added again later.

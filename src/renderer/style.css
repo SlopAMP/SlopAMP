@@ -325,10 +325,10 @@ body.fs #subs { bottom: 9%; }
 #tabs { flex: none; display: flex; align-items: flex-end; gap: 2px; padding: 4px 5px 0; background: var(--tabs-bg); border-bottom: 1px solid var(--line-green); }
 #tabStrip { display: flex; align-items: flex-end; gap: 2px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; min-width: 0; }
 #tabStrip::-webkit-scrollbar { display: none; }
-.ptab { flex: none; display: flex; align-items: center; gap: 6px; max-width: 160px; padding: 3px 9px; font: bold var(--fs-s) var(--font-label); letter-spacing: .5px; color: var(--ink-dim); background: var(--menu-bg); border: 1px solid var(--vctl-line); border-bottom: 0; cursor: pointer; user-select: none; }
+.ptab { flex: none; display: flex; align-items: center; gap: 6px; max-width: 160px; padding: 3px 9px; font: bold var(--fs-s) var(--font-label); letter-spacing: .5px; color: var(--tab-ink); background: var(--menu-bg); border: 1px solid var(--vctl-line); border-bottom: 0; cursor: pointer; user-select: none; }
 .ptab:hover { color: var(--ink-menu); }
 .ptab .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ptab .ct { font-weight: normal; color: var(--base-42); }
+.ptab .ct { font-weight: normal; color: var(--tab-count); }
 .ptab .pl { display: none; width: 0; height: 0; border-left: 6px solid var(--green); border-top: 4px solid transparent; border-bottom: 4px solid transparent; filter: drop-shadow(0 0 3px var(--green)); }
 .ptab.playing .pl { display: block; }
 .ptab.on { color: var(--green); background: var(--black); border-color: var(--line-green); position: relative; top: 1px; padding-bottom: 4px; }
@@ -897,3 +897,61 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .dlm-nomatch small { display: block; margin-top: 8px; color: var(--ink-dim); font-size: var(--fs-s); }
 .dlm-nomatch .nm-btns button { background: var(--menu-bg); border: 1px solid var(--vctl-line); color: var(--ink-menu); padding: 4px 10px; font: var(--fs-m) var(--font-ui); cursor: pointer; }
 .dlm-nomatch .nm-btns button:hover { background: var(--base-21); border-color: var(--line-green); }
+
+/* 2.7: Library Classic | Preview toggle, the one-time tip, Preview tiles (lp-*), skin tiles; compact History tabs */
+.dlm-searchrow input#dlmSearch { width: calc(100% - 176px); }
+.dlm-searchrow #dlmSearchX { right: 190px; }
+.dlm-view { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; }
+.dlm-searchrow .dlm-view button { position: static; transform: none; right: auto; top: auto; border: 1px solid var(--vctl-line); background: var(--menu-bg); color: var(--ink-muted); font: var(--fs-m) var(--font-ui); padding: 4px 9px; margin-left: -1px; cursor: pointer; white-space: nowrap; }
+.dlm-searchrow .dlm-view button:hover { color: var(--ink-menu); }
+.dlm-searchrow .dlm-view button.on { background: var(--btn-green); border-color: var(--line-green); color: var(--menu-accent); position: relative; }
+.dlm-tip { position: absolute; right: 10px; top: calc(100% - 2px); z-index: 5; background: var(--notice-bg); border: 1px solid var(--line-green); color: var(--ink-green); font-size: var(--fs-m); padding: 6px 30px 6px 10px; box-shadow: 0 2px 10px var(--shadow); max-width: 300px; }
+.dlm-tip b { color: var(--menu-accent); }
+.dlm-searchrow .dlm-tip button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: 0; color: var(--ink-dim); cursor: pointer; }
+#dlmDlg.lpmode .dlm-table { display: none; }
+.lp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(142px, 1fr)); gap: 10px; padding: 10px; }
+.lp-grid.hidden { display: none; }
+.lt { border: 1px solid var(--base-18); background: var(--menu-bg); cursor: pointer; min-width: 0; position: relative; user-select: none; }
+.lt:hover { border-color: var(--vctl-line); }
+.lt.sel { border-color: var(--line-green); box-shadow: inset 0 0 0 1px var(--line-green); }
+.lt-im { aspect-ratio: 16 / 9; background: var(--black) center / cover no-repeat; position: relative; overflow: hidden; }
+.lt-im.cover { background-size: contain; background-color: var(--lcd); }
+.lt-im canvas { position: absolute; inset: 12% 0; width: 100%; height: 76%; }
+.lt-im.wave { background-color: var(--lcd); }
+.lt-ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--base-42); font-size: 22px; }
+.lt-im.got .lt-ph { display: none; }
+.lt-kd { position: absolute; left: 4px; top: 4px; font: bold 10px var(--font-ui); padding: 0 4px; background: var(--black-a70); color: var(--ink-green); border: 1px solid var(--line-green); }
+.lt-im .dlm-cb { position: absolute; right: 4px; top: 4px; }
+.lt.sel .lt-im .dlm-cb { background: var(--green); box-shadow: inset 0 0 0 2px var(--edge); border-color: var(--green); }
+.lt-du { position: absolute; right: 4px; bottom: 4px; background: var(--black-a70); color: var(--white); font: var(--fs-s) var(--font-ui); padding: 0 4px; }
+.lt-du.hidden, .lt-io.hidden { display: none; }
+.lt-io { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: var(--black-a70); }
+.lt-io i { position: absolute; top: 0; bottom: 0; background: var(--amber); }
+.lt-spr { position: absolute; inset: 0; background: var(--black) 0 0 / 1000% 100% no-repeat; display: none; }
+.lt-im.look .lt-spr { display: block; }
+.lt-scrub { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--white-a25, rgba(255,255,255,.25)); display: none; }
+.lt-im.look .lt-scrub { display: block; } .lt-scrub i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--green); }
+.lt-mo { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1px; background: var(--base-18); }
+.lt-mo b { background: var(--black) center / cover no-repeat; position: relative; display: flex; align-items: center; justify-content: center; color: var(--ink-dim); font: bold 10px var(--font-ui); }
+.lt-mo b canvas { position: absolute; inset: 15% 0; width: 100%; height: 70%; } .lt-mo b.wave { background-color: var(--lcd); }
+.lt-n { padding: 5px 7px 1px; color: var(--ink-menu); font-size: var(--fs-m); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lt.miss .lt-n { color: var(--ink-dim); text-decoration: line-through; }
+.lt-s { padding: 0 7px 6px; color: var(--ink-dim); font-size: var(--fs-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lt-s .dlm-tag { margin-left: 4px; }
+/* Library → SKINS in Preview: a big mini-player per skin; Apply / Edit / ⋯ on hover (and on the selected one) */
+#sklList .lp-grid { padding: 6px 0 10px; }
+.skl-row.skl-tile { display: block; padding: 0; border: 1px solid var(--base-18); background: var(--menu-bg); position: relative; }
+.skl-row.skl-tile.on { border-color: var(--line-green); box-shadow: inset 0 0 0 1px var(--line-green); }
+.skt-pv { aspect-ratio: 16 / 9; display: flex; flex-direction: column; border-bottom: 1px solid var(--black); }
+.skt-pv .tb { height: 9px; } .skt-pv .bd { flex: 1; display: flex; gap: 4px; padding: 5px; }
+.skt-pv .lcd { width: 48%; display: flex; align-items: center; justify-content: center; font: bold 18px var(--font-lcd); }
+.skt-pv .ls { flex: 1; display: flex; flex-direction: column; gap: 3px; padding: 4px; } .skt-pv .ls i { height: 4px; border-radius: 1px; display: block; }
+.skt-on { position: absolute; right: 4px; top: 4px; background: var(--green); color: var(--black); font: bold 10px var(--font-ui); padding: 0 4px; }
+.skl-tile > .dlm-cb { position: absolute; left: 4px; top: 13px; }
+.skl-tile .skl-n { display: block; padding: 5px 7px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.skl-tile .skl-n small { display: block; margin: 0; }
+.skl-tile .skl-btns { position: absolute; left: 4px; right: 4px; top: 40%; justify-content: center; flex-wrap: wrap; gap: 3px; visibility: hidden; }
+.skl-tile:hover .skl-btns, .skl-tile.on .skl-btns { visibility: visible; }
+.skl-tile .skl-n input { width: 100%; }
+.ptab.hist.compact { gap: 3px; padding-left: 7px; padding-right: 7px; }
+.ptab.hist.compact .ct { display: none; }

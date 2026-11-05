@@ -363,12 +363,15 @@
     <div class="dlm-title"><span>LIBRARY</span><button type="button" id="dlmX" title="Close (Esc)">&#x2715;</button></div>
     <div class="dlm-sum"><span class="dlm-lcd" id="dlmCount">0 FILES</span><span class="dlm-miss" id="dlmMiss"></span>
       <div class="dlm-seg" id="dlmSeg"><button type="button" data-f="all" class="on" title="Videos, MP3s and saved playlists">ALL</button><button type="button" data-f="video">VIDEO</button><button type="button" data-f="audio">MP3</button><button type="button" data-f="playlist">PLAYLISTS</button><button type="button" data-f="clips" title="Your MP3 and MP4 clips (made with CLIP)">CLIPS</button><button type="button" data-f="skins">SKINS</button></div></div>
-    <div class="dlm-searchrow"><input type="text" id="dlmSearch" placeholder="Search your library&#8230;" spellcheck="false"><button type="button" id="dlmSearchX" class="hidden" title="Clear search">&#x2715;</button></div>
+    <div class="dlm-searchrow"><input type="text" id="dlmSearch" placeholder="Search your library&#8230;" spellcheck="false"><button type="button" id="dlmSearchX" class="hidden" title="Clear search">&#x2715;</button>
+      <!-- 2.7: Classic (the list) | Preview (a picture of each item), remembered per section -->
+      <div class="dlm-view" id="dlmView"><button type="button" data-v="classic" title="Classic view: the list">&#9776; Classic</button><button type="button" data-v="preview" title="Preview view: a picture of each item">&#9638; Preview</button></div>
+      <div class="dlm-tip hidden" id="dlmTip"><b>New: Preview view</b> &#8212; a picture of every file. Try it here. <button type="button" id="dlmTipX" title="Got it">&#x2715;</button></div></div>
     <div class="clsub" id="clsub"><button type="button" data-c="all">All clips</button><button type="button" data-c="mp3clip">MP3 clips</button><button type="button" data-c="mp4clip">MP4 clips</button></div>
     <div class="dlm-scroll"><table class="dlm-table">
       <thead><tr><th class="c"><span class="dlm-cb" id="dlmAll" title="Select all"></span></th><th data-sort="title">Title</th><th data-sort="kind">Type</th><th data-sort="size" class="r">Size</th><th data-sort="mtime" class="r">Date</th><th></th></tr></thead>
       <tbody id="dlmBody"></tbody>
-    </table><div class="dlm-empty hidden" id="dlmEmpty"></div></div>
+    </table><div class="lp-grid hidden" id="dlmGrid"></div><div class="dlm-empty hidden" id="dlmEmpty"></div></div>
     <div class="dlm-bar cl-bar"><button type="button" id="clAdd" disabled>&#9654; Add to playlist</button><button type="button" class="dim" id="clAgain" disabled>&#9986; Clip again&#8230;</button><button type="button" class="red" id="clDel" disabled>&#x1F5D1; Delete selected</button><span class="spacer"></span><button type="button" class="dim" id="clDir3">&#x1F4C1; mp3clips</button><button type="button" class="dim" id="clDir4">&#x1F4C1; mp4clips</button></div>
     <div class="dlm-note cl-note">Clips are files in Downloads\SlopAMP\mp3clips and Downloads\SlopAMP\mp4clips (files you put there show up too). Double-click plays a clip; &#8220;Clip again&#8221; reopens CLIP on the original with the same In/Out. Deleted clips go to the Recycle Bin.</div>
     <div class="dlm-skins" id="dlmSkins"><div class="skl-list" id="sklList"></div></div>

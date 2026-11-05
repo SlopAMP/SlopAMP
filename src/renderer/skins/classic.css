@@ -65,6 +65,8 @@
   --lit-ink: var(--green);                                                                 /* lit labels on the panels (FILE, stereo, EQ dB scale) */
   --btn-on-ink: var(--green);                                                              /* text of switched-on buttons (EQ, VIS, VID, PL, ON) */
   --tab-count-on: var(--line-green);                                                       /* item count in the open playlist tab */
+  --tab-ink: var(--ink-dim);                                                               /* names of the other playlist tabs (2.7: at least 4.5:1 in every skin) */
+  --tab-count: #7a8296;                                                                    /* their item counts (at least 3:1) */
   --menu-accent: var(--green);                                                             /* highlighted text in menus and dialogs (titles, ticks) */
   --menu-hover-ink: var(--ink-menu);                                                       /* menu item text under the mouse */
   --hint-ink: var(--base-42);                                                              /* small hints in dialogs */
