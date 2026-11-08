@@ -578,6 +578,10 @@
         <p>SlopAMP is free software (MIT). It bundles Electron/Chromium and FFmpeg (LGPL v3). It includes the Butterchurn visualizer (MIT) and its preset collection. Not affiliated with or endorsed by Winamp, VideoLAN, YouTube/Google, or X.</p>
         <iframe id="licFrame" title="Licenses" class="hidden"></iframe>
       </div>
+      <!-- 2.9.3: Check for updates is back in "?" (it's also in Settings → Updates, with "When a new version is out") -->
+      <div class="upd" id="aboutUpd">
+        <div class="upd-head"><span class="upd-lbl">Updates</span><span class="upd-status" id="aboutUpdStatus"></span><button type="button" id="aboutUpdCheck">Check for updates</button></div>
+      </div>
       <div class="dlg-btns"><button type="button" id="aboutSet" class="about-set" title="Settings (Ctrl+,)">&#9881; Settings&#8230;</button><button type="button" id="aboutLic">View licenses</button><button value="close">Close</button></div>
     </form>
   </dialog>

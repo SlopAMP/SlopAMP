@@ -9,7 +9,9 @@
   - An empty tab still closes without asking. Files, downloads and saved playlists are never touched either way.
   - The last playlist tab can't close (it empties and becomes Main, as before): its box, **Clear tab**, offers **Save to Playlists & clear** (QUICK SAVE first), **Just clear it** or **Cancel**.
 - **Drag the playlist tabs to reorder them.** Press a tab and move it left or right: a green bar shows where it lands. YT and X History stay first (they don't drag, and a tab dropped further left lands right after them). Near the strip's edge it scrolls. Esc, or letting go away from the strip, cancels. A click still selects and a double-click still renames; right-click → Move left / right / to front / to end stay.
-- Tests: `tests/tabs-293.js`.
+- **Empty playlists open.** An empty saved playlist (SAVE ALL / QUICK SAVE write one for an emptied tab) opens as an empty tab named after it, with no error: from **LOAD** (it used to say "That playlist is empty or has nothing SlopAMP can play" and open nothing) and from Library → PLAYLISTS (Open in new tab, double-click, Classic or Preview view). LOAD of a playlist that's already open as a tab brings that tab up. A playlist that has lines but nothing SlopAMP can play still says so.
+- **"?" has Check for updates again**: an Updates row with the status and the button, as before 2.9.2. It's still in Settings → Updates too (with "When a new version is out"), and both show the same.
+- Tests: `tests/tabs-293.js`, `tests/empty-playlist-about-293.js`.
 
 ## 2.9.2 — released Nov 8, 2026
 

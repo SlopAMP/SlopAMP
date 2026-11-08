@@ -2207,7 +2207,22 @@ async function loadPlaylistFile() {
   const res = await P.loadPlaylist();
   if (!res || res.canceled) return;
   if (res.zip) { await openSharedZip(res.zip); return; }     // 2.4: LOAD a shared playlist .zip
-  if (!res.entries || !res.entries.length) { toast('That playlist is empty or has nothing SlopAMP can play.'); return; }
+  return loadPlaylistResult(res);
+}
+// LOAD's answer → the playlist. 2.9.3: an empty playlist (SAVE ALL / QUICK SAVE write one for an emptied tab)
+// opens as an empty tab named after it, no error; it's already open (same file): that tab comes up.
+async function loadPlaylistResult(res) {
+  if (!res.entries) { toast('Couldn’t read that playlist.', 3000); return; }
+  if (!res.entries.length && !res.lines) {
+    const name = String(res.name || 'Playlist').replace(/\.(m3u8?|pls)$/i, '').slice(0, 40);
+    const open = res.path ? S.tabs.findIndex(t => t.src && samePath(t.src, res.path)) : -1;
+    if (open >= 0) { switchTab(open); toast(`"${S.tabs[open].name}" is already open (the playlist is empty)`, 2600); return; }
+    const k = newTab(name); if (res.path) S.tabs[k].src = res.path;
+    switchTab(k); renderTabs(); saveSoon();
+    toast(`Opened ${res.name}: it’s empty`, 2600);
+    return;
+  }
+  if (!res.entries.length) { toast('That playlist has nothing SlopAMP can play.'); return; }
   let mode = 'replace';
   if (histOnScreen()) mode = 'newtab';          // never into a History tab
   else if (S.items.length) { mode = await askLoadMode(res.name, res.entries.length); if (!mode) return; }
@@ -2342,10 +2357,12 @@ function renderUpdAbout() {
   else if (st.status === 'error' && st.error === 'offline') html = `Couldn’t reach GitHub${checked}`;
   else html = st.lastCheck ? `<span class="ok">Up to date</span>${checked}` : 'Not checked yet';
   $('#updStatus').innerHTML = st.test ? `<span class="new">TEST FEED</span> · ${html}` : html;
+  $('#aboutUpdStatus').innerHTML = $('#updStatus').innerHTML;       // 2.9.3: the same status in "?"
   // The button says what the next click does: check → install (or download page) → restart.
   const [label, tip] = updAboutButton(st);
   $('#updCheck').textContent = label; $('#updCheck').title = tip;
   $('#updCheck').disabled = ['checking', 'downloading', 'verifying', 'installing'].includes(st.status);
+  $('#aboutUpdCheck').textContent = label; $('#aboutUpdCheck').title = tip; $('#aboutUpdCheck').disabled = $('#updCheck').disabled;
   const sel = $('#updModeSel');
   sel.querySelector('option[value="auto"]').hidden = !st.canInstall;
   sel.value = !st.canInstall && st.mode === 'auto' ? 'notify' : (st.mode || 'notify');
@@ -2418,6 +2435,7 @@ $('#updGo').onclick = () => {
 };
 $('#updSkip').onclick = () => { $('#updDlg').close(); P.updSkip(); };
 $('#updCheck').onclick = updAboutClick;
+$('#aboutUpdCheck').onclick = updAboutClick;      // 2.9.3: "?" → Check for updates
 $('.logo-dot').addEventListener('click', () => { if ($('.logo-dot').classList.contains('has-upd')) { if (UPD.status === 'error') updAction('page'); else openUpdNotes(); } });
 $('#updModeSel').onchange = (e) => P.updMode(e.target.value);
 P.onUpd((st) => { UPD = st; renderUpd(); });
@@ -3974,10 +3992,11 @@ $('#assocBtn').onclick = async () => {
   toast(r && r.ok ? 'SlopAMP is registered for playlists. In Default apps, pick SlopAMP for .m3u8 / .m3u (or use Open with → Always).' : `Couldn’t register SlopAMP for playlists${r && r.error ? `: ${r.error}` : '.'}`, 6000);
 };
 async function openPlaylistFiles(rows) {
-  let opened = 0, last = '';
+  let opened = 0, last = '', empty = 0;
   for (const r of rows) {
     const res = await P.plOpen(r.path);
     if (!res || !res.entries) continue;
+    if (!res.entries.length) empty++;          // 2.9.3: an empty playlist opens as an empty tab
     const k = newTab(r.title.slice(0, 40));
     if (S.tabs[k]) S.tabs[k].src = r.path;       // 2.6: renaming the playlist in the Library renames this tab too
     if (res.entries.length) addDescribed(res.entries, undefined, false);
@@ -3985,7 +4004,7 @@ async function openPlaylistFiles(rows) {
   }
   if (!opened) { toast('Couldn\u2019t open that playlist file.'); return; }
   $('#dlmDlg').close();
-  toast(opened === 1 ? `Opened "${last}" in a new tab` : `Opened ${opened} playlists in new tabs`, 2200);
+  toast(opened === 1 ? `Opened "${last}" in a new tab${empty ? ' (it’s empty)' : ''}` : `Opened ${opened} playlists in new tabs${empty ? ` (${empty} empty)` : ''}`, 2200);
 }
 $('#dlmClean').onclick = async () => { const n = await P.dlmCleanMissing(); await dlmRefresh(); toast(`Removed ${n} missing entr${n === 1 ? 'y' : 'ies'}.`, 1800); };
 $('#dlmDel').onclick = () => { const rows = dlmVisible().filter(r => DLM.sel.has(dlmKey(r))); if (rows.length) dlmDelete(rows); };

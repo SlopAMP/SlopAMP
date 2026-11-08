@@ -750,7 +750,7 @@ function registerIpc() {
     const file = res.filePaths[0];
     if (/\.zip$/i.test(file)) return { zip: file };      // 2.4: a shared playlist .zip (renderer → share:open)
     rememberPlaylistDir(file);
-    return { name: path.basename(file), entries: await loadPlaylistEntries(file) };
+    return { name: path.basename(file), path: file, lines: parsePlaylistFile(file).length, entries: await loadPlaylistEntries(file) };    // 2.9.3: lines = entries in the file (0: an empty playlist)
   });
   // ---- 2.4 #6: a playlist file handed to SlopAMP (double-click, Open with, the command line): read it for a new tab
   ipcMain.handle('pl:openFile', async (_e, p) => {
