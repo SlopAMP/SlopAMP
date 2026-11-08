@@ -1636,11 +1636,12 @@ function closeTabBox(mode, t, others, def) {
     } else {        // the last ordinary tab
       $('#ctTitle').textContent = 'Clear tab';
       $('#ctText').textContent = `"${t.name}" is your only playlist tab, so it can’t close: it empties and is renamed Main. Save its ${items} first?`;
-      $('#ctSmall').textContent = `Save puts it in Playlists as "${t.name}.m3u8" (QUICK SAVE).`;
+      $('#ctSmall').textContent = `Save to Playlists puts it in Playlists as "${t.name}.m3u8" (QUICK SAVE). Save as… lets you pick where. If it isn’t saved, nothing is cleared.`;
       $('#ctDrop').textContent = 'Just clear it';
       $('#ctMove').textContent = 'Save to Playlists & clear'; $('#ctMove').title = '';
     }
     $('#ctRow').classList.toggle('hidden', mode !== 'close');
+    $('#ctSaveAs').classList.toggle('hidden', mode !== 'clear');      // 2.9.3: Save as… (pick where) for the last tab
     d.returnValue = 'cancel';
     // answered by a button (submit, which also covers Enter), Esc (cancel) or close(): whichever comes first, once
     let done = false;
@@ -1648,7 +1649,7 @@ function closeTabBox(mode, t, others, def) {
     const finish = (v) => {
       if (done) return; done = true;
       form.removeEventListener('submit', onSubmit); d.removeEventListener('cancel', onCancel); d.removeEventListener('close', onClose);
-      resolve(v === 'move' ? { act: 'move', to: mode === 'close' ? +sel.value : -1 } : v === 'drop' ? { act: 'drop' } : null);
+      resolve(v === 'move' ? { act: 'move', to: mode === 'close' ? +sel.value : -1 } : v === 'drop' ? { act: 'drop' } : v === 'saveas' && mode === 'clear' ? { act: 'saveas' } : null);
     };
     const onSubmit = (e) => finish(e.submitter ? e.submitter.value : 'cancel');
     const onCancel = () => finish('cancel');
@@ -1671,14 +1672,16 @@ async function closeTab(i) {
     if (t.items.length) {
       const r = await closeTabBox('clear', t, others);
       if (!r) return;
-      if (r.act === 'move') {
-        const res = await P.quickSave(t.items.map(({ type, path, url, title, duration }) => ({ type, path, url, title, duration })), t.name);
-        if (!(res && res.saved)) { toast(`Couldn’t save: ${(res && res.error) || 'unknown error'}. Nothing was cleared.`, 4000); return; }
-        toast(`\u2713 Saved "${res.name}" (${t.items.length} item${t.items.length === 1 ? '' : 's'}) and cleared the tab.`, 3000);
+      const items = t.items.map(({ type, path, url, title, duration }) => ({ type, path, url, title, duration })), n = t.items.length;
+      if (r.act === 'move' || r.act === 'saveas') {      // Save to Playlists (QUICK SAVE) / Save as… (the file window): only a saved list is cleared
+        const res = await (r.act === 'move' ? P.quickSave(items, t.name) : P.savePlaylist(items, t.name)).catch((e) => ({ saved: false, error: String(e && e.message || e) }));
+        if (!(res && res.saved)) { toast(res && res.error ? `Couldn’t save: ${res.error}. Nothing was cleared.` : 'Not saved, so nothing was cleared.', 4000); return; }
+        if (S.tabs[i] !== t) return;
+        toast(`\u2713 Saved "${res.name}" (${n} item${n === 1 ? '' : 's'}) and cleared the tab.`, 3000);
         if ($('#dlmDlg').open) dlmRefresh();
       }
     }
-    S.tab = i; clearList(); t.name = 'Main'; renderTabs(); saveSoon(); return;
+    S.tab = i; clearList(); t.name = 'Main'; delete t.src; renderTabs(); saveSoon(); return;      // 2.9.3: an emptied tab isn't that playlist any more
   }
   if (!t.items.length) { removeTabAt(i); return; }
   const near = others.filter(k => k < i).pop(), after = others.find(k => k > i);
@@ -2190,10 +2193,26 @@ async function quickSaveAll() {
 async function savePlaylistFile() {
   if (histOnScreen()) { histSaveCopy(); return; }
   // 2.9.3: an empty tab saves too (an empty playlist, which LOAD and the Library open as an empty tab), like QUICK SAVE / SAVE ALL
-  const res = await P.savePlaylist(S.items.map(({ type, path, url, title, duration }) => ({ type, path, url, title, duration })), S.tabs[S.tab].name);
-  if (res && res.saved) toast(res.empty ? `Playlist saved: ${res.name} (empty)` : `Playlist saved: ${res.name}`);
-  else if (res && res.error) toast(`Couldn\u2019t save playlist: ${res.error}`, 4000);
+  const tab = S.tabs[S.tab];
+  const res = await P.savePlaylist(tab.items.map(({ type, path, url, title, duration }) => ({ type, path, url, title, duration })), tab.name);
+  if (res && res.saved) {
+    const renamed = linkTabToFile(tab, res.path);
+    toast(`Playlist saved: ${res.name}${res.empty ? ' (empty)' : ''}${renamed ? ` · the tab is now "${tab.name}"` : ''}`);
+  } else if (res && res.error) toast(`Couldn\u2019t save playlist: ${res.error}`, 4000);
   if (res && res.saved && $('#dlmDlg').open) dlmRefresh();
+}
+// 2.9.3: SAVE remembers the file it wrote (like a playlist opened from the Library): LOAD / the Library bring this tab
+// up instead of a copy, and renaming the playlist in the Library renames the tab. The tab takes the file's name (as
+// "Save as" does elsewhere); another tab linked to the same file lets go of it. Returns true when the tab was renamed.
+function linkTabToFile(tab, p) {
+  if (!tab || !p || !S.tabs.includes(tab)) return false;
+  for (const t of S.tabs) if (t !== tab && t.src && samePath(t.src, p)) delete t.src;
+  tab.src = p;
+  const base = String(p).split(/[\\/]/).pop().replace(PL_FILE_RE, '').slice(0, 40);
+  const renamed = !!base && base !== tab.name;
+  if (renamed) tab.name = base;
+  renderTabs(); saveSoon();
+  return renamed;
 }
 function askLoadMode(name, count) {
   return new Promise((resolve) => {
@@ -2214,10 +2233,11 @@ async function loadPlaylistFile() {
 // opens as an empty tab named after it, no error; it's already open (same file): that tab comes up.
 async function loadPlaylistResult(res) {
   if (!res.entries) { toast('Couldn’t read that playlist.', 3000); return; }
+  // 2.9.3: a playlist that's already open in a tab (opened from the Library, or saved with SAVE): that tab comes up, no copy
+  const open = res.path ? S.tabs.findIndex(t => t.src && samePath(t.src, res.path)) : -1;
+  if (open >= 0) { switchTab(open); toast(`"${S.tabs[open].name}" is already open${res.entries.length || res.lines ? '' : ' (the playlist is empty)'}`, 2600); return; }
   if (!res.entries.length && !res.lines) {
     const name = String(res.name || 'Playlist').replace(/\.(m3u8?|pls)$/i, '').slice(0, 40);
-    const open = res.path ? S.tabs.findIndex(t => t.src && samePath(t.src, res.path)) : -1;
-    if (open >= 0) { switchTab(open); toast(`"${S.tabs[open].name}" is already open (the playlist is empty)`, 2600); return; }
     const k = newTab(name); if (res.path) S.tabs[k].src = res.path;
     switchTab(k); renderTabs(); saveSoon();
     toast(`Opened ${res.name}: it’s empty`, 2600);
@@ -3994,7 +4014,10 @@ $('#assocBtn').onclick = async () => {
 };
 async function openPlaylistFiles(rows) {
   let opened = 0, last = '', empty = 0;
+  let already = -1, nAlready = 0;
   for (const r of rows) {
+    const o = S.tabs.findIndex(t => t.src && samePath(t.src, r.path));       // 2.9.3: already open in a tab: bring that one up, no copy
+    if (o >= 0) { already = o; nAlready++; continue; }
     const res = await P.plOpen(r.path);
     if (!res || !res.entries) continue;
     if (!res.entries.length) empty++;          // 2.9.3: an empty playlist opens as an empty tab
@@ -4003,9 +4026,11 @@ async function openPlaylistFiles(rows) {
     if (res.entries.length) addDescribed(res.entries, undefined, false);
     opened++; last = r.title;
   }
+  if (!opened && already >= 0) { $('#dlmDlg').close(); switchTab(already); toast(`"${S.tabs[already].name}" is already open`, 2200); return; }
   if (!opened) { toast('Couldn\u2019t open that playlist file.'); return; }
   $('#dlmDlg').close();
-  toast(opened === 1 ? `Opened "${last}" in a new tab${empty ? ' (it’s empty)' : ''}` : `Opened ${opened} playlists in new tabs${empty ? ` (${empty} empty)` : ''}`, 2200);
+  const more = [empty ? `${empty} empty` : '', nAlready ? `${nAlready} already open` : ''].filter(Boolean).join(', ');
+  toast(opened === 1 && !nAlready ? `Opened "${last}" in a new tab${empty ? ' (it’s empty)' : ''}` : `Opened ${opened} playlist${opened === 1 ? '' : 's'} in new tabs${more ? ` (${more})` : ''}`, 2400);
 }
 $('#dlmClean').onclick = async () => { const n = await P.dlmCleanMissing(); await dlmRefresh(); toast(`Removed ${n} missing entr${n === 1 ? 'y' : 'ies'}.`, 1800); };
 $('#dlmDel').onclick = () => { const rows = dlmVisible().filter(r => DLM.sel.has(dlmKey(r))); if (rows.length) dlmDelete(rows); };

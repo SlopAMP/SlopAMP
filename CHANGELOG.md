@@ -11,8 +11,11 @@
 - **Drag the playlist tabs to reorder them.** Press a tab and move it left or right: a green bar shows where it lands. YT and X History stay first (they don't drag, and a tab dropped further left lands right after them). Near the strip's edge it scrolls. Esc, or letting go away from the strip, cancels. A click still selects and a double-click still renames; right-click → Move left / right / to front / to end stay.
 - **Empty playlists open.** An empty saved playlist (SAVE ALL / QUICK SAVE write one for an emptied tab) opens as an empty tab named after it, with no error: from **LOAD** (it used to say "That playlist is empty or has nothing SlopAMP can play" and open nothing) and from Library → PLAYLISTS (Open in new tab, double-click, Classic or Preview view). LOAD of a playlist that's already open as a tab brings that tab up. A playlist that has lines but nothing SlopAMP can play still says so.
 - **SAVE saves an empty tab too**, like QUICK SAVE and SAVE ALL (since 2.9.2): the usual file dialog, then an empty playlist SlopAMP can open again (it used to do nothing on an empty tab). The same for the tab's right-click **Save as playlist file…**. SAVE now writes the file in one go (a temporary file, then renamed), like QUICK SAVE.
+- **SAVE remembers the file it saved to.** That tab is linked to the file, like a playlist opened from the Library: LOAD or Library → PLAYLISTS → Open of that file brings the tab up instead of opening a copy, and renaming the playlist in the Library renames the tab. Saved under a different name, the tab takes the file's name (the note says so); another tab linked to the same file lets go of it. The link is kept across restarts. QUICK SAVE doesn't change it.
+- The Library's **Open in new tab** (and double-click) brings up a tab that already has that playlist open instead of opening a second copy.
+- The **Clear tab** box (the last playlist tab) has **Save as…** next to Save to Playlists & clear: pick where to save it, then the tab is cleared. Cancelling the window or a failed save leaves the tab as it was. A cleared tab is no longer linked to a file.
 - **"?" has Check for updates again**: an Updates row with the status and the button, as before 2.9.2. It's still in Settings → Updates too (with "When a new version is out"), and both show the same.
-- Tests: `tests/tabs-293.js`, `tests/empty-playlist-about-293.js`.
+- Tests: `tests/tabs-293.js`, `tests/empty-playlist-about-293.js`, `tests/save-link-293.js`.
 
 ## 2.9.2 — released Nov 8, 2026
 

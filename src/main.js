@@ -697,7 +697,7 @@ function registerIpc() {
     try {
       fs.writeFileSync(res.filePath + '.tmp', buildM3U(items), 'utf8'); fs.renameSync(res.filePath + '.tmp', res.filePath);   // 2.9.3: like QUICK SAVE, never half a file
       rememberPlaylistDir(res.filePath);
-      return { saved: true, name: path.basename(res.filePath), empty: !items.length };
+      return { saved: true, name: path.basename(res.filePath), path: res.filePath, empty: !items.length };   // 2.9.3: path: the tab remembers it
     } catch (e) { log('playlist save failed', e); return { saved: false, error: String(e.message || e) }; }
   });
   // Quick Save: write the tab straight to Playlists\\<tab name>.m3u8, replacing any older copy (no dialog).

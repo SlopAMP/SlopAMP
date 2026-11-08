@@ -20,7 +20,7 @@ const CLIP = path.join(os.tmpdir(), 'slopamp-test-293-song.m4a');
   const names = () => ev(() => S.tabs.map(t => `${t.name}:${t.items.length}`).join(' '));
   const box = () => ev(() => ({ open: WM.$('#closeTabDlg').open, title: WM.$('#ctTitle').textContent, text: WM.$('#ctText').textContent, row: !WM.$('#ctRow').classList.contains('hidden'),
     opts: [...WM.$$('#ctTo option')].map(o => o.textContent), val: WM.$('#ctTo').selectedOptions[0] ? WM.$('#ctTo').selectedOptions[0].textContent : '', small: WM.$('#ctSmall').textContent,
-    btns: [...WM.$$('#closeTabDlg .dlg-btns button')].map(b => b.textContent), focus: (WM.$('#closeTabDlg').ownerDocument.activeElement || {}).id || '' }));
+    btns: [...WM.$$('#closeTabDlg .dlg-btns button')].filter(b => !b.classList.contains('hidden')).map(b => b.textContent), focus: (WM.$('#closeTabDlg').ownerDocument.activeElement || {}).id || '' }));
   const answer = (v) => ev((v) => WM.$(`#closeTabDlg .dlg-btns button[value="${v}"]`).click(), v);     // the buttons, as a person would
   const toastTxt = () => ev(() => WM.$('#toast').classList.contains('hidden') ? '' : WM.$('#toast').firstChild.textContent);
   const idx = (n) => ev((n) => S.tabs.findIndex(t => t.name === n), n);
@@ -108,7 +108,7 @@ const CLIP = path.join(os.tmpdir(), 'slopamp-test-293-song.m4a');
   await ev(() => { const m = S.tabs.find(t => t.name === 'Main'); m.name = 'Keepers'; renderTabs(); });
   await ev(() => { closeTab(S.tabs.findIndex(t => t.name === 'Keepers')); }); await sleep(400);
   b = await box();
-  ok(b.open && b.title === 'Clear tab' && !b.row && /only playlist tab/.test(b.text) && JSON.stringify(b.btns) === '["Cancel","Just clear it","Save to Playlists & clear"]' && b.focus === 'ctMove', `the last tab: Clear tab ${JSON.stringify([b.text, b.btns])}`);
+  ok(b.open && b.title === 'Clear tab' && !b.row && /only playlist tab/.test(b.text) && JSON.stringify(b.btns) === '["Cancel","Just clear it","Save as…","Save to Playlists & clear"]' && b.focus === 'ctMove', `the last tab: Clear tab ${JSON.stringify([b.text, b.btns])}`);
   await answer('move'); await sleep(800);
   const saved = fs.existsSync(`${dl}/Playlists/Keepers.m3u8`) ? fs.readFileSync(`${dl}/Playlists/Keepers.m3u8`, 'utf8') : '';
   ok(/M1/.test(saved) && /W1/.test(saved), 'Save to Playlists & clear: Playlists\\Keepers.m3u8 has its items');
