@@ -2189,10 +2189,11 @@ async function quickSaveAll() {
 }
 async function savePlaylistFile() {
   if (histOnScreen()) { histSaveCopy(); return; }
-  if (!S.items.length) { toast('The playlist is empty — nothing to save.'); return; }
+  // 2.9.3: an empty tab saves too (an empty playlist, which LOAD and the Library open as an empty tab), like QUICK SAVE / SAVE ALL
   const res = await P.savePlaylist(S.items.map(({ type, path, url, title, duration }) => ({ type, path, url, title, duration })), S.tabs[S.tab].name);
-  if (res && res.saved) toast(`Playlist saved: ${res.name}`);
+  if (res && res.saved) toast(res.empty ? `Playlist saved: ${res.name} (empty)` : `Playlist saved: ${res.name}`);
   else if (res && res.error) toast(`Couldn\u2019t save playlist: ${res.error}`, 4000);
+  if (res && res.saved && $('#dlmDlg').open) dlmRefresh();
 }
 function askLoadMode(name, count) {
   return new Promise((resolve) => {

@@ -1,4 +1,5 @@
-// 2.9.3 (late fixes): an empty saved playlist opens as an empty tab, no error (LOAD, the Library's PLAYLISTS
+// 2.9.3 (late fixes): SAVE (the file dialog) saves an empty tab too, like QUICK SAVE / SAVE ALL; an empty saved
+// playlist opens as an empty tab, no error (LOAD, the Library's PLAYLISTS
 // Open in new tab / double-click, Classic and Preview views); "?" has Check for updates again (also still in Settings).
 // Run (Linux, xvfb): SLOPAMP_ELECTRON=… SLOPAMP_APP=… xvfb-run -a node tests/empty-playlist-about-293.js
 'use strict';
@@ -79,6 +80,44 @@ const H = path.join(os.tmpdir(), 'slopamp-test-293e');
   await sleep(800);
   ok(await ev(() => S.tabs[S.tab].name === 'Watch Later' && S.items.length === 0 && !WM.$('#dlmDlg').open), 'double-clicking the tile opens it as an empty tab');
   await ev(() => { S.lib.modes = {}; });
+
+  // ================= SAVE (the file dialog) saves an empty tab too
+  const saveAs = (f) => app.evaluate(({ dialog }, f) => { dialog.showSaveDialog = async () => (f ? { canceled: false, filePath: f } : { canceled: true }); }, f);
+  await ev(() => { if (WM.$('#dlmDlg').open) WM.$('#dlmDlg').close(); const n = newTab('Later'); switchTab(n); });
+  await saveAs(`${PL}/Later.m3u8`);
+  await ev(() => WM.$('#pSave').click()); await sleep(600);
+  let txt = fs.existsSync(`${PL}/Later.m3u8`) ? fs.readFileSync(`${PL}/Later.m3u8`, 'utf8') : null;
+  ok(txt !== null && /^#EXTM3U/.test(txt) && !/^(?!#)\S/m.test(txt), `SAVE on an empty tab writes an empty playlist ${JSON.stringify(txt)}`);
+  ok(await toastTxt() === 'Playlist saved: Later.m3u8 (empty)', `…and says so (${await toastTxt()})`);
+  ok(!fs.existsSync(`${PL}/Later.m3u8.tmp`), 'no leftover .tmp file');
+  // over an older copy that had items: the file is emptied (the dialog itself asks before replacing a file)
+  fs.writeFileSync(`${PL}/Old List.m3u8`, '#EXTM3U\r\n#EXTINF:60,Gone\r\nhttps://www.youtube.com/watch?v=gggggggggg1\r\n');
+  await saveAs(`${PL}/Old List.m3u8`);
+  await ev(() => WM.$('#pSave').click()); await sleep(600);
+  ok(!/Gone/.test(fs.readFileSync(`${PL}/Old List.m3u8`, 'utf8')), 'SAVE of an empty tab over a playlist with items empties it');
+  // .m3u too
+  await saveAs(`${PL}/Plain.m3u`);
+  await ev(() => WM.$('#pSave').click()); await sleep(600);
+  ok(fs.existsSync(`${PL}/Plain.m3u`) && /^#EXTM3U/.test(fs.readFileSync(`${PL}/Plain.m3u`, 'utf8')), 'an empty .m3u too');
+  // the tab's right-click Save as playlist file… is the same SAVE
+  await saveAs(`${PL}/From Menu.m3u8`);
+  await ev(() => saveTabFile(S.tab)); await sleep(600);
+  ok(fs.existsSync(`${PL}/From Menu.m3u8`), 'right-click → Save as playlist file… saves an empty tab too');
+  // Cancel in the dialog: nothing written, no note
+  await ev(() => { WM.$('#toast').classList.add('hidden'); });
+  await saveAs(null);
+  await ev(() => WM.$('#pSave').click()); await sleep(500);
+  ok(!fs.existsSync(`${PL}/Later (2).m3u8`) && await toastTxt() === '', 'Cancel: nothing saved, no note');
+  // what SAVE wrote opens again: close the tab, LOAD it → an empty "Later" tab
+  await ev(() => { closeTab(S.tabs.findIndex(t => t.name === 'Later')); }); await sleep(300);
+  await pick(`${PL}/Later.m3u8`); await ev(() => WM.$('#pLoad').click()); await sleep(600);
+  ok(await ev(() => S.tabs[S.tab].name === 'Later' && S.items.length === 0) && /it’s empty/.test(await toastTxt()), 'the empty playlist SAVE wrote opens again with LOAD');
+  // a tab with items still saves its items
+  await ev(() => addDescribed([{ url: 'https://www.youtube.com/watch?v=ssssssssss1', title: 'S1' }], undefined, false)); await sleep(300);
+  await saveAs(`${PL}/Later.m3u8`);
+  await ev(() => WM.$('#pSave').click()); await sleep(600);
+  ok(/S1/.test(fs.readFileSync(`${PL}/Later.m3u8`, 'utf8')) && await toastTxt() === 'Playlist saved: Later.m3u8', 'SAVE with items: as before');
+  // History's Save a copy… still needs items (it's a copy of History, not a tab)
 
   // ================= "?" → Check for updates (still in Settings too)
   await ev(() => { openAbout(); }); await sleep(600);

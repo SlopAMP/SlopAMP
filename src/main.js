@@ -687,7 +687,7 @@ function registerIpc() {
     return describeFiles(res.filePaths);
   });
   ipcMain.handle('playlist:save', async (_e, items, name) => {
-    if (!Array.isArray(items) || !items.length) return { saved: false };
+    if (!Array.isArray(items)) return { saved: false };      // 2.9.3: an empty tab saves too (an empty playlist SlopAMP can reopen)
     const res = await dialog.showSaveDialog(win, {
       title: 'Save playlist',
       defaultPath: path.join(playlistsDir(), `${safeFileName(name)}.m3u8`),
@@ -695,9 +695,9 @@ function registerIpc() {
     });
     if (res.canceled || !res.filePath) return { saved: false };
     try {
-      fs.writeFileSync(res.filePath, buildM3U(items), 'utf8');
+      fs.writeFileSync(res.filePath + '.tmp', buildM3U(items), 'utf8'); fs.renameSync(res.filePath + '.tmp', res.filePath);   // 2.9.3: like QUICK SAVE, never half a file
       rememberPlaylistDir(res.filePath);
-      return { saved: true, name: path.basename(res.filePath) };
+      return { saved: true, name: path.basename(res.filePath), empty: !items.length };
     } catch (e) { log('playlist save failed', e); return { saved: false, error: String(e.message || e) }; }
   });
   // Quick Save: write the tab straight to Playlists\\<tab name>.m3u8, replacing any older copy (no dialog).
