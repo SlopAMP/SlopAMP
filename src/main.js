@@ -469,6 +469,28 @@ function inPlaylistsDir(p) {
 }
 function safeFileName(n) { return String(n || 'SlopAMP playlist').replace(/[<>:"/\\|?*\x00-\x1f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'SlopAMP playlist'; }
 
+// 2.9.3: why a playlist couldn't be written, in plain words (SAVE, QUICK SAVE, SAVE ALL; the technical message goes to the log)
+function saveError(e, file) {
+  const code = e && e.code;
+  const m = {
+    ENOENT: 'That folder doesn’t exist any more. Pick another one.',
+    ENOTDIR: 'That folder doesn’t exist any more. Pick another one.',
+    EACCES: 'SlopAMP isn’t allowed to save there. Pick another folder (Documents or Downloads work).',
+    EPERM: 'SlopAMP isn’t allowed to save there, or the file is read-only. Pick another folder or name.',
+    EROFS: 'That drive is read-only. Pick another folder.',
+    ENOSPC: 'The disk is full. Free some space or pick another drive.',
+    EDQUOT: 'The disk is full. Free some space or pick another drive.',
+    EBUSY: 'The file is open in another program. Close it there and try again.',
+    EISDIR: 'There’s a folder with that name. Pick another name.',
+    ENAMETOOLONG: 'That name or folder path is too long. Pick a shorter one.',
+    EINVAL: 'That name can’t be used for a file. Pick another one.'
+  }[code];
+  try { if (file && fs.existsSync(file + '.tmp')) fs.unlinkSync(file + '.tmp'); } catch (_) {}
+  // Windows reports a folder in the way as "not allowed" (EPERM): say what it really is
+  try { if (file && fs.statSync(file).isDirectory()) return 'There’s a folder with that name. Pick another name.'; } catch (_) {}
+  return m || 'Something went wrong while writing the file. Try another folder or name.';
+}
+
 function rememberPlaylistDir(file) {
   const s = currentState || loadState();
   s.playlistDir = path.dirname(file);
@@ -698,7 +720,7 @@ function registerIpc() {
       fs.writeFileSync(res.filePath + '.tmp', buildM3U(items), 'utf8'); fs.renameSync(res.filePath + '.tmp', res.filePath);   // 2.9.3: like QUICK SAVE, never half a file
       rememberPlaylistDir(res.filePath);
       return { saved: true, name: path.basename(res.filePath), path: res.filePath, empty: !items.length };   // 2.9.3: path: the tab remembers it
-    } catch (e) { log('playlist save failed', e); return { saved: false, error: String(e.message || e) }; }
+    } catch (e) { log('playlist save failed', e); return { saved: false, error: saveError(e, res.filePath), code: e && e.code }; }
   });
   // Quick Save: write the tab straight to Playlists\\<tab name>.m3u8, replacing any older copy (no dialog).
   // History tabs (2.2): the synced copies, Playlists\YouTube History.m3u8 and Playlists\X History.m3u8,
@@ -722,7 +744,7 @@ function registerIpc() {
       fs.writeFileSync(tmp, buildM3U(items), 'utf8');
       fs.renameSync(tmp, file);
       return { saved: true, name: path.basename(file), path: file };
-    } catch (e) { log('quick save failed', e); return { saved: false, error: String(e.message || e) }; }
+    } catch (e) { log('quick save failed', e); return { saved: false, error: saveError(e, file), code: e && e.code }; }
   });
   // Quick Save All: every tab to Playlists\\<tab name>.m3u8 (same-named tabs get " (2)", " (3)"...). 2.9.2: empty tabs too,
   // so emptying a tab and saving empties its file.
@@ -735,7 +757,7 @@ function registerIpc() {
       used.add(name.toLowerCase());
       const file = path.join(playlistsDir(), `${name}.m3u8`);
       try { fs.writeFileSync(file + '.tmp', buildM3U(t.items), 'utf8'); fs.renameSync(file + '.tmp', file); out.push({ name: path.basename(file), ok: true, empty: !t.items.length }); }
-      catch (e) { log('quick save all failed', e); out.push({ name: path.basename(file), ok: false, error: String(e.message || e) }); }
+      catch (e) { log('quick save all failed', e); out.push({ name: path.basename(file), ok: false, error: saveError(e, file) }); }
     }
     return out;
   });

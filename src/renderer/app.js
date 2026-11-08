@@ -1576,7 +1576,7 @@ function renderTabs() {
     const el = document.createElement('div');
     el.className = 'ptab' + (i === S.tab ? ' on' : '') + (i === S.playTab && status !== 'stopped' ? ' playing' : '');
     el.dataset.t = i;
-    el.title = `${t.name} — ${t.items.length} item${t.items.length === 1 ? '' : 's'}\nDouble-click to rename, right-click for more`;
+    el.title = `${t.name} — ${t.items.length} item${t.items.length === 1 ? '' : 's'}${t.src ? `\nFile: ${t.src}` : ''}\nDouble-click to rename, right-click for more`;   // 2.9.3: the linked file
     if (i === renamingTab) {
       const inp = document.createElement('input'); inp.value = t.name; inp.maxLength = 40;
       const done = (ok) => { if (renamingTab !== i) return; renamingTab = -1; if (ok && inp.value.trim()) t.name = inp.value.trim(); renderTabs(); saveSoon(); };
@@ -1675,7 +1675,7 @@ async function closeTab(i) {
       const items = t.items.map(({ type, path, url, title, duration }) => ({ type, path, url, title, duration })), n = t.items.length;
       if (r.act === 'move' || r.act === 'saveas') {      // Save to Playlists (QUICK SAVE) / Save as… (the file window): only a saved list is cleared
         const res = await (r.act === 'move' ? P.quickSave(items, t.name) : P.savePlaylist(items, t.name)).catch((e) => ({ saved: false, error: String(e && e.message || e) }));
-        if (!(res && res.saved)) { toast(res && res.error ? `Couldn’t save: ${res.error}. Nothing was cleared.` : 'Not saved, so nothing was cleared.', 4000); return; }
+        if (!(res && res.saved)) { toast(res && res.error ? `Couldn’t save, so nothing was cleared. ${res.error}` : 'Not saved, so nothing was cleared.', 6000); return; }
         if (S.tabs[i] !== t) return;
         toast(`\u2713 Saved "${res.name}" (${n} item${n === 1 ? '' : 's'}) and cleared the tab.`, 3000);
         if ($('#dlmDlg').open) dlmRefresh();
@@ -1840,6 +1840,7 @@ $('#tabStrip').addEventListener('contextmenu', (e) => {
     ['Duplicate', () => duplicateTab(i)],
     ['Save as playlist file…', () => saveTabFile(i)],
     ['Share playlist (.zip)…', () => shareOpenDlg(S.tabs[i].items, S.tabs[i].name), !S.tabs[i].items.length],
+    ['Open file location', () => openTabFile(i), !S.tabs[i].src],          // 2.9.3: the file this tab is linked to (greyed when none)
     null,
     ['New tab', () => { const n = newTab(); renameTab(n); }],
     ...(i > 0 && !isHist(S.tabs[i - 1]) ? [['Move left', () => moveTab(i, -1)]] : []),
@@ -1852,6 +1853,13 @@ $('#tabStrip').addEventListener('contextmenu', (e) => {
   showCtxMenu(entries, e.clientX, e.clientY, e.target.ownerDocument);
   void t;
 });
+// 2.9.3: right-click → Open file location: the tab's linked file, selected in its folder
+async function openTabFile(i) {
+  const t = S.tabs[i]; if (!t || !t.src) return;
+  const [there] = await P.filesExist([t.src]).catch(() => [false]);
+  if (!there) { toast(`"${String(t.src).split(/[\\/]/).pop()}" isn’t there any more (moved or deleted). SAVE can write it again.`, 5000); return; }
+  P.showInFolder(t.src);
+}
 function moveTab(i, d) {
   const j = i + d; if (j < 0 || j >= S.tabs.length) return;
   if (isHist(S.tabs[i]) || isHist(S.tabs[j])) return;   // History tabs stay first
@@ -2178,8 +2186,9 @@ async function quickSavePlaylist() {
   if (histOnScreen()) { histQuickSave(); return; }
   const tab = S.tabs[S.tab];
   const res = await P.quickSave(tab.items.map(({ type, path, url, title, duration }) => ({ type, path, url, title, duration })), tab.name);   // 2.9.2: an empty tab empties its file
+  if (res && res.saved && res.path) linkTabToFile(tab, res.path, { keepName: true });     // 2.9.3: QUICK SAVE links the tab too (its name stays)
   if (res && res.saved) toast(tab.items.length ? `\u2713 Saved "${res.name}" (${tab.items.length} item${tab.items.length === 1 ? '' : 's'})` : `\u2713 Saved "${res.name}" (now empty)`, 2200);
-  else toast(`Couldn\u2019t save: ${(res && res.error) || 'unknown error'}`, 4000);
+  else toast(`Couldn\u2019t save the playlist. ${(res && res.error) || 'Something went wrong while writing the file.'}`, 6000);
   if ($('#dlmDlg').open) dlmRefresh();
 }
 async function quickSaveAll() {
@@ -2198,18 +2207,18 @@ async function savePlaylistFile() {
   if (res && res.saved) {
     const renamed = linkTabToFile(tab, res.path);
     toast(`Playlist saved: ${res.name}${res.empty ? ' (empty)' : ''}${renamed ? ` · the tab is now "${tab.name}"` : ''}`);
-  } else if (res && res.error) toast(`Couldn\u2019t save playlist: ${res.error}`, 4000);
+  } else if (res && res.error) toast(`Couldn\u2019t save the playlist. ${res.error}`, 6000);       // 2.9.3: plain words (main.js saveError); the tab is unchanged
   if (res && res.saved && $('#dlmDlg').open) dlmRefresh();
 }
-// 2.9.3: SAVE remembers the file it wrote (like a playlist opened from the Library): LOAD / the Library bring this tab
+// 2.9.3: SAVE and QUICK SAVE remember the file they wrote (like a playlist opened from the Library): LOAD / the Library bring this tab
 // up instead of a copy, and renaming the playlist in the Library renames the tab. The tab takes the file's name (as
 // "Save as" does elsewhere); another tab linked to the same file lets go of it. Returns true when the tab was renamed.
-function linkTabToFile(tab, p) {
+function linkTabToFile(tab, p, o = {}) {
   if (!tab || !p || !S.tabs.includes(tab)) return false;
-  for (const t of S.tabs) if (t !== tab && t.src && samePath(t.src, p)) delete t.src;
+  for (const t of S.tabs) if (t !== tab && t.src && samePath(t.src, p)) delete t.src;      // that tab keeps its name and items
   tab.src = p;
   const base = String(p).split(/[\\/]/).pop().replace(PL_FILE_RE, '').slice(0, 40);
-  const renamed = !!base && base !== tab.name;
+  const renamed = !o.keepName && !!base && base !== tab.name;     // QUICK SAVE (keepName) saves under the tab's name: no renaming
   if (renamed) tab.name = base;
   renderTabs(); saveSoon();
   return renamed;
