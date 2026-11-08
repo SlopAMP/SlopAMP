@@ -148,21 +148,43 @@ class Downloader {
       '--print', 'pre_process:PHOSSTATUS %(live_status)s',
       '--match-filter', '!is_live & live_status!=?is_upcoming'
     ];
+    a.push(...this.pick(job));
     if (job.kind === 'audio') {
       // 2.7: the video's thumbnail goes into the MP3 as its cover art (shown in Library → Preview and in other players)
-      a.push('-f', 'ba/b', '-x', '--audio-format', 'mp3', '--audio-quality', '0', '--embed-metadata', '--embed-thumbnail', '--convert-thumbnails', 'jpg');
-    } else {
+      a.push('-x', '--audio-format', 'mp3', '--audio-quality', '0', '--embed-metadata', '--embed-thumbnail', '--convert-thumbnails', 'jpg');
+    } else a.push('--merge-output-format', 'mp4', '--remux-video', 'webm>mp4', '--embed-metadata');
+    a.push(job.url);
+    return a;
+  }
+  // which format(s) a download takes (shared by the download and, 2.9.1, the size check before it)
+  pick(job) {
+    const a = [];
+    if (job.kind === 'audio') a.push('-f', 'ba/b');
+    else {
       // 2.5 (#22): X-ready by default = H.264 first (best H.264 up to the height, AAC audio), so the .mp4 posts to X;
       // a video with no H.264 falls back to its best format (SlopAMP then labels it "not for X"). 'best' = the
       // largest picture whatever the codec (4K / 1440p are VP9 / AV1 on YouTube), as before 2.5.
       const h = { xready: 1080, 1080: 1080, 720: 720, 480: 480 }[job.quality];
       const sort = h ? `vcodec:h264,res:${h},fps,acodec:m4a` : 'res,fps,vcodec:h264,acodec:m4a';
-      a.push('-f', 'bv*+ba/b', '-S', sort, '--merge-output-format', 'mp4', '--remux-video', 'webm>mp4', '--embed-metadata');
+      a.push('-f', 'bv*+ba/b', '-S', sort);
     }
     // an X post can hold several videos: take the one the link names (".../video/2"), else the first
     if (job.x) a.push('--playlist-items', String(Math.max(1, +((/\/video\/(\d+)$/.exec(job.url) || [])[1] || 1))));
-    a.push(job.url);
     return a;
+  }
+  // 2.9.1 (size limit): about how big a download will be, in bytes, before it starts (yt-dlp -j: nothing is saved).
+  // The picked formats' filesize, else filesize_approx, else bitrate × length; an MP3 is about 256 kb/s × length.
+  // null when yt-dlp can't say (the caller then estimates from the item's length).
+  async sizeOf(job) {
+    const exe = this.ensureExe(); if (!exe) return null;
+    const args = [...this.baseArgs(false), '-j', ...this.pick(job), job.url];
+    const env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', ...(this.jsRuntime ? this.jsRuntime.env : {}) };
+    const out = await new Promise((resolve) => {
+      execFile(exe, args, { windowsHide: true, timeout: 45000, maxBuffer: 32 * 1024 * 1024, env }, (err, stdout) => resolve(String(stdout || '')));
+    });
+    let j = null;
+    for (const line of out.split('\n')) { if (!line.trim().startsWith('{')) continue; try { j = JSON.parse(line); break; } catch (_) {} }
+    return sizeFromInfo(j, job.kind);
   }
 
   run(job, android) {
@@ -209,6 +231,16 @@ class Downloader {
   }
 }
 
+function sizeFromInfo(j, kind) {
+  if (!j || typeof j !== 'object') return null;
+  const dur = Number(j.duration) || 0;
+  if (kind === 'audio') return dur ? Math.round(dur * 256000 / 8) : null;
+  const one = (f) => Number(f && (f.filesize || f.filesize_approx)) || (f && f.tbr && dur ? Math.round(f.tbr * 1000 / 8 * dur) : 0);
+  const parts = Array.isArray(j.requested_formats) && j.requested_formats.length ? j.requested_formats : [j];
+  const n = parts.reduce((a, f) => a + one(f), 0);
+  return n > 0 ? n : null;
+}
+
 function killTree(proc, sync) {
   if (!proc || proc.exitCode !== null) return;
   const args = ['/pid', String(proc.pid), '/T', '/F'];
@@ -235,4 +267,4 @@ function friendlyError(msg) {
   return last.replace(/^ERROR:\s*/, '').replace(/\[(youtube|twitter)\]\s*[\w-]+:\s*/, '').slice(0, 240);
 }
 
-module.exports = { Downloader };
+module.exports = { Downloader, sizeFromInfo };

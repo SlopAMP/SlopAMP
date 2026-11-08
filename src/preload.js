@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('phosphor', {
   dlLookup: (vids) => ipcRenderer.invoke('dl:lookup', vids),
   dlRemember: (vid, kind, file, title) => ipcRenderer.send('dl:remember', vid, kind, file, title),
   dlmList: () => ipcRenderer.invoke('dlm:list'),
+  dlSize: (job) => ipcRenderer.invoke('dl:size', job),   // 2.9.1: a download's size before it starts
   dlmDelete: (rows) => ipcRenderer.invoke('dlm:delete', rows),
   dlmCleanMissing: () => ipcRenderer.invoke('dlm:clean-missing'),
   dlForget: (vid, kind) => ipcRenderer.send('dl:forget', vid, kind),

@@ -793,6 +793,13 @@ function registerIpc() {
   });
   // ---- downloads
   ipcMain.handle('dl:info', () => ({ available: downloader.available(), dirs: downloadDirs() }));
+  // 2.9.1 (size limit): about how big a download will be, before it starts (bytes, or null when yt-dlp can't say)
+  ipcMain.handle('dl:size', async (_e, job) => {
+    if (!job || typeof job.url !== 'string' || !downloader || !downloader.available()) return null;
+    const x = X_POST_URL_RE.test(job.url);
+    if (!x && !/^https:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(job.url)) return null;
+    try { return await downloader.sizeOf({ url: job.url, kind: job.kind === 'audio' ? 'audio' : 'video', quality: ['xready', 'best', '1080', '720', '480'].includes(job.quality) ? job.quality : 'xready', x }); } catch (e) { log('size check failed', e.message); return null; }
+  });
   ipcMain.handle('dl:start', (_e, job) => {
     const isX = !!job && typeof job.url === 'string' && X_POST_URL_RE.test(job.url);
     if (!job || typeof job.url !== 'string' || (!isX && !/^https:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(job.url))) return { ok: false, reason: 'unsupported' };

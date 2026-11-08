@@ -1,6 +1,20 @@
 # Changelog
 
-## 2.9.0 — unreleased
+## 2.9.1 — unreleased
+
+- **Downloads folder size limit** ("?" → Downloads folder): **Off** (the default), 1, 5, 10, 25, 50 or 100 GB, or **Custom…**, with a bar of what's in SlopAMP's folders (videos, MP3s and clips count) that turns amber past 90%. With a limit on, the Library shows the bar next to the file count too.
+  - With a limit on, SlopAMP checks how big a download will be before it starts (yt-dlp, about 2 seconds; from the length and quality when YouTube or X doesn't say). A download that fits just goes.
+  - If it would pass the limit, nothing downloads until you answer a box. The box lists exactly which downloads would go to the Recycle Bin: the oldest first, never one that's in a playlist (any tab or saved playlist; YT History and X History don't count, nor their synced copies in Playlists) or a ★ favorite, and never clips, shots, skins or saved playlists. **Cancel download** is selected by default, so pressing Enter never deletes. **Choose files…** opens the Library oldest-first with those files ticked. A note says files go to the Recycle Bin and can be restored. **Why are these kept?** lists every kept file and what keeps it (which tab, which saved playlist, or ★).
+  - When even that wouldn't make enough room, a second box says so and offers **Open Library**, **Cancel download** or **Download anyway**.
+  - DOWNLOAD ALL asks for each item that would go over, with **Do the same for the rest of this download**; the result says how many were skipped.
+  - **Make room…** runs the same cleanup whenever you like: free 1, 2, 5 or 10 GB, everything it can, or (when you're over) just enough to get back under the limit.
+  - Nothing is ever deleted without the box. If a download turns out bigger than expected, SlopAMP only tells you that you're over the limit.
+- **Favorites in the Library**: a ☆ before every title (a ★ on Preview tiles); click it, press **F**, or right-click → **★ Add to Favorites** (also on playlist items that have a file). **★ Favorites** next to the search shows only favorites, in any section. Favorites are never removed to make room; deleting one by hand still works, after a warning. A favorite stays a favorite when the file is renamed or a YouTube / X video is downloaded again.
+- Downloads that are in a playlist say so in the Library ("▶ in Road Trip"; the tooltip names every tab and saved playlist that holds it), so you can see what the size limit keeps.
+- Fix (bug #7): the Library's search box (and the skin picker's) was unreadable in Pocket LCD (dark green on dark green). Search boxes now use each skin's own field colours.
+- Tests: `tests/size-limit-favorites.js` (the stand-in yt-dlp now also answers sizes and writes files).
+
+## 2.9.0 — released Nov 5, 2026
 
 Bug fixes only.
 

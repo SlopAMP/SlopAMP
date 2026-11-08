@@ -373,10 +373,11 @@
 
   <dialog id="dlmDlg">
     <div class="dlm-title"><span>LIBRARY</span><button type="button" id="dlmX" title="Close (Esc)">&#x2715;</button></div>
-    <div class="dlm-sum"><span class="dlm-lcd" id="dlmCount">0 FILES</span><span class="dlm-miss" id="dlmMiss"></span>
+    <div class="dlm-sum"><span class="dlm-lcd" id="dlmCount">0 FILES</span><span class="dlm-miss" id="dlmMiss"></span><span class="dlm-use hidden" id="dlmUse"><span id="dlmUseT"></span><span class="room-bar" id="dlmUseBar"></span></span>
       <div class="dlm-seg" id="dlmSeg"><button type="button" data-f="all" class="on" title="Videos, MP3s and saved playlists">ALL</button><button type="button" data-f="video">VIDEO</button><button type="button" data-f="audio">MP3</button><button type="button" data-f="playlist">PLAYLISTS</button><button type="button" data-f="clips" title="Your MP3 and MP4 clips (made with CLIP)">CLIPS</button><button type="button" data-f="skins">SKINS</button></div></div>
     <div class="dlm-searchrow"><input type="text" id="dlmSearch" placeholder="Search your library&#8230;" spellcheck="false"><button type="button" id="dlmSearchX" class="hidden" title="Clear search">&#x2715;</button>
       <!-- 2.7: Classic (the list) | Preview (a picture of each item), remembered per section -->
+      <button type="button" class="dlm-favbtn" id="dlmFav" title="Show only your ★ favorites (kept when SlopAMP makes room)">&#9733; Favorites</button>
       <div class="dlm-view" id="dlmView"><button type="button" data-v="classic" title="Classic view: the list">&#9776; Classic</button><button type="button" data-v="preview" title="Preview view: a picture of each item">&#9638; Preview</button></div>
       <div class="dlm-tip hidden" id="dlmTip"><b>New: Preview view</b> &#8212; a picture of every file. Try it here. <button type="button" id="dlmTipX" title="Got it">&#x2715;</button></div></div>
     <div class="clsub" id="clsub"><button type="button" data-c="all">All clips</button><button type="button" data-c="mp3clip">MP3 clips</button><button type="button" data-c="mp4clip">MP4 clips</button></div>
@@ -421,6 +422,22 @@
     </form>
   </dialog>
 
+  <!-- 2.9.1: before a download would pass the size limit, and Make room… (app.js "size limit + Favorites") -->
+  <dialog id="roomDlg">
+    <div class="dlg-title" id="roomTitle"></div>
+    <div class="dlg-note" id="roomText"></div>
+    <div class="room-bar big" id="roomBar"></div>
+    <div class="room-leg" id="roomLeg"></div>
+    <div class="room-free hidden" id="roomFreeRow">Free up <select id="roomFree"></select></div>
+    <div class="dlg-note" id="roomWhat"></div>
+    <div class="room-list" id="roomList"></div>
+    <div class="room-kept" id="roomKept"></div>
+    <details class="room-why" id="roomWhy"><summary id="roomWhySum">Why are these kept?</summary><div class="room-list" id="roomWhyList"></div></details>
+    <div class="room-bin">&#9851; Files go to the Recycle Bin, so you can restore them from there.</div>
+    <label class="room-same hidden" id="roomSameRow"><input type="checkbox" id="roomSame"> Do the same for the rest of this download</label>
+    <div class="dlg-btns room-btns" id="roomBtns"></div>
+  </dialog>
+
   <dialog id="confirmDlg">
     <form method="dialog">
       <div class="dlg-title" id="confirmTitle"></div>
@@ -457,6 +474,15 @@
         <label class="upd-mode" for="xPlaySel" title="Play right away: an X post that isn&#8217;t downloaded plays in SlopAMP&#8217;s own player (up to 720p, nothing is saved). Ask me: SlopAMP asks first: play here, download or open it on X.">X posts
           <select id="xPlaySel"><option value="stream">Play right away</option><option value="ask">Ask me</option></select>
         </label>
+        <!-- 2.9.1: the downloads folder's size limit (app.js "size limit + Favorites") -->
+        <div class="dl-room"><div class="upd-head"><span class="upd-lbl">Downloads folder</span><button type="button" id="dlRoomBtn" title="Move the oldest downloads (not in a playlist, not ★ favorites) to the Recycle Bin">Make room&#8230;</button></div>
+        <label class="upd-mode" for="dlLimitSel" title="Before a download would pass the limit, SlopAMP asks first. It never deletes anything on its own.">Size limit
+          <select id="dlLimitSel"><option value="0">Off</option><option value="1">1 GB</option><option value="5">5 GB</option><option value="10">10 GB</option><option value="25">25 GB</option><option value="50">50 GB</option><option value="100">100 GB</option><option value="custom">Custom&#8230;</option></select>
+          <input type="number" id="dlLimitGb" class="hidden" min="1" max="100000" step="1" title="Your limit in GB (Enter)"><span class="dl-gb">GB</span>
+        </label>
+        <div class="room-bar" id="dlUseBar"></div>
+        <div class="room-leg" id="dlUseLeg"></div>
+        <div class="sys-hint">Videos, MP3s and clips count. Before a download would pass the limit, SlopAMP asks first; it never deletes anything on its own.</div></div>
         <div class="upd-head"><span class="upd-lbl">Windows &amp; keys</span></div>
         <label class="sys-ck" title="The &#8211; button (and the taskbar) hides SlopAMP next to the clock instead; click its icon to bring it back. &#10005; still quits."><input type="checkbox" id="sysTray"><span>Minimize to the tray <small>(click its icon to come back)</small></span></label>
         <label class="sys-ck" title="Your keyboard&#8217;s play / next / previous / stop keys control SlopAMP even in the background. Off: other players (Spotify, your browser) get them; fully after restarting SlopAMP."><input type="checkbox" id="sysKeys"><span>Use media keys <small>(also in the background)</small></span></label>

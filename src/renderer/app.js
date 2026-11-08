@@ -32,6 +32,8 @@ const S = {
   rate: 1,             // playback speed (this session only)
   subsOn: false,       // subtitles stay on for the next items once turned on
   xPlay: 'stream',     // 2.8: an X post that isn't downloaded plays right away ('stream') or asks first ('ask'), set in "?"
+  dlLimit: 0,          // 2.9.1: the downloads folder's size limit in GB (0 = off), set in "?" → Downloads folder
+  favs: {},            // 2.9.1: Library favorites: 'y:<video id>' (a download, any copy of it) or 'f:<path, lower case>' -> 1
   lib: { w: 0, h: 0, view: 'grid', modes: {}, tip: 0 },   // the Library's size once resized (0: default); `view` was SLOP's (kept so old state reads); 2.7: modes = Classic / Preview per section, tip = the "New: Preview view" tip was seen
   vis: { mode: 'milkdrop', preset: '', cycle: true, panel: 'open', showTitle: false, showPreset: true, showTrack: false, favs: [], favOnly: false }   // audio visualizer: milkdrop (Butterchurn) | bars; panel: open | min | hidden
 };
@@ -262,7 +264,7 @@ function showOverlay(title, text, buttons = [], opts = {}) {
     paint();
     CD.timer = setInterval(() => {
       if (CD.btn !== cdBtn || !$('#overlay').classList.contains('show')) { cdStop(true); return; }
-      if (!$('#dlMenu').classList.contains('hidden')) return;     // choosing a quality: wait
+      if (!$('#dlMenu').classList.contains('hidden') || ROOM.open) return;     // choosing a quality, or the size-limit box (2.9.1): wait
       CD.left--; paint();
       if (CD.left > 0) return;
       cdStop(true); hideOverlay();
@@ -1252,6 +1254,7 @@ list.addEventListener('contextmenu', (e) => {
       if (lp) { entries.push(['Show local copy in folder', () => P.showInFolder(lp)], ['Delete local copy', () => deleteLocalCopy(it)]); }
       entries.push(['Open in browser', () => P.openExternal(it.url)], ['Rename…\tF2', () => renameItem(it)]);
     }
+    if (favKeysOfItem(it).length) entries.push([isFavItem(it) ? '\u2606 Remove from Favorites' : '\u2605 Add to Favorites', () => favToggleItems(S.items.filter(x => S.sel.has(x.id)).concat(S.sel.has(it.id) ? [] : [it]), !isFavItem(it))]);   // 2.9.1
     entries.push(...clipMenuEntries(it));                 // CLIP (2.3)
     { const files = S.items.filter(x => S.sel.has(x.id)).map(xVideoFile).filter(Boolean), own = xVideoFile(it);   // Fix for X (2.5)
       if (own) entries.push([`𝕏 Fix for X…${files.length > 1 && files.includes(own) ? ` (${files.length})` : ''}`, () => xFixOpen(files.length > 1 && files.includes(own) ? files : [own])]); }
@@ -2054,6 +2057,7 @@ async function openAbout() {
   $('#aboutEnc').textContent = info.hasFfmpeg ? `FFmpeg ready · video converter: ${info.encoder || 'detecting…'}` : 'FFmpeg not found — only natively supported formats will play.';
   $('#assocRow').classList.toggle('hidden', info.platform !== 'win32');
   $('#dlFmtSel').value = dlDefault();
+  roomPaintSettings();      // 2.9.1: Downloads folder: the limit and the bar
   $('#xPlaySel').value = xStreamOn() ? 'stream' : 'ask';
   $('#aboutDlg').showModal();
 }
@@ -2489,7 +2493,7 @@ async function openDlMenu(item, pos) {
 $('#dlFmtSel').onchange = (e) => { S.dlFormat = e.target.value === 'best' ? 'best' : 'xready'; saveSoon(); toast(S.dlFormat === 'best' ? 'Video downloads: Best quality (4K / AV1; may not post to X).' : 'Video downloads: X-ready (H.264 + AAC, up to 1080p).', 3000); };
 const dlDefault = () => (S.dlFormat === 'best' ? 'best' : 'xready');
 $('#xPlaySel').onchange = (e) => { S.xPlay = e.target.value === 'ask' ? 'ask' : 'stream'; saveSoon(); toast(S.xPlay === 'ask' ? 'X posts: SlopAMP asks first (play here, download or open on X).' : 'X posts: play right away in SlopAMP (nothing is saved).', 3000); };
-async function startDownload(item, kind, quality, quiet) {
+async function startDownload(item, kind, quality, quiet, batch) {
   // If the YouTube player already knows this is a live stream, don't even start yt-dlp.
   try {
     if (curItem() === item && engine === 'youtube' && yt && yt.getVideoData && yt.getVideoData().isLive) {
@@ -2497,12 +2501,16 @@ async function startDownload(item, kind, quality, quiet) {
       return;
     }
   } catch (_) {}
+  const d0 = DL.get(item.id);
+  if (!(d0 && DL_BUSY.includes(d0.status)) && await roomCheck(item, kind, quality, batch) !== 'go') return { ok: false, reason: 'room' };   // 2.9.1: the size limit
   const res = await P.dlStart({ id: item.id, vid: item.vid, url: item.url, kind, quality, title: item.title });
   if (res && res.ok && CD.itemId === item.id) {   // the choice sheet waits for this download now
     cdStop();
     $('#ovText').textContent = item.type === 'x' ? 'It’s downloading now and plays when it’s done.' : 'It’s downloading now. You can play it when it’s done.';
   }
   if (!res || !res.ok) {
+    if (res && res.reason !== 'room') ROOM.pending.delete(item.id);
+    if (res && res.reason === 'room') return res;       // the size-limit box said no: nothing to add
     const why = { busy: 'That download is already running.', queued: 'That download is already queued.', missing: 'The downloader isn’t included in this copy of SlopAMP.', unsupported: 'Only YouTube videos and X posts can be downloaded.' }[res && res.reason] || 'Couldn’t start the download.';
     if (!quiet) toast(why);
   }
@@ -2525,6 +2533,7 @@ function linkDownload(item, ev) {
 }
 P.onDl((ev) => {
   clipDlFailed(ev);
+  if (['done', 'error', 'canceled'].includes(ev.status)) { ROOM.pending.delete(ev.id); if (ev.status === 'done') roomAfterDownload(); }   // 2.9.1
   const prev = DL.get(ev.id) || {};
   const d = { ...prev, ...ev };
   DL.set(ev.id, d);
@@ -2539,7 +2548,7 @@ P.onDl((ev) => {
     if (ev.status === 'done' && ev.file) { linkDownload(item, ev); if (ev.x !== undefined) XS.set(ev.file, ev.x || null); else XS.delete(ev.file); xsRecheck(); }
     if (ev.status === 'error' && ev.live && item) markLive(item, true);
     if (ev.status === 'done') updateDlInfo();
-    if (!dlBatch.ids.size) finishDlBatch(); else renderDlProgress();
+    if (!dlBatch.ids.size && !dlBatch.adding) finishDlBatch(); else renderDlProgress();
     renderList();
     return;
   }
@@ -3011,27 +3020,305 @@ async function downloadAll(kind, quality) {
   if (!info.available) { toast('The downloader isn’t included in this copy of SlopAMP.'); return; }
   const targets = dlTargets(kind);
   if (!targets.length) { toast(kind === 'audio' ? 'Every item already has an MP3.' : 'Every item is already saved.', 3000); return; }
-  dlBatch = { ids: new Set(), total: 0, done: 0, failed: 0, canceled: 0 };
+  dlBatch = { ids: new Set(), total: 0, done: 0, failed: 0, canceled: 0, adding: true, room: {}, skipped: 0 };   // room: 2.9.1 "Do the same for the rest"
+  const b = dlBatch;
   for (const it of targets) {
-    if (!dlBatch) break;
-    dlBatch.ids.add(it.id); dlBatch.total++;
-    const res = await startDownload(it, kind, quality, true);
-    if (!dlBatch) break;
-    if (!res || !res.ok) { dlBatch.ids.delete(it.id); dlBatch.total--; }
+    if (dlBatch !== b) break;
+    b.ids.add(it.id); b.total++;
+    const res = await startDownload(it, kind, quality, true, b);
+    if (dlBatch !== b) break;
+    if (!res || !res.ok) { b.ids.delete(it.id); b.total--; if (res && res.reason === 'room') b.skipped++; }
   }
-  if (dlBatch && !dlBatch.total) { dlBatch = null; toast('Couldn’t start the downloads.'); return; }
-  if (dlBatch) renderDlProgress();
+  if (dlBatch !== b) return;
+  b.adding = false;
+  if (!b.total) { dlBatch = null; toast(b.skipped ? 'No downloads started: they would pass your size limit.' : 'Couldn’t start the downloads.', 3500); return; }
+  if (!b.ids.size) finishDlBatch(); else renderDlProgress();
 }
 function cancelDlBatch() { if (!dlBatch) return; for (const id of [...dlBatch.ids]) P.dlCancel(id); }
 function finishDlBatch() {
   const b = dlBatch; dlBatch = null;
   if (!b) return;
-  const extra = [b.failed ? `${b.failed} failed or live` : '', b.canceled ? `${b.canceled} canceled` : ''].filter(Boolean).join(', ');
+  const extra = [b.failed ? `${b.failed} failed or live` : '', b.canceled ? `${b.canceled} canceled` : '', b.skipped ? `${b.skipped} skipped: size limit` : ''].filter(Boolean).join(', ');
   showDlBar({ text: `${b.done ? '✓' : '✕'} Downloaded ${b.done} of ${b.total}${extra ? ` (${extra})` : ''}`, pct: b.total ? b.done / b.total * 100 : 0, hideAfter: 10000 });
 }
 
+// ------------------------------------------------------------------ 2.9.1: downloads folder size limit + Favorites
+// "?" → Downloads folder: a size limit (Off by default; 5 / 10 / 25 / 50 / 100 GB or your own) and a bar of what's in
+// SlopAMP's folders (videos, MP3s, clips). With a limit on, every download is sized first (yt-dlp, nothing saved;
+// from the length and quality when it can't say). If it would pass the limit, nothing downloads until the box
+// answers: it lists exactly which downloads go to the Recycle Bin, oldest first, never one that's in a playlist
+// (any tab or saved playlist; YT / X History don't count) or a ★ favorite, and never clips, shots, skins or
+// playlists. When even that isn't enough room, it says so and offers Download anyway. DOWNLOAD ALL asks per item,
+// with "Do the same for the rest". Nothing is deleted without the box. Make room… runs the same cleanup on demand.
+// Favorites: ☆ / ★ before a title in the Library (and on Preview tiles), right-click or F; the ★ Favorites button
+// shows only them. A download's favorite is kept by its video id (any copy, re-downloads too), a file's by its path
+// (it follows Rename). Deleting a favorite by hand still works, after a warning.
+const GIB = 1024 ** 3;
+const ROOM = { pending: new Map(), open: false, resolve: null };     // pending: item id -> { n: bytes, vid, kind } of a download under way
+const limitBytes = () => (S.dlLimit > 0 ? S.dlLimit * GIB : 0);
+const lc = (p) => String(p || '').toLowerCase();
+const favKeysOfRow = (r) => (r.vid ? ['y:' + r.vid, 'f:' + lc(r.path)] : ['f:' + lc(r.path)]);
+const isFavRow = (r) => favKeysOfRow(r).some(k => S.favs[k]);
+const favKeysOfItem = (it) => {
+  if (!it) return [];
+  if (it.type === 'file') return it.path && !it.missing ? ['f:' + lc(it.path)] : [];
+  const lp = [it.localVideo, it.localAudio].filter(Boolean);
+  return lp.length && it.vid ? ['y:' + it.vid, ...lp.map(p => 'f:' + lc(p))] : [];
+};
+const isFavItem = (it) => favKeysOfItem(it).some(k => S.favs[k]);
+function favSet(keys, on) {
+  for (const k of keys) { if (on) S.favs[k] = 1; else delete S.favs[k]; }
+}
+function favChanged(n, on) {
+  saveSoon();
+  if ($('#dlmDlg').open) dlmRender();
+  toast(on ? `★ ${n === 1 ? 'Added to' : `${n} added to`} Favorites (kept when SlopAMP makes room)` : `${n === 1 ? 'Removed from' : `${n} removed from`} Favorites`, 2200);
+}
+function favToggleRows(rows, on) {
+  rows = rows.filter(r => r.kind !== 'playlist' && !r.missing); if (!rows.length) return;
+  for (const r of rows) favSet(on ? [favKeysOfRow(r)[0]] : favKeysOfRow(r), on);
+  favChanged(rows.length, on);
+}
+function favToggleItems(items, on) {
+  items = items.filter(it => favKeysOfItem(it).length); if (!items.length) return;
+  for (const it of items) { const ks = favKeysOfItem(it); favSet(on ? [ks[0]] : ks, on); }
+  favChanged(items.length, on);
+}
+// ---- what's in SlopAMP's folders
+async function roomUsage() {
+  const [dl, clips] = await Promise.all([P.dlmList(), P.clipList().catch(() => [])]);
+  const rows = dl.filter(r => !r.missing && r.size > 0);
+  const sum = (a) => a.reduce((n, r) => n + (r.size || 0), 0);
+  const video = sum(rows.filter(r => r.kind === 'video')), audio = sum(rows.filter(r => r.kind === 'audio'));
+  const clip = sum((clips || []).filter(r => !r.missing));
+  return { rows, video, audio, clips: clip, total: video + audio + clip };
+}
+// which files are in a playlist: every tab but YT / X History, and every saved playlist (Library → PLAYLISTS) except
+// the synced copies of YT / X History (Playlists\YouTube History.m3u8 / X History.m3u8: by call B, History doesn't
+// count). key -> every playlist that holds it: [{ kind: 'tab' | 'saved', name }]
+async function roomProtect() {
+  const names = new Map();
+  const add = (k, kind, name) => {
+    if (!k) return;
+    const a = names.get(k) || []; if (!a.some(x => x.kind === kind && x.name === name)) a.push({ kind, name }); names.set(k, a);
+  };
+  for (const t of S.tabs) {
+    if (isHist(t)) continue;
+    for (const it of t.items) {
+      if (it.type === 'file' && it.path) add('f:' + lc(it.path), 'tab', t.name);
+      if (isWeb(it) && it.vid) add('y:' + it.vid, 'tab', t.name);
+      for (const p of [it.localVideo, it.localAudio]) if (p) add('f:' + lc(p), 'tab', t.name);
+    }
+  }
+  const mirrors = new Set(HIST_KINDS.map(k => lc(HK[k].file)));
+  const pls = await P.plList().catch(() => []);
+  for (const r of pls || []) {
+    if (mirrors.has(lc(String(r.path).split(/[\\/]/).pop()))) continue;      // YT / X History's synced copy: not a playlist here
+    const res = await P.plOpen(r.path).catch(() => null);
+    for (const e of (res && res.entries) || []) {
+      if (e.path) add('f:' + lc(e.path), 'saved', r.title);
+      else if (e.url) { const it = linkItem(e.url); if (it && it.vid) add('y:' + it.vid, 'saved', r.title); }
+    }
+  }
+  return names;
+}
+// every playlist that keeps this download ([] when none); protectedBy: a short label, or null
+const protectedAll = (r, names) => { const a = [...(names.get('f:' + lc(r.path)) || [])]; for (const x of (r.vid && names.get('y:' + r.vid)) || []) if (!a.some(y => y.kind === x.kind && y.name === x.name)) a.push(x); return a; };
+const plLabel = (x) => (x.kind === 'tab' ? `tab “${x.name}”` : `saved playlist “${x.name}”`);
+const protectedBy = (r, names) => { const a = protectedAll(r, names); return a.length ? a[0].name : null; };
+// the downloads that would go (oldest first) to free `need` bytes; need = Infinity: every one that may go
+function roomPlan(rows, names, need) {
+  const inPl = rows.filter(r => protectedBy(r, names)), fav = rows.filter(r => !protectedBy(r, names) && isFavRow(r));
+  const may = rows.filter(r => !protectedBy(r, names) && !isFavRow(r)).sort((a, b) => a.mtime - b.mtime);
+  const pick = []; let freed = 0;
+  for (const r of may) { if (freed >= need) break; pick.push(r); freed += r.size; }
+  const all = inPl.flatMap(r => protectedAll(r, names));
+  const tabs = [...new Set(all.filter(x => x.kind === 'tab').map(x => x.name))], saved = [...new Set(all.filter(x => x.kind === 'saved').map(x => x.name))];
+  const why = [...inPl.map(r => ({ r, by: protectedAll(r, names).map(plLabel).join(', ') })), ...fav.map(r => ({ r, by: '★ favorite' }))];
+  return { pick, freed, enough: freed >= need, may, maySize: may.reduce((a, r) => a + r.size, 0), inPl: inPl.length, tabs, saved, favs: fav.length, why };
+}
+// about how big a download is when yt-dlp can't say: its length × a usual bitrate for the quality (0: unknown)
+function roomGuess(item, kind, quality) {
+  const d = item && item.duration; if (!d) return 0;
+  const kbps = kind === 'audio' ? 256 : { best: 8000, 480: 1200, 720: 2500 }[quality] || 4000;
+  return Math.round(d * kbps * 1000 / 8);
+}
+// before a download: 'go' or 'stop' (the box decided). batch: DOWNLOAD ALL's state, for "Do the same for the rest".
+async function roomCheck(item, kind, quality, batch) {
+  const lim = limitBytes(); if (!lim) return 'go';
+  if (!batch) showDlBar({ text: `Checking the size of "${item.title}"…`, pct: 0, busy: true });
+  let size = await P.dlSize({ url: item.url, kind, quality }).catch(() => null);
+  const guessed = !size;
+  if (!size) size = roomGuess(item, kind, quality);
+  const u = await roomUsage();
+  const onDisk = new Set(u.rows.map(r => `${r.vid}|${r.kind}`));      // a download whose file is already there counts once
+  const reserved = [...ROOM.pending.entries()].filter(([id, p]) => id !== item.id && !onDisk.has(`${p.vid}|${p.kind}`)).reduce((a, [, p]) => a + p.n, 0);
+  const need = u.total + reserved + size - lim;
+  const mine = { n: size, vid: item.vid, kind };
+  if (need <= 0) { ROOM.pending.set(item.id, mine); return 'go'; }
+  const names = await roomProtect();
+  const plan = roomPlan(u.rows, names, need);
+  const kindOf = plan.enough ? 'room' : 'full';
+  let v = batch && batch.room[kindOf];
+  if (!v) {
+    const ans = await roomBox({ mode: kindOf, item, size, guessed, used: u, reserved, lim, plan, batch });
+    v = ans.v;
+    if (batch && ans.same && v !== 'choose') batch.room[kindOf] = v;
+  }
+  if (v === 'delete' && plan.pick.length) { const ok = await roomTrash(plan.pick); if (!ok) return 'stop'; }
+  if (v === 'delete' || v === 'anyway') { ROOM.pending.set(item.id, mine); return 'go'; }
+  if (!batch) hideDlBar();
+  if (v === 'choose') roomChoose(plan.pick);
+  return 'stop';
+}
+function hideDlBar() { clearTimeout(dlBarTimer); $('#dlBar').classList.add('hidden'); renderDlProgress(); }
+// after a download: if the sizes guessed wrong and the folder is now past the limit, say so (nothing is deleted)
+let roomNoteT = 0;
+function roomAfterDownload() {
+  clearTimeout(roomNoteT);
+  roomNoteT = setTimeout(async () => {
+    const lim = limitBytes(); if (!lim || ROOM.pending.size) return;
+    const u = await roomUsage();
+    if (u.total > lim) toast(`Your downloads now use ${fmtGB(u.total)}, over your ${S.dlLimit} GB limit. “?” → Make room… frees some.`, 6000);
+  }, 1500);
+}
+const fmtGB = (b) => (!b ? '0 MB' : b >= GIB ? `${(b / GIB).toFixed(b >= 100 * GIB ? 0 : 1)} GB` : fmtSize(b));
+// move these downloads to the Recycle Bin (as the Library's Delete does); false if none could go
+async function roomTrash(rows) {
+  const paths = new Set(rows.map(r => r.path));
+  const cur = curItem();
+  const wasCurrent = cur && engine === 'local' && paths.has(localPathOf(cur));
+  if (wasCurrent) { stopEngines(); setStatus('stopped'); await new Promise(r => setTimeout(r, 250)); }
+  const res = await P.dlmDelete(rows.map(r => ({ vid: r.vid, kind: r.kind, path: r.path })));
+  let ok = 0, freed = 0;
+  for (const r of res) {
+    if (!r.ok) continue;
+    ok++; freed += (rows.find(x => x.path === r.path) || {}).size || 0;
+    for (const it of allItems()) { if (it.localVideo === r.path) delete it.localVideo; if (it.localAudio === r.path) delete it.localAudio; }
+  }
+  if (wasCurrent) { engine = cur.type === 'x' && !localPathOf(cur) ? null : 'youtube'; setMarquee(cur); }
+  renderList(); saveSoon(); updateDlButton(); updateDlInfo(); xsRecheck();
+  if ($('#dlmDlg').open) await dlmRefresh();
+  if (ok) toast(`Moved ${ok} file${ok === 1 ? '' : 's'} (${fmtGB(freed)}) to the Recycle Bin.`, 3000);
+  if (ok < rows.length) toast(`${rows.length - ok} file${rows.length - ok === 1 ? '' : 's'} couldn’t be moved to the Recycle Bin.`, 4000);
+  return ok > 0;
+}
+// Choose files…: the Library, oldest first, with the files the box would remove ticked
+async function roomChoose(pick) {
+  DLM.sort = 'mtime'; DLM.dir = 1; DLM.favOnly = false;
+  await openDownloadsManager('all');
+  DLM.sel = new Set(pick.map(dlmKey)); dlmRender();
+  toast('Oldest first, with the files SlopAMP would remove ticked. Delete what you like, then download again.', 5000);
+}
+// ---- the box
+function roomBarHtml(u, add, lim, reserved = 0) {
+  const W = Math.max(u.total + reserved + add, lim, 1) * 1.04, pc = (x) => `${(Math.max(0, x) / W * 100).toFixed(2)}%`;
+  return `<i class="v" style="width:${pc(u.video)}"></i><i class="a" style="width:${pc(u.audio)}"></i><i class="c" style="width:${pc(u.clips)}"></i>${reserved ? `<i class="r" style="width:${pc(reserved)}"></i>` : ''}${add ? `<i class="n" style="width:${pc(add)}"></i>` : ''}${lim ? `<span class="lim" style="left:${pc(lim)}"></span>` : ''}`;
+}
+const roomEsc = (t) => htmlEsc(String(t));
+function roomBox(o) {
+  return new Promise((resolve) => {
+    const d = $('#roomDlg'), lim = o.lim, u = o.used, p = o.plan;
+    ROOM.open = true; ROOM.resolve = resolve;
+    const b = (t) => `<b class="hi">${t}</b>`;
+    $('#roomTitle').textContent = o.mode === 'room' ? `You’re about to pass your ${S.dlLimit} GB limit` : o.mode === 'full' ? `Not enough room under your ${S.dlLimit} GB limit` : 'Make room';
+    const what = o.item ? `${b(roomEsc(o.item.title))} is ${o.guessed ? 'roughly' : 'about'} ${b(fmtGB(o.size))}. ` : '';
+    const now = `Your downloads use ${fmtGB(u.total)}${lim ? ` of ${S.dlLimit} GB` : ''}${o.reserved ? ` (+${fmtGB(o.reserved)} downloading)` : ''}`;
+    $('#roomText').innerHTML = o.mode === 'room' ? `${what}${now}, so it needs ${b(fmtGB(u.total + o.reserved + o.size - lim))} more room.` : o.mode === 'full' ? `${what}${now}.` : `${now}.`;
+    $('#roomBar').innerHTML = roomBarHtml(u, o.size || 0, lim, o.reserved);
+    $('#roomLeg').innerHTML = `<span><i class="sw v"></i>videos ${fmtGB(u.video)}</span><span><i class="sw a"></i>MP3s ${fmtGB(u.audio)}</span><span><i class="sw c"></i>clips ${fmtGB(u.clips)}</span>${o.size ? `<span><i class="sw n"></i>this download ${fmtGB(o.size)}</span>` : ''}${lim ? `<span>│ your limit ${S.dlLimit} GB</span>` : ''}`;
+    const list = (rows) => rows.map(r => `<div><span class="dlm-tag ${r.kind}">${r.kind === 'audio' ? 'MP3' : 'VIDEO'}</span><span class="t">${roomEsc(r.title)}</span><span class="s">${fmtSize(r.size)}</span><span class="dt">${fmtDate(r.mtime)}</span></div>`).join('');
+    const where = [p.tabs.length ? `tab${p.tabs.length === 1 ? '' : 's'} ${roomEsc(p.tabs.join(', '))}` : '', p.saved.length ? `saved playlist${p.saved.length === 1 ? '' : 's'} ${roomEsc(p.saved.join(', '))}` : ''].filter(Boolean).join('; ');
+    const kept = [p.inPl ? `${b(`${p.inPl} file${p.inPl === 1 ? '' : 's'} in a playlist`)}${where ? ` (${where})` : ''}` : '', p.favs ? b(`${p.favs} ★ favorite${p.favs === 1 ? '' : 's'}`) : ''].filter(Boolean).join(' · ');
+    const keptLine = `Kept: ${kept ? `${kept} · ` : ''}clips, shots, skins and saved playlists are never removed.`;
+    const btns = [];
+    $('#roomFreeRow').classList.toggle('hidden', o.mode !== 'manual');
+    if (o.mode === 'room') {
+      $('#roomWhat').innerHTML = `To make room, SlopAMP moves ${p.pick.length === 1 ? 'the oldest file' : `the ${b(`${p.pick.length} oldest files`)}`} to the Recycle Bin (${fmtGB(p.freed)}):`;
+      $('#roomList').innerHTML = list(p.pick);
+      btns.push(['choose', 'Choose files…', 'l'], ['cancel', 'Cancel download'], ['delete', `Delete ${p.pick.length} and download`, 'red']);
+    } else if (o.mode === 'full') {
+      $('#roomWhat').innerHTML = p.may.length ? `Even moving every download that isn’t in a playlist or a ★ favorite to the Recycle Bin (${p.may.length} file${p.may.length === 1 ? '' : 's'}, ${fmtGB(p.maySize)}) wouldn’t make enough room.` : 'Every download is in a playlist or a ★ favorite, so there’s nothing SlopAMP can remove.';
+      $('#roomList').innerHTML = '';
+      btns.push(['library', 'Open Library', 'l'], ['cancel', 'Cancel download'], ['anyway', 'Download anyway']);
+    } else {
+      const paint = () => {
+        const want = $('#roomFree').value, need = want === 'all' ? Infinity : want === 'limit' ? u.total - lim : +want * GIB;
+        const q = roomPlan(u.rows, o.names, need);
+        ROOM.manual = q;
+        $('#roomWhat').innerHTML = q.pick.length ? `SlopAMP moves ${q.pick.length === 1 ? 'the oldest file' : `the ${b(`${q.pick.length} oldest files`)}`} to the Recycle Bin (${fmtGB(q.freed)})${q.enough ? '' : ', all it can'}:` : 'There’s nothing SlopAMP can remove: every download is in a playlist or a ★ favorite.';
+        $('#roomList').innerHTML = list(q.pick);
+        const del = d.querySelector('[data-v=delete]'); if (del) { del.textContent = `Delete ${q.pick.length}`; del.disabled = !q.pick.length; }
+      };
+      const sel = $('#roomFree');
+      sel.innerHTML = `${lim && u.total > lim ? `<option value="limit">get back under the limit (${fmtGB(u.total - lim)})</option>` : ''}<option value="1">1 GB</option><option value="2">2 GB</option><option value="5">5 GB</option><option value="10">10 GB</option><option value="all">everything it can</option>`;
+      sel.onchange = paint;
+      btns.push(['cancel', 'Cancel'], ['delete', 'Delete', 'red']);
+      ROOM.paint = paint;
+    }
+    $('#roomKept').innerHTML = keptLine;
+    roomWhyPaint(p);
+    $('#roomSameRow').classList.toggle('hidden', !o.batch); $('#roomSame').checked = false;
+    $('#roomBtns').innerHTML = '';
+    for (const [v, label, cls] of btns) {
+      const el = document.createElement('button'); el.type = 'button'; el.dataset.v = v; el.textContent = label; if (cls) el.className = cls;
+      el.onclick = () => roomDone(v);
+      $('#roomBtns').appendChild(el);
+    }
+    if (o.mode === 'manual') ROOM.paint();
+    $('#roomWhy').open = false;
+    d.showModal();
+    const c = d.querySelector('[data-v=cancel]'); if (c) c.focus();       // Enter never deletes
+  });
+}
+// "Why are these kept?": each kept download and what keeps it (every tab / saved playlist, or ★)
+function roomWhyPaint(p) {
+  const w = $('#roomWhy'); w.classList.toggle('hidden', !p.why.length);
+  $('#roomWhySum').textContent = `Why ${p.why.length === 1 ? 'is 1 file' : `are ${p.why.length} files`} kept?`;
+  $('#roomWhyList').innerHTML = p.why.map(({ r, by }) => `<div><span class="dlm-tag ${r.kind}">${r.kind === 'audio' ? 'MP3' : 'VIDEO'}</span><span class="t">${roomEsc(r.title)}</span><span class="by">${roomEsc(by)}</span></div>`).join('');
+}
+function roomDone(v) {
+  const d = $('#roomDlg'), r = ROOM.resolve; ROOM.resolve = null; ROOM.open = false;
+  const same = $('#roomSame').checked;
+  if (d.open) d.close();
+  if (v === 'library') { openDownloadsManager('all'); v = 'cancel'; }
+  if (r) r({ v, same });
+}
+$('#roomDlg').addEventListener('close', () => { if (ROOM.resolve) roomDone('cancel'); });   // Esc = cancel
+// "?" → Downloads folder → Make room…: the same cleanup, any time, for as much as you pick
+async function roomMakeRoom() {
+  if ($('#aboutDlg').open) $('#aboutDlg').close();
+  const u = await roomUsage(), names = await roomProtect();
+  const all = roomPlan(u.rows, names, Infinity);
+  const ans = await roomBox({ mode: 'manual', used: u, lim: limitBytes(), size: 0, reserved: 0, plan: all, names });
+  if (ans.v === 'delete' && ROOM.manual && ROOM.manual.pick.length) await roomTrash(ROOM.manual.pick);
+}
+// ---- "?" → Downloads folder: the limit and the bar
+const LIMITS = [0, 1, 5, 10, 25, 50, 100];
+async function roomPaintSettings() {
+  const sel = $('#dlLimitSel'), gb = $('#dlLimitGb');
+  const custom = S.dlLimit > 0 && !LIMITS.includes(S.dlLimit);
+  sel.value = custom ? 'custom' : String(S.dlLimit);
+  gb.classList.toggle('hidden', !custom && sel.value !== 'custom'); if (custom) gb.value = S.dlLimit;
+  const u = await roomUsage(), lim = limitBytes();
+  const bar = $('#dlUseBar'); bar.innerHTML = roomBarHtml(u, 0, lim); bar.classList.toggle('warn', !!lim && u.total >= lim * 0.9);
+  $('#dlUseLeg').innerHTML = `<span><b>${fmtGB(u.total)}</b>${lim ? ` of ${S.dlLimit} GB` : ''}</span><span><i class="sw v"></i>Videos ${fmtGB(u.video)}</span><span><i class="sw a"></i>MP3s ${fmtGB(u.audio)}</span><span><i class="sw c"></i>Clips ${fmtGB(u.clips)}</span>${lim ? `<span>${u.total > lim ? `${fmtGB(u.total - lim)} over` : `${fmtGB(lim - u.total)} left`}</span>` : ''}`;
+}
+function roomSetLimit(n) {
+  S.dlLimit = n > 0 ? Math.min(100000, Math.round(n * 10) / 10) : 0; saveSoon(); roomPaintSettings();
+  if ($('#dlmDlg').open) dlmRender();
+  toast(S.dlLimit ? `Downloads folder limit: ${S.dlLimit} GB. SlopAMP asks before a download would pass it.` : 'Downloads folder limit: off.', 3000);
+}
+$('#dlLimitSel').onchange = (e) => {
+  const v = e.target.value;
+  if (v === 'custom') { const gb = $('#dlLimitGb'); gb.classList.remove('hidden'); gb.value = S.dlLimit || 20; gb.focus(); gb.select(); return; }
+  $('#dlLimitGb').classList.add('hidden'); roomSetLimit(+v);
+};
+$('#dlLimitGb').onchange = (e) => { const n = parseFloat(e.target.value); if (n > 0) roomSetLimit(n); };
+$('#dlRoomBtn').onclick = () => roomMakeRoom();
+
 // ------------------------------------------------------------------ Downloads manager
-const DLM = { rows: [], sel: new Set(), filter: 'all', sort: 'mtime', dir: -1, anchor: -1, q: {} };
+const DLM = { rows: [], sel: new Set(), filter: 'all', sort: 'mtime', dir: -1, anchor: -1, q: {}, favOnly: false, prot: new Map() };   // 2.9.1: favOnly = the ★ Favorites button; prot = files in a playlist
 // Bug #4 (2.6): every section (ALL, VIDEO, MP3, PLAYLISTS, CLIPS, SKINS) has its own search, kept until SlopAMP closes
 const dlmQ = (f = DLM.filter) => String(DLM.q[f] || '').trim();
 function dlmSection(f) { DLM.filter = f; DLM.anchor = -1; const s = $('#dlmSearch'); s.value = DLM.q[f] || ''; }
@@ -3080,6 +3367,7 @@ async function dlmRefresh() {
     if (it && (!r.title || /\[([\w-]{11}|x\d+(-\d+)?)\]/.test(r.title) || r.title === r.path)) r.title = it.title;
   }
   DLM.rows = rows;
+  DLM.prot = await roomProtect().catch(() => new Map());     // 2.9.1: "▶ in <playlist>" on downloads (kept when SlopAMP makes room)
   updateDlInfo();
   for (const k of [...DLM.sel]) if (!rows.some(r => dlmKey(r) === k)) DLM.sel.delete(k);
   dlmRender();
@@ -3089,7 +3377,7 @@ function dlmVisible() {
   const f = DLM.filter;
   const q = dlmQ().toLowerCase();
   const kindOk = (r) => f === 'all' || r.kind === f || (f === 'clips' && isClipRow(r) && (CLS.sub === 'all' || r.kind === CLS.sub));
-  const v = DLM.rows.filter(r => kindOk(r) && dlmHit(r, q));
+  const v = DLM.rows.filter(r => kindOk(r) && dlmHit(r, q) && (!DLM.favOnly || isFavRow(r)));
   const k = DLM.sort, dir = DLM.dir;
   v.sort((a, b) => {
     let x = a[k], y = b[k];
@@ -3117,6 +3405,9 @@ function dlmRender() {
   $('#dlmCount').textContent = `${present.length} FILE${present.length === 1 ? '' : 'S'} · ${total ? fmtSize(total).toUpperCase() : '0 MB'} · ${pls} PLAYLIST${pls === 1 ? '' : 'S'}`;
   if (cm) { const c = DLM.rows.filter(isClipRow), cs = c.reduce((a, r) => a + r.size, 0); $('#dlmCount').textContent = `${c.length} CLIP${c.length === 1 ? '' : 'S'} · ${cs ? fmtSize(cs).toUpperCase() : '0 MB'}`;
     for (const b of $('#clsub').children) { const n = b.dataset.c === 'all' ? c.length : c.filter(r => r.kind === b.dataset.c).length; b.classList.toggle('on', b.dataset.c === CLS.sub); b.textContent = `${{ all: 'All clips', mp3clip: 'MP3 clips', mp4clip: 'MP4 clips' }[b.dataset.c]} (${n})`; } }
+  if (DLM.favOnly && !cm) { const fv = vis.filter(r => !r.missing), fs = fv.reduce((a, r) => a + r.size, 0); $('#dlmCount').textContent = `${fv.length} FAVORITE${fv.length === 1 ? '' : 'S'} · ${fs ? fmtSize(fs).toUpperCase() : '0 MB'}`; }
+  $('#dlmFav').classList.toggle('on', DLM.favOnly);
+  dlmUsePaint();
   $('#dlmMiss').textContent = miss ? `${miss} missing` : '';
   $('#dlmClean').disabled = !miss;
   $('#dlmDelAll').disabled = !vis.some(r => !r.missing);
@@ -3136,6 +3427,8 @@ function dlmRender() {
       : `<td class="c"><span class="dlm-cb${on ? ' on' : ''}"></span></td><td class="t"></td><td><span class="dlm-tag ${r.missing ? 'missing' : r.kind}">${tag}</span></td><td class="r">${r.missing ? '—' : fmtSize(r.size)}</td><td class="r">${fmtDate(r.mtime)}</td><td class="c">${r.missing ? '' : '<button class="dlm-show" title="Show in folder">📁</button>'}</td>`;
     if (cm) { const fr = tr.querySelector('.from'); fr.textContent = r.from || '—'; fr.title = r.src ? `${r.from || ''}\n${r.src}${r.srcExists ? '' : ' (not there any more)'}` : 'Not made with CLIP (or its original isn\u2019t known)'; }
     tr.querySelector('.t').textContent = r.title; tr.querySelector('.t').title = `${r.title}\n${r.path}`;
+    if (r.kind !== 'playlist' && !r.missing) { const st = document.createElement('span'); const f = isFavRow(r); st.className = `fav-star${f ? ' on' : ''}`; st.textContent = f ? '\u2605' : '\u2606'; st.title = f ? 'Favorite: kept when SlopAMP makes room (click to un-star)' : 'Add to Favorites (F)'; tr.querySelector('.t').prepend(st); } else if (!cm) { const sp = document.createElement('span'); sp.className = 'fav-sp'; sp.textContent = '\u2606'; tr.querySelector('.t').prepend(sp); }   // 2.9.1 (a spacer keeps titles in line)
+    if ((r.kind === 'video' || r.kind === 'audio') && !r.missing) { const pa = protectedAll(r, DLM.prot); if (pa.length) { const m = document.createElement('span'); m.className = 'dlm-inpl'; m.textContent = `\u25b6 in ${pa[0].name}${pa.length > 1 ? ` +${pa.length - 1}` : ''}`; m.title = `Kept when SlopAMP makes room. In: ${pa.map(plLabel).join(', ')}`; tr.querySelector('.t').appendChild(m); } }
     if (r.kind === 'playlist') { const c = document.createElement('span'); c.className = 'dlm-count'; c.textContent = ` \u00b7 ${r.count} item${r.count === 1 ? '' : 's'}`; tr.querySelector('.t').appendChild(c); }
     if ((r.kind === 'video' || r.kind === 'mp4clip') && !r.missing) { const x = xOf(r.path); if (x) tr.querySelector('.t').appendChild(xTag(x, 'dlm-tag')); }   // 2.5 (#22)
     body.appendChild(tr);
@@ -3158,6 +3451,7 @@ function dlmRender() {
 // Why a section is empty (bug #4, 2.6): it names the section and the search, with Clear search (and All clips)
 function dlmEmptyHtml(q, cm) {
   const f = DLM.filter, ql = q.toLowerCase();
+  if (DLM.favOnly) return `<div class="dlm-nomatch"><b>No ★ favorites${q ? ` match “${htmlEsc(q)}”` : ' here yet'}.</b><div class="nm-btns"><button type="button" data-a="favoff">Show everything</button></div><small>Click ☆ before a title (or select and press F) to make one. Favorites are kept when SlopAMP makes room.</small></div>`;
   if (cm) {
     const sub = CLS.sub, noun = { all: 'clips', mp3clip: 'MP3 clips', mp4clip: 'MP4 clips' }[sub] || 'clips';
     const clips = DLM.rows.filter(isClipRow), inSub = clips.filter(r => sub === 'all' || r.kind === sub);
@@ -3204,7 +3498,7 @@ function lpTile(r, doc) {
   const tag = r.missing ? 'MISSING' : { audio: 'MP3', playlist: 'PLAYLIST', mp3clip: 'MP3 CLIP', mp4clip: 'MP4 CLIP' }[r.kind] || 'VIDEO';
   const ph = r.missing ? '?' : r.kind === 'playlist' ? '☰' : /audio|mp3clip/.test(r.kind) ? '♫' : '▶';
   const showKind = DLM.filter === 'all' || (DLM.filter === 'clips' && CLS.sub === 'all') || r.missing;
-  t.innerHTML = `<div class="lt-im"><span class="lt-ph">${ph}</span><span class="lt-spr"></span><span class="lt-scrub"><i></i></span>${showKind ? `<span class="lt-kd">${tag}</span>` : ''}<span class="dlm-cb"></span><span class="lt-du hidden"></span>${isClipRow(r) ? '<span class="lt-io hidden"><i></i></span>' : ''}</div><div class="lt-n"></div><div class="lt-s"></div>`;
+  t.innerHTML = `<div class="lt-im"><span class="lt-ph">${ph}</span><span class="lt-spr"></span><span class="lt-scrub"><i></i></span>${showKind ? `<span class="lt-kd">${tag}</span>` : ''}<span class="dlm-cb"></span><span class="lt-du hidden"></span>${isClipRow(r) ? '<span class="lt-io hidden"><i></i></span>' : ''}${r.kind !== 'playlist' && !r.missing ? '<span class="lt-fav off" title="Add to Favorites (F)">\u2606</span>' : ''}</div><div class="lt-n"></div><div class="lt-s"></div>`;
   t.querySelector('.lt-n').textContent = r.title;
   t.title = `${r.title}\n${r.path}`;
   const s = t.querySelector('.lt-s');
@@ -3228,6 +3522,7 @@ function lpRender(vis) {
     t._row = r; t.dataset.i = i;
     const on = DLM.sel.has(dlmKey(r));
     t.classList.toggle('sel', on); t.querySelector('.dlm-cb').classList.toggle('on', on);
+    const fv = t.querySelector('.lt-fav'); if (fv) { const f = isFavRow(r); fv.classList.toggle('off', !f); fv.textContent = f ? '\u2605' : '\u2606'; fv.title = f ? 'Favorite: kept when SlopAMP makes room (click to un-star)' : 'Add to Favorites (F)'; }   // 2.9.1
     keep.set(k, t); order.push(t);
   });
   for (const [k, t] of LP.tiles) if (!keep.has(k)) LP.io.unobserve(t);
@@ -3324,7 +3619,28 @@ $('#dlmEmpty').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-a]'); if (!b) return;
   if (b.dataset.a === 'clearq') dlmClearQ();
   else if (b.dataset.a === 'allclips') { CLS.sub = 'all'; DLM.anchor = -1; dlmRender(); }
+  else if (b.dataset.a === 'favoff') { DLM.favOnly = false; DLM.anchor = -1; dlmRender(); }
 });
+// 2.9.1: ☆ / ★ before a title (or on a tile) toggles that one; ★ Favorites shows only favorites
+for (const host of [$('#dlmBody'), $('#dlmGrid')]) host.addEventListener('click', (e) => {
+  const st = e.target.closest('.fav-star, .lt-fav'); if (!st) return;
+  e.stopImmediatePropagation(); e.preventDefault();
+  const tr = st.closest('tr, .lt'), r = tr && (tr._row || dlmVisible()[+tr.dataset.i]); if (!r) return;
+  favToggleRows([r], !isFavRow(r));
+}, true);
+$('#dlmFav').onclick = () => { DLM.favOnly = !DLM.favOnly; DLM.anchor = -1; dlmRender(); };
+// the bar by the file count (only with a limit on)
+async function dlmUsePaint() {
+  const el = $('#dlmUse'), lim = limitBytes();
+  el.classList.toggle('hidden', !lim); if (!lim) return;
+  const files = DLM.rows.filter(r => !r.missing && r.kind !== 'playlist');
+  const sum = (k) => files.filter(k).reduce((a, r) => a + (r.size || 0), 0);
+  const u = { video: sum(r => r.kind === 'video'), audio: sum(r => r.kind === 'audio'), clips: sum(r => isClipRow(r)) };
+  u.total = u.video + u.audio + u.clips;
+  $('#dlmUseT').textContent = `${fmtGB(u.total).replace(/ GB$/, '')} / ${S.dlLimit} GB`;
+  const bar = $('#dlmUseBar'); bar.innerHTML = roomBarHtml(u, 0, lim); bar.classList.toggle('warn', u.total >= lim * 0.9);
+  el.title = `Videos ${fmtGB(u.video)} · MP3s ${fmtGB(u.audio)} · clips ${fmtGB(u.clips)}. Change the limit in “?” → Downloads folder.`;
+}
 for (const host of [$('#dlmBody'), $('#dlmGrid')]) host.addEventListener('click', (e) => {     // rows, and Preview tiles (2.7)
   const tr = e.target.closest('tr, .lt'); if (!tr) return;
   const vis = dlmVisible(); const i = +tr.dataset.i; const r = vis[i]; if (!r) return;
@@ -3501,6 +3817,10 @@ $('#dlmDlg').addEventListener('keydown', (e) => {
   if (e.key === 'F2') { e.preventDefault(); const vis = dlmVisible(), a = vis[DLM.anchor], r = a && DLM.sel.has(dlmKey(a)) ? a : vis.find(x => DLM.sel.has(dlmKey(x))); if (r && !r.missing) libRename(r); }
   else if (e.key === 'Delete') { e.preventDefault(); $('#dlmDel').click(); }
   else if (e.ctrlKey && e.key.toLowerCase() === 'a') { e.preventDefault(); for (const r of dlmVisible()) DLM.sel.add(dlmKey(r)); dlmRender(); }
+  else if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.altKey && !(e.target && e.target.id === 'dlmSearch')) {   // 2.9.1: ★ the selection (or un-star it when all are)
+    e.preventDefault(); const sel = dlmVisible().filter(x => DLM.sel.has(dlmKey(x)) && x.kind !== 'playlist' && !x.missing);
+    if (sel.length) favToggleRows(sel, !sel.every(isFavRow));
+  }
 });
 async function dlmDelete(allRows, all) {
   const plRows = allRows.filter(r => r.kind === 'playlist');
@@ -3518,6 +3838,8 @@ async function dlmDelete(allRows, all) {
   if (rows.length - files.length) lines.push(`${rows.length - files.length} missing entr${rows.length - files.length === 1 ? 'y' : 'ies'} will be removed from the list.`);
   if (files.length) lines.push('Playlist items stay and stream from YouTube again.');
   if (plRows.length) lines.push('Your playlist tabs in SlopAMP aren\u2019t affected.');
+  const nFav = allRows.filter(r => r.kind !== 'playlist' && !r.missing && isFavRow(r)).length;     // 2.9.1: warn first
+  if (nFav) lines.unshift(`This includes ${nFav === allRows.length && nFav === 1 ? 'a' : nFav} \u2605 favorite${nFav === 1 ? '' : 's'}.`);
   const ok = await confirmBox(all ? `Delete all ${q ? `matching ${what}` : what}?` : `Delete ${allRows.length} item${allRows.length > 1 ? 's' : ''}?`, lines.join('\n\n'), 'Delete');
   if (!ok) return;
   let plFailed = 0;
@@ -4314,7 +4636,7 @@ function restoreName(k, prev, title, vid) {
 function moveKeys(from, to) {     // a renamed file keeps its name and its resume point
   const a = 'f:' + String(from).toLowerCase(), b = 'f:' + String(to).toLowerCase();
   if (a === b) return;
-  for (const m of [S.names, S.resume]) if (m[a]) { m[b] = m[a]; delete m[a]; }
+  for (const m of [S.names, S.resume, S.favs]) if (m[a]) { m[b] = m[a]; delete m[a]; }   // 2.9.1: favorites too
 }
 // Windows won't rename a file that's open: the player lets go of it, and carries on from the same second after
 function releaseFile(p) {
@@ -4505,6 +4827,7 @@ for (const host of [$('#dlmBody'), $('#dlmGrid')]) host.addEventListener('contex
       en.push(null);
     }
   }
+  if (!r.missing && r.kind !== 'playlist') { const fsel = sel.filter(x => x.kind !== 'playlist' && !x.missing), on = !isFavRow(r); en.push([`${on ? '\u2605 Add to Favorites' : '\u2606 Remove from Favorites'}${fsel.length > 1 ? ` (${fsel.length})` : ''}\tF`, () => favToggleRows(fsel.length ? fsel : [r], on)]); }   // 2.9.1
   if (!r.missing) en.push(['Show in folder', () => P.showInFolder(r.path)]);
   if (!r.missing && !isClipRow(r)) en.push(['Rename…\tF2', () => libRename(r)]);    // 2.6 (clips have it above)
   en.push([`Delete${sel.length > 1 ? ` (${sel.length})` : ''}`, () => dlmDelete(sel)]);
@@ -4894,7 +5217,7 @@ function stateSnapshot() {
     tabs: S.tabs.map(t => ({ id: t.id, name: t.name, current: t.current, src: t.src || undefined, items: t.items.map(({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at }) => ({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at })) })),
     tab: S.tab, playTab: S.playTab, vis: S.vis, volume: S.volume, muted: S.muted, shuffle: S.shuffle, repeat: S.repeat,
     showVideo: S.showVideo, showPlaylist: S.showPlaylist, plShade: S.plShade, vidShade: S.vidShade, remaining: S.remaining, plHeight: S.plHeight, visMode, eq: S.eq,
-    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, xPlay: S.xPlay, hist: S.hist, xhist: S.xhist
+    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, xPlay: S.xPlay, dlLimit: S.dlLimit, favs: S.favs, hist: S.hist, xhist: S.xhist
   };
 }
 function saveSoon() {
@@ -4968,6 +5291,8 @@ setInterval(() => { blink = !blink; }, 500);
     S.subsOn = !!st.subsOn;
     S.dlFormat = st.dlFormat === 'best' ? 'best' : 'xready';
     S.xPlay = st.xPlay === 'ask' ? 'ask' : 'stream';
+    S.dlLimit = Number.isFinite(+st.dlLimit) && +st.dlLimit > 0 ? Math.min(100000, +st.dlLimit) : 0;
+    S.favs = st.favs && typeof st.favs === 'object' ? { ...st.favs } : {};
     if (st.lib && typeof st.lib === 'object') {
       const modes = {};      // 2.7: Classic / Preview per Library section
       if (st.lib.modes && typeof st.lib.modes === 'object') for (const [k, v] of Object.entries(st.lib.modes)) if (['all', 'video', 'audio', 'playlist', 'clips', 'skins'].includes(k) && (v === 'preview' || v === 'classic')) modes[k] = v;

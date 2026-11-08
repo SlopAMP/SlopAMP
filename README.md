@@ -13,7 +13,7 @@ A free, retro-styled media player for Windows 10/11. It has the classic late-'90
 - **X video posts** play right in SlopAMP's own player without downloading first (up to 720p, with the EQ and visualizer); a post that can't be streamed opens X's own post card instead.
 - **Downloads (optional):** save a YouTube video (Best/1080p/720p/480p MP4) or MP3 with the bundled [yt-dlp](https://github.com/yt-dlp/yt-dlp), or download a whole playlist tab at once. Saved copies play offline. *Only download videos you have the right to save.*
 - **Playlist tabs**, plus SAVE / LOAD / QUICK SAVE of `.m3u8` playlists.
-- **Manage Library:** search, sort, open and delete downloads and saved playlists.
+- **Manage Library:** search, sort, open and delete downloads and saved playlists; ★ favorites; an optional downloads folder size limit that asks before making room (oldest first, never favorites or files in a playlist).
 - **10-band equalizer** with presets, for local files and downloaded copies.
 - **Butterchurn visualizer** (a WebGL MilkDrop engine) with 1,731 presets, search, favorites and MilkDrop-style keys (N, P, K, H). The classic green bars are also available.
 - **Resume where you left off**, playback speed 1×–3×, subtitles (embedded, `.srt`/`.vtt`/`.ass`, YouTube captions), keyboard media keys, fullscreen and mini-player modes.
