@@ -1614,11 +1614,111 @@ function newTab(name, items = []) {
   return S.tabs.length - 1;
 }
 function renameTab(i) { if (isHist(S.tabs[i])) { switchTab(i); return; } renamingTab = i; switchTab(i); renderTabs(); }
+// Closing a tab (its right-click Close, Ctrl+W). 2.9.3: a tab with items asks first: move them to the end of
+// another ordinary tab (the default, so Enter never drops the list), or drop the list. Undo on the note puts it
+// back. The last ordinary tab can't close: it empties and becomes Main, after an offer to save it to Playlists.
+// Files, downloads and saved playlists are never touched.
+let closeMoveTo = null;        // the id of the tab items were last moved to (the box starts on it)
+function closeTabBox(mode, t, others, def) {
+  return new Promise((resolve) => {
+    const d = $('#closeTabDlg'), n = t.items.length, items = `${n} item${n === 1 ? '' : 's'}`;
+    const playing = status !== 'stopped' && S.tabs[S.playTab] === t && curItem() && t.items.includes(curItem());
+    const sel = $('#ctTo');
+    if (mode === 'close') {
+      $('#ctTitle').textContent = 'Close tab';
+      $('#ctText').textContent = `"${t.name}" has ${items}${playing ? ', and one of them is playing' : ''}. Move them to another tab, or close it and drop the list?`;
+      sel.innerHTML = others.map(k => `<option value="${k}">${htmlEsc(S.tabs[k].name)} (${S.tabs[k].items.length})</option>`).join('');
+      sel.value = String(def);
+      $('#ctSmall').textContent = playing ? 'Moved: it keeps playing. Dropped: playback stops.' : 'Your files and downloads are never deleted, either way.';
+      $('#ctDrop').textContent = 'Close, drop the list';
+      const label = () => { const k = +sel.value, nm = S.tabs[k] ? S.tabs[k].name : ''; $('#ctMove').textContent = `Move to "${nm.length > 18 ? `${nm.slice(0, 17)}…` : nm}" & close`; $('#ctMove').title = `Add the ${items} to the end of "${nm}", then close "${t.name}"`; };
+      sel.onchange = label; label();
+    } else {        // the last ordinary tab
+      $('#ctTitle').textContent = 'Clear tab';
+      $('#ctText').textContent = `"${t.name}" is your only playlist tab, so it can’t close: it empties and is renamed Main. Save its ${items} first?`;
+      $('#ctSmall').textContent = `Save puts it in Playlists as "${t.name}.m3u8" (QUICK SAVE).`;
+      $('#ctDrop').textContent = 'Just clear it';
+      $('#ctMove').textContent = 'Save to Playlists & clear'; $('#ctMove').title = '';
+    }
+    $('#ctRow').classList.toggle('hidden', mode !== 'close');
+    d.returnValue = 'cancel';
+    // answered by a button (submit, which also covers Enter), Esc (cancel) or close(): whichever comes first, once
+    let done = false;
+    const form = d.querySelector('form');
+    const finish = (v) => {
+      if (done) return; done = true;
+      form.removeEventListener('submit', onSubmit); d.removeEventListener('cancel', onCancel); d.removeEventListener('close', onClose);
+      resolve(v === 'move' ? { act: 'move', to: mode === 'close' ? +sel.value : -1 } : v === 'drop' ? { act: 'drop' } : null);
+    };
+    const onSubmit = (e) => finish(e.submitter ? e.submitter.value : 'cancel');
+    const onCancel = () => finish('cancel');
+    const onClose = () => finish(d.returnValue);
+    form.addEventListener('submit', onSubmit); d.addEventListener('cancel', onCancel); d.addEventListener('close', onClose);
+    d.showModal(); setTimeout(() => $('#ctMove').focus(), 0);
+  });
+}
+function stopIfPlayingIn(t) {
+  if (S.tabs[S.playTab] === t && curItem()) { stopEngines(); engine = null; setStatus('stopped'); hideOverlay(); showLayer('empty'); setMarquee(null); updateInfo(null); }
+}
 async function closeTab(i) {
   const t = S.tabs[i]; if (!t) return;
-  if (t.items.length && !(await confirmBox(`Close "${t.name}"?`, `This tab has ${t.items.length} item${t.items.length === 1 ? '' : 's'}. Closing it removes the list (your files and downloads are not deleted).`, 'Close tab'))) return;
-  if (S.tabs.filter(x => !isHist(x)).length === 1) { S.tab = i; clearList(); t.name = 'Main'; renderTabs(); saveSoon(); return; }   // the last ordinary tab is reset, not closed
-  if (i === S.playTab && curItem()) { stopEngines(); engine = null; setStatus('stopped'); hideOverlay(); showLayer('empty'); setMarquee(null); updateInfo(null); }
+  if (isHist(t)) {        // a History tab (Ctrl+W on it): as before 2.9.3
+    if (t.items.length && !(await confirmBox(`Close "${t.name}"?`, `This tab has ${t.items.length} item${t.items.length === 1 ? '' : 's'}. Closing it removes the list (your files and downloads are not deleted).`, 'Close tab'))) return;
+    removeTabAt(i); return;
+  }
+  const others = S.tabs.map((x, k) => k).filter(k => k !== i && !isHist(S.tabs[k]));
+  if (!others.length) {   // the last ordinary tab is cleared and reset, not closed
+    if (t.items.length) {
+      const r = await closeTabBox('clear', t, others);
+      if (!r) return;
+      if (r.act === 'move') {
+        const res = await P.quickSave(t.items.map(({ type, path, url, title, duration }) => ({ type, path, url, title, duration })), t.name);
+        if (!(res && res.saved)) { toast(`Couldn’t save: ${(res && res.error) || 'unknown error'}. Nothing was cleared.`, 4000); return; }
+        toast(`\u2713 Saved "${res.name}" (${t.items.length} item${t.items.length === 1 ? '' : 's'}) and cleared the tab.`, 3000);
+        if ($('#dlmDlg').open) dlmRefresh();
+      }
+    }
+    S.tab = i; clearList(); t.name = 'Main'; renderTabs(); saveSoon(); return;
+  }
+  if (!t.items.length) { removeTabAt(i); return; }
+  const near = others.filter(k => k < i).pop(), after = others.find(k => k > i);
+  const lastTo = S.tabs.findIndex(x => x.id === closeMoveTo);
+  const def = others.includes(lastTo) ? lastTo : near != null ? near : after;
+  const r = await closeTabBox('close', t, others, def);
+  if (!r || S.tabs[i] !== t) return;
+  if (r.act === 'drop') { removeTabAt(i); return; }
+  const dest = S.tabs[r.to]; if (!dest || isHist(dest) || dest === t) return;
+  // move: the items go to the end of `dest` in their order; a playing item keeps playing there
+  const moved = t.items.slice(), playing = S.tabs[S.playTab] === t ? curItem() : null, from = dest.items.length;
+  const shown = S.tabs[S.tab] === t ? dest : S.tabs[S.tab], playTabWas = S.tabs[S.playTab];
+  dest.items.push(...moved);
+  closeMoveTo = dest.id;
+  S.tabs.splice(i, 1);
+  S.tab = Math.max(0, S.tabs.indexOf(shown));
+  if (playTabWas === t) { S.playTab = S.tabs.indexOf(dest); dest.current = playing ? dest.items.indexOf(playing) : dest.current; }
+  else S.playTab = Math.max(0, S.tabs.indexOf(playTabWas));
+  S.history = []; S.sel.clear(); S.anchor = -1;
+  renderList(); saveSoon();
+  const undo = () => {
+    if (S.tabs.includes(t)) return;
+    const back = moved.filter(it => dest.items.includes(it));
+    const shownNow = S.tabs[S.tab], playNow = S.tabs[S.playTab], cur = curItem();
+    dest.items = dest.items.filter(it => !back.includes(it));
+    t.items = back; t.current = -1;
+    S.tabs.splice(Math.min(i, S.tabs.length), 0, t);
+    if (S.tabs.includes(dest)) dest.current = cur && playNow === dest && dest.items.includes(cur) ? dest.items.indexOf(cur) : (dest.current >= from ? -1 : dest.current);
+    if (cur && playNow === dest && back.includes(cur)) { S.playTab = S.tabs.indexOf(t); t.current = t.items.indexOf(cur); } else S.playTab = Math.max(0, S.tabs.indexOf(playNow));
+    S.tab = S.tabs.indexOf(shownNow === dest ? t : shownNow);
+    S.history = []; S.sel.clear(); S.anchor = -1;
+    renderList(); saveSoon();
+    toast(`"${t.name}" is back, with its ${back.length} item${back.length === 1 ? '' : 's'}.`, 2200);
+  };
+  toast(`Moved ${moved.length} item${moved.length === 1 ? '' : 's'} from "${t.name}" to the end of "${dest.name}".`, 8000, { label: 'Undo', fn: undo });
+}
+// removes tab i and its list (stops playback if it played from it)
+function removeTabAt(i) {
+  const t = S.tabs[i]; if (!t) return;
+  stopIfPlayingIn(t);
   S.tabs.splice(i, 1);
   if (S.playTab === i) S.playTab = Math.min(i, S.tabs.length - 1); else if (S.playTab > i) S.playTab--;
   if (S.tab >= i && S.tab > 0) S.tab--;
@@ -1655,7 +1755,75 @@ function sendSelectedToTab(ti, copy) {
   toast(`${copy ? 'Copied' : 'Moved'} ${picked.length} item${picked.length === 1 ? '' : 's'} to "${dest.name}"`, 1800);
 }
 $('#tabAdd').onclick = () => { const i = newTab(); renameTab(i); };
-$('#tabStrip').addEventListener('mousedown', (e) => { const el = e.target.closest('.ptab'); if (el && e.button === 0 && !e.target.closest('input')) switchTab(+el.dataset.t); });
+$('#tabStrip').addEventListener('mousedown', (e) => { const el = e.target.closest('.ptab'); if (el && e.button === 0 && !e.target.closest('input')) { switchTab(+el.dataset.t); tabDragStart(e, el); } });
+// 2.9.3: drag a tab left / right to reorder (YT and X History stay first and don't drag). It starts after a few
+// pixels, so a click still selects and a double-click still renames. A green bar shows where it lands; near the
+// strip's edges the strip scrolls; Esc or letting go away from the strip cancels. Same rules as Move to front.
+const TD = { on: false };
+function tabDragStart(e, el) {
+  const from = +el.dataset.t, t = S.tabs[from];
+  if (!t || isHist(t) || renamingTab >= 0) return;
+  const strip = $('#tabStrip'), doc = strip.ownerDocument, x0 = e.clientX, y0 = e.clientY;
+  Object.assign(TD, { on: false, t, strip, doc, el, to: -1, ghost: null, bar: null, scroll: 0, raf: 0, x: x0, y: y0 });
+  const move = (ev) => {
+    TD.x = ev.clientX; TD.y = ev.clientY;
+    if (!TD.on) { if (Math.abs(ev.clientX - x0) < 6) return; tabDragBegin(); }
+    tabDragPaint();
+  };
+  const up = (ev) => { stop(); if (TD.on) tabDragEnd(ev.type === 'mouseup' && tabDragNear()); };
+  const key = (ev) => { if (ev.key === 'Escape' && TD.on) { ev.preventDefault(); ev.stopImmediatePropagation(); stop(); tabDragEnd(false); } };
+  const stop = () => { doc.removeEventListener('mousemove', move, true); doc.removeEventListener('mouseup', up, true); doc.removeEventListener('keydown', key, true); doc.defaultView.removeEventListener('blur', up); };
+  doc.addEventListener('mousemove', move, true); doc.addEventListener('mouseup', up, true); doc.addEventListener('keydown', key, true); doc.defaultView.addEventListener('blur', up);
+}
+function tabDragBegin() {
+  TD.on = true;
+  const doc = TD.doc;
+  TD.strip.classList.add('tdragging');
+  const el = TD.strip.querySelector(`.ptab[data-t="${S.tabs.indexOf(TD.t)}"]`) || TD.el; el.classList.add('tlift');
+  TD.ghost = doc.createElement('div'); TD.ghost.className = 'tab-ghost';
+  TD.ghost.innerHTML = `<span>${htmlEsc(TD.t.name)}</span><span class="ct">${TD.t.items.length}</span>`;
+  TD.bar = doc.createElement('div'); TD.bar.className = 'tab-bar hidden';
+  doc.body.append(TD.ghost, TD.bar);
+  const loop = () => { if (!TD.on) return; if (TD.scroll) { TD.strip.scrollLeft += TD.scroll; tabDragPaint(); } TD.raf = doc.defaultView.requestAnimationFrame(loop); };
+  TD.raf = doc.defaultView.requestAnimationFrame(loop);
+}
+const tabDragNear = () => { const r = TD.strip.getBoundingClientRect(); return TD.y > r.top - 40 && TD.y < r.bottom + 40; };
+// where the tab would go: before the first ordinary tab whose middle is right of the pointer (never before YT / X)
+function tabDragPaint() {
+  const r = TD.strip.getBoundingClientRect();
+  TD.ghost.style.left = `${TD.x + 10}px`; TD.ghost.style.top = `${r.bottom - 4}px`;
+  TD.scroll = TD.x < r.left + 24 ? -8 : TD.x > r.right - 24 ? 8 : 0;
+  const tabs = [...TD.strip.querySelectorAll('.ptab')], front = tabFront();
+  let to = S.tabs.length;
+  for (const el of tabs) { const k = +el.dataset.t; if (k < front) continue; const b = el.getBoundingClientRect(); if (TD.x < b.left + b.width / 2) { to = k; break; } }
+  TD.to = to;
+  const near = tabDragNear();
+  const ref = tabs.find(el => +el.dataset.t === to), last = tabs.filter(el => !isHist(S.tabs[+el.dataset.t])).pop();
+  const b = ref ? ref.getBoundingClientRect() : last ? last.getBoundingClientRect() : null;
+  TD.bar.classList.toggle('hidden', !near || !b);
+  if (b) { TD.bar.style.left = `${(ref ? b.left : b.right + 2) - 3}px`; TD.bar.style.top = `${b.top - 2}px`; TD.bar.style.height = `${b.height + 4}px`; }
+  TD.ghost.style.opacity = near ? '1' : '.5';
+}
+function tabDragEnd(drop) {
+  TD.on = false; TD.scroll = 0;
+  try { TD.doc.defaultView.cancelAnimationFrame(TD.raf); } catch (_) {}
+  if (TD.ghost) TD.ghost.remove(); if (TD.bar) TD.bar.remove();
+  TD.strip.classList.remove('tdragging');
+  for (const x of TD.strip.querySelectorAll('.tlift')) x.classList.remove('tlift');
+  const i = S.tabs.indexOf(TD.t);
+  if (drop && i >= 0 && TD.to >= 0) moveTabToIndex(i, TD.to > i ? TD.to - 1 : TD.to);
+  TD.t = null;
+}
+// moves tab i to position j (indexes after taking it out), after the History tabs; keeps the shown and the playing tab
+function moveTabToIndex(i, j) {
+  if (isHist(S.tabs[i])) return;
+  j = Math.max(tabFront() - (i < tabFront() ? 1 : 0), Math.min(j, S.tabs.length - 1));
+  if (j === i) return;
+  const shown = S.tabs[S.tab], playing = S.tabs[S.playTab];
+  const [t] = S.tabs.splice(i, 1); S.tabs.splice(j, 0, t);
+  S.tab = S.tabs.indexOf(shown); S.playTab = S.tabs.indexOf(playing);
+  renderTabs(); saveSoon();
+}
 $('#tabStrip').addEventListener('dblclick', (e) => { const el = e.target.closest('.ptab'); if (el && !e.target.closest('input')) renameTab(+el.dataset.t); });
 $('#tabStrip').addEventListener('wheel', (e) => { e.preventDefault(); $('#tabStrip').scrollLeft += e.deltaY || e.deltaX; }, { passive: false });
 $('#tabs').addEventListener('dblclick', (e) => { if (e.target.id === 'tabs' || e.target.id === 'tabStrip') { const i = newTab(); renameTab(i); } });

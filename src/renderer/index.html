@@ -461,6 +461,17 @@
     </form>
   </dialog>
 
+  <!-- 2.9.3: closing a tab with items (app.js closeTab): move them to another tab, or drop the list. Also "Clear tab" for the last ordinary tab. -->
+  <dialog id="closeTabDlg">
+    <form method="dialog">
+      <div class="dlg-title" id="ctTitle">Close tab</div>
+      <div class="dlg-note" id="ctText"></div>
+      <div class="ct-row" id="ctRow"><label for="ctTo">Move them to the end of</label><select id="ctTo"></select></div>
+      <div class="ct-small" id="ctSmall"></div>
+      <div class="dlg-btns"><button value="cancel">Cancel</button><button value="drop" id="ctDrop">Close, drop the list</button><button value="move" id="ctMove">Move &amp; close</button></div>
+    </form>
+  </dialog>
+
   <dialog id="loadDlg">
     <form method="dialog">
       <div class="dlg-title">Load playlist</div>

@@ -1,6 +1,17 @@
 # Changelog
 
-## 2.9.2 — unreleased
+## 2.9.3 — unreleased
+
+- **Closing a tab can move its items to another tab.** Closing a tab that has items (its right-click **Close tab**, or Ctrl+W) now asks, in the same style as the Load playlist box: **Move them to the end of** [another tab ▾], with **Cancel**, **Close, drop the list** and **Move to "…" & close**.
+  - Move is selected, so pressing Enter never drops the list. The list offers your other playlist tabs with their counts (never YT / X History) and starts on the tab you last moved items to, else the one next to it.
+  - All the items go to the end of that tab, in their order (like Load's "Add to end"), and that tab comes up. An item that's playing moves along and keeps playing.
+  - The note afterwards has **Undo**, which puts the tab back where it was, with its items.
+  - An empty tab still closes without asking. Files, downloads and saved playlists are never touched either way.
+  - The last playlist tab can't close (it empties and becomes Main, as before): its box, **Clear tab**, offers **Save to Playlists & clear** (QUICK SAVE first), **Just clear it** or **Cancel**.
+- **Drag the playlist tabs to reorder them.** Press a tab and move it left or right: a green bar shows where it lands. YT and X History stay first (they don't drag, and a tab dropped further left lands right after them). Near the strip's edge it scrolls. Esc, or letting go away from the strip, cancels. A click still selects and a double-click still renames; right-click → Move left / right / to front / to end stay.
+- Tests: `tests/tabs-293.js`.
+
+## 2.9.2 — released Nov 8, 2026
 
 - **Settings window**: every setting in one place, in its own window that opens next to the player (like CLIP) and remembers where you put it. Open it with **⚙** in the title bar, **Ctrl+,**, the tray menu's **Settings…**, **"?" → ⚙ Settings…** or the new **⚙** at the left of the playlist's bottom bar. **Esc** or **Done** closes it.
   - Sections: General, Playback, Downloads, YouTube & X, History, Look, Keys & Windows, Updates, About. **Search settings…** at the top finds a setting in any section.

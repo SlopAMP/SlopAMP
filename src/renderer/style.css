@@ -1077,3 +1077,18 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .set-foot { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--base-18); background: var(--menu-bg); font-size: var(--fs-s); color: var(--ink-dim); }
 .set-foot button { margin-left: auto; padding: 4px 14px; }
 #plbar2 .pb.pset { padding: 0 6px; font-size: var(--fs-base); flex: none; }
+
+/* ---- 2.9.3: Close tab box (app.js closeTab) and dragging tabs (app.js "drag tabs") */
+#closeTabDlg { width: 470px; max-width: none; }     /* a fixed width: the dialog host window sizes itself to the dialog (vw would squash it, as #roomDlg found) */
+.ct-row { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: var(--fs-base); color: var(--ink-menu); }
+.ct-row select { min-width: 140px; max-width: 240px; background: var(--field-bg); color: var(--field-ink); border: 1px solid var(--field-line); padding: 3px 6px; font: inherit; color-scheme: var(--color-scheme); }
+.ct-small { color: var(--ink-dim); font-size: var(--fs-s); margin: 4px 0 12px; }
+.ct-small:empty { display: none; }
+#tabStrip.tdragging, #tabStrip.tdragging .ptab { cursor: grabbing; }
+.ptab.tlift { opacity: .35; border-style: dashed; }
+.tab-ghost { position: fixed; z-index: 60; pointer-events: none; display: flex; align-items: center; gap: 6px; padding: 3px 9px; font: bold var(--fs-s) var(--font-label); letter-spacing: .5px; color: var(--ink-menu); background: var(--menu-bg); border: 1px solid var(--green); box-shadow: 0 4px 14px var(--black-a70); transform: rotate(-2deg); white-space: nowrap; }
+.tab-ghost .ct { font-weight: normal; color: var(--tab-count); }
+.tab-bar { position: fixed; z-index: 59; width: 3px; pointer-events: none; background: var(--green); box-shadow: 0 0 6px var(--green); border-radius: 1px; }
+.tab-bar::before, .tab-bar::after { content: ''; position: absolute; left: -3px; border: 4.5px solid transparent; }
+.tab-bar::before { top: -4px; border-top-color: var(--green); }
+.tab-bar::after { bottom: -4px; border-bottom-color: var(--green); }
