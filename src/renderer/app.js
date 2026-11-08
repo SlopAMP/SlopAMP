@@ -33,6 +33,12 @@ const S = {
   subsOn: false,       // subtitles stay on for the next items once turned on
   xPlay: 'stream',     // 2.8: an X post that isn't downloaded plays right away ('stream') or asks first ('ask'), set in "?"
   dlLimit: 0,          // 2.9.1: the downloads folder's size limit in GB (0 = off), set in "?" → Downloads folder
+  startMode: 'spot',   // 2.9.2 Settings → General → Open where you left off: spot (the last item, same spot) | top | none
+  askCloseDl: true,    // 2.9.2 Settings → General → Ask before closing while something downloads
+  skipSecs: 10,        // 2.9.2 Settings → Playback → Skip countdown (0 = off)
+  mp3q: 'best',        // 2.9.2 Settings → Downloads → MP3 quality: best | 320 | 192 | 128
+  dlWarn: 90,          // 2.9.2 Settings → Downloads → Warn me at (% of the limit; 0 = never)
+  xq: 720,             // 2.9.2 Settings → YouTube & X → Streaming quality (480 | 720 | 1080)
   favs: {},            // 2.9.1: Library favorites: 'y:<video id>' (a download, any copy of it) or 'f:<path, lower case>' -> 1
   lib: { w: 0, h: 0, view: 'grid', modes: {}, tip: 0 },   // the Library's size once resized (0: default); `view` was SLOP's (kept so old state reads); 2.7: modes = Classic / Preview per section, tip = the "New: Preview view" tip was seen
   vis: { mode: 'milkdrop', preset: '', cycle: true, panel: 'open', showTitle: false, showPreset: true, showTrack: false, favs: [], favOnly: false }   // audio visualizer: milkdrop (Butterchurn) | bars; panel: open | min | hidden
@@ -237,7 +243,7 @@ function showLayer(name) {
 // counts down "Skip (10)" … "Skip (0)" and then clicks itself. Any button click ends the countdown; it
 // waits while the download menu is open, and stops for good once a download of that item starts
 // (the sheet then waits for it). opts.item: the playlist item the box is about.
-const SKIP_SECS = 10;
+const SKIP_SECS = 10;      // the default; 2.9.2: Settings → Playback → Skip countdown (S.skipSecs, 0 = off)
 let sheet = null;   // the choice sheet on screen: { itemId, show(why) } (shown again if its download fails)
 const CD = { timer: null, left: 0, btn: null, label: '', itemId: null, chain: 0 };
 function cdStop(keepLabel) {
@@ -259,7 +265,7 @@ function showOverlay(title, text, buttons = [], opts = {}) {
   }
   $('#overlay').classList.add('show'); $('#overlay').classList.remove('hidden');
   if (cdBtn && countdownOk(opts.item)) {
-    CD.btn = cdBtn; CD.label = cdDef.label; CD.itemId = opts.item ? opts.item.id : null; CD.left = SKIP_SECS;
+    CD.btn = cdBtn; CD.label = cdDef.label; CD.itemId = opts.item ? opts.item.id : null; CD.left = S.skipSecs || SKIP_SECS;
     const paint = () => { cdBtn.textContent = `${CD.label} (${CD.left})`; cdBtn.title = `Skips to the next item in ${CD.left} s. Pick another button to stay.`; };
     paint();
     CD.timer = setInterval(() => {
@@ -277,6 +283,7 @@ function showOverlay(title, text, buttons = [], opts = {}) {
 // No countdown when Skip couldn't go anywhere, when the item is already downloading (the box waits for
 // it), or when countdowns have already gone round the whole playlist without anything playing.
 function countdownOk(item) {
+  if (!S.skipSecs) return false;            // 2.9.2: "Off (wait for me)"
   if (item) { const d = DL.get(item.id); if (d && DL_BUSY.includes(d.status)) return false; }
   if (skipIndex() < 0) return false;
   if (CD.chain >= Math.max(1, PT().items.length)) { if (!CD.warned) { CD.warned = true; toast('Nothing in this playlist could play, so SlopAMP stopped skipping.', 4000); } return false; }
@@ -495,6 +502,8 @@ async function playIndex(i, startAt = 0, opts = {}) {
   hideResumeBar();
   if (prevItem !== item || !L.prep) clearSubs();
   if (ti !== S.playTab) { S.history = []; S.playTab = ti; PT().current = -1; }
+  bootLast = null;
+  if (bootFromStart) { if (item === bootFromStart) opts = { ...opts, noResume: true }; bootFromStart = null; }
   if (!startAt && !opts.noResume) {
     const r = resumePoint(item);
     if (r) { startAt = r; showResumeBar(r); }
@@ -625,7 +634,7 @@ async function loadXStream(item, startAt = 0, o = {}) {
     showOverlay('Getting the video from X…', `${item.title}  ·  usually 2–4 seconds`, [{ label: 'Cancel', action: () => { L.token++; stopEngines(); engine = null; setStatus('stopped'); updateControlsEnabled(); updateDlButton(); } }]);
     $('#overlay').classList.add('x-getting');
   }, X_GET_DELAY);
-  const ask = (fresh) => P.xResolve(item.url, { fresh }).catch((e) => ({ ok: false, code: 'other', error: String(e && e.message || e) }));
+  const ask = (fresh) => P.xResolve(item.url, { fresh, height: S.xq }).catch((e) => ({ ok: false, code: 'other', error: String(e && e.message || e) }));
   let r = await ask(!!o.fresh), again = !!o.again;
   if (!r.ok && !again && !gone() && !X_FINAL.has(r.code)) { again = true; r = await ask(true); }   // ask X once more
   clearTimeout(boxT);
@@ -688,7 +697,7 @@ function xPrefetchNext() {
   if (!xStreamOn() || S.shuffle) return;
   const t = PT(), i = nextIndex(true); if (i < 0) return;
   const it = t.items[i];
-  if (it && it !== curItem() && xNeedsDownload(it)) P.xResolve(it.url, {}).catch(() => {});
+  if (it && it !== curItem() && xNeedsDownload(it)) P.xResolve(it.url, { height: S.xq }).catch(() => {});
 }
 // "▶ Play here" on the Ask-me sheet: stream this one post
 function xPlayHere(item) {
@@ -848,7 +857,8 @@ function syncWindows(opts = {}) {
     skined: { visible: !mini && !!(WM.skins && WM.skins.editorOpen), shade: !!(WM.skins && WM.skins.editorShade) },
     clip: { visible: !mini && !!clipVisible, shade: !!clipShade },          // CLIP (2.3)
     ytweb: { visible: !mini && !!ytwVisible, shade: !!ytwShade },           // YOUTUBE window (2.3)
-    xweb: { visible: !mini && !!(XW && XW.visible), shade: !!(XW && XW.shade) }              // X PLAYER (2.8)
+    xweb: { visible: !mini && !!(XW && XW.visible), shade: !!(XW && XW.shade) },             // X PLAYER (2.8)
+    settings: { visible: !mini && !!(SETV && SETV.visible), shade: !!(SETV && SETV.shade) }   // SETTINGS (2.9.2)
   }, { reflow: opts.reflow !== false && !mini });
   const btn = (id, min, what) => { const b = $(id); if (!b) return; b.innerHTML = min ? '&#x25A1;' : '&#x2013;'; b.title = `${min ? 'Expand' : 'Minimize'} ${what}`; };
   btn('#visMinBtn', vidShade, audvis ? 'visualizer' : 'video');
@@ -857,6 +867,7 @@ function syncWindows(opts = {}) {
   btn('#clipMinBtn', !!clipShade, 'CLIP');
   btn('#ytwMinBtn', !!ytwShade, 'YOUTUBE');
   btn('#xwMinBtn', !!(XW && XW.shade), 'X PLAYER');
+  btn('#setMinBtn', !!(SETV && SETV.shade), 'Settings');
   $('#visCloseBtn').title = audvis ? 'Close visualizer' : 'Close video';
 }
 function updateControlsEnabled() {
@@ -988,7 +999,7 @@ $('#togEq').onclick = () => setEqPanel(S.eq.panel === 'hidden' ? 'open' : 'hidde
 $('#eqMinBtn').onclick = () => setEqPanel(S.eq.panel === 'min' ? 'open' : 'min');
 $('#eqCloseBtn').onclick = () => setEqPanel('hidden');
 $('#eqTitle').addEventListener('dblclick', (e) => { if (!e.target.closest('button')) setEqPanel(S.eq.panel === 'min' ? 'open' : 'min'); });
-$('#eqOn').onclick = () => { S.eq.on = !S.eq.on; applyEq(); renderEq(); saveSoon(); };
+$('#eqOn').onclick = () => { S.eq.on = !S.eq.on; applyEq(); renderEq(); saveSoon(); setPaintSoon(); };
 $('#eqReset').onclick = () => { S.eq.gains = EQ_FREQS.map(() => 0); S.eq.preamp = 0; S.eq.preset = 'Flat'; applyEq(); renderEq(); saveSoon(); };
 $('#eqPresetsBtn').onclick = (e) => { e.stopPropagation(); if ($('#eqPresets').classList.contains('hidden')) openEqPresets(); else $('#eqPresets').classList.add('hidden'); };
 WM.onDocs('mousedown', (e) => { if (!e.target.closest('#eqPresets') && !e.target.closest('#eqPresetsBtn')) $('#eqPresets').classList.add('hidden'); });
@@ -1995,19 +2006,16 @@ async function openFiles(kind) { const res = await P.openDialog(kind === 'folder
 async function quickSavePlaylist() {
   if (histOnScreen()) { histQuickSave(); return; }
   const tab = S.tabs[S.tab];
-  if (!tab.items.length) { toast('This tab is empty \u2014 nothing to save.'); return; }
-  const res = await P.quickSave(tab.items.map(({ type, path, url, title, duration }) => ({ type, path, url, title, duration })), tab.name);
-  if (res && res.saved) toast(`\u2713 Saved "${res.name}" (${tab.items.length} item${tab.items.length === 1 ? '' : 's'})`, 2200);
+  const res = await P.quickSave(tab.items.map(({ type, path, url, title, duration }) => ({ type, path, url, title, duration })), tab.name);   // 2.9.2: an empty tab empties its file
+  if (res && res.saved) toast(tab.items.length ? `\u2713 Saved "${res.name}" (${tab.items.length} item${tab.items.length === 1 ? '' : 's'})` : `\u2713 Saved "${res.name}" (now empty)`, 2200);
   else toast(`Couldn\u2019t save: ${(res && res.error) || 'unknown error'}`, 4000);
   if ($('#dlmDlg').open) dlmRefresh();
 }
 async function quickSaveAll() {
   const tabs = S.tabs.filter(t => !isHist(t)).map(t => ({ name: t.name, items: t.items.map(({ type, path, url, title, duration }) => ({ type, path, url, title, duration })) }));
-  const empty = tabs.filter(t => !t.items.length).length;
-  if (empty === tabs.length) { toast('All tabs are empty \u2014 nothing to save.'); return; }
-  const res = await P.quickSaveAll(tabs);
-  const ok = res.filter(r => r.ok).length, bad = res.length - ok;
-  const extra = [empty ? `${empty} empty tab${empty === 1 ? '' : 's'} skipped` : '', bad ? `${bad} failed` : ''].filter(Boolean).join(', ');
+  const res = await P.quickSaveAll(tabs);      // 2.9.2: empty tabs save too (their files are emptied)
+  const ok = res.filter(r => r.ok).length, bad = res.length - ok, empty = res.filter(r => r.ok && r.empty).length;
+  const extra = [empty ? `${empty} now empty` : '', bad ? `${bad} failed` : ''].filter(Boolean).join(', ');
   toast(`${bad ? '' : '\u2713 '}Saved ${ok} playlist${ok === 1 ? '' : 's'}${extra ? ` (${extra})` : ''}`, 2600);
   if ($('#dlmDlg').open) dlmRefresh();
 }
@@ -2050,17 +2058,14 @@ function openUrlDialog() {
 }
 $('#urlDlg').addEventListener('close', () => { if ($('#urlDlg').returnValue === 'ok') { const urls = extractUrls($('#urlText').value); if (urls.length) addUrls(urls); } });
 $('#urlText').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); $('#urlDlg').close('ok'); } });
-async function openAbout() {
+async function openAbout() {      // 2.9.2: About only (the settings moved to the Settings window)
   const info = await P.info();
   $('#aboutVer').textContent = `version ${info.version}`;
   $('#licFrame').classList.add('hidden'); $('#aboutLic').textContent = 'View licenses';
   $('#aboutEnc').textContent = info.hasFfmpeg ? `FFmpeg ready · video converter: ${info.encoder || 'detecting…'}` : 'FFmpeg not found — only natively supported formats will play.';
-  $('#assocRow').classList.toggle('hidden', info.platform !== 'win32');
-  $('#dlFmtSel').value = dlDefault();
-  roomPaintSettings();      // 2.9.1: Downloads folder: the limit and the bar
-  $('#xPlaySel').value = xStreamOn() ? 'stream' : 'ask';
   $('#aboutDlg').showModal();
 }
+$('#aboutSet').onclick = () => { $('#aboutDlg').close(); setOpen(); };
 $('#aboutLic').onclick = () => {
   const f = $('#licFrame'); const show = f.classList.contains('hidden');
   if (show && !f.getAttribute('src')) f.src = 'licenses.html';
@@ -2322,7 +2327,7 @@ WM.onReset = restoreWindows;
 
 // ------------------------------------------------------------------ wiring
 $('#btnMin').onclick = () => P.minimize();
-$('#btnClose').onclick = () => { recordResume(); saveNow(); P.close(); };
+$('#btnClose').onclick = () => closeApp();
 $('#btnMini').onclick = () => toggleMini();
 // The lightning bolt (2.3.1): always Classic (stacked), except when Classic (stacked, No EQ) was the last layout
 // picked from the Layout menu: then that one, with the EQ hidden. (E under No EQ switches to Classic (stacked);
@@ -2347,7 +2352,7 @@ $('#bRepeat').onclick = cycleRepeat; $('#vRep').onclick = cycleRepeat;
 $('#togVid').onclick = () => { S.showVideo = !S.showVideo; renderToggles(); saveSoon(); };
 const togglePl = () => { S.showPlaylist = !S.showPlaylist; renderToggles(); saveSoon(); };
 $('#togPl').onclick = togglePl; $('#vPl').onclick = togglePl; $('#plCloseBtn').onclick = togglePl;
-$('#clock').onclick = () => { S.remaining = !S.remaining; saveSoon(); drawClock(); };
+$('#clock').onclick = () => { S.remaining = !S.remaining; saveSoon(); drawClock(); setPaintSoon(); };
 $('#vol').addEventListener('input', (e) => setVolume(+e.target.value));
 $('#vMute').onclick = () => setMuted(!S.muted);
 (() => {
@@ -2390,8 +2395,10 @@ WM.onDocs('keydown', (e) => {
   else if (k === 'Delete') removeSelected();
   else if (k === 'F2') { e.preventDefault(); const a = S.items[S.anchor]; const it = a && S.sel.has(a.id) ? a : S.items.find(x => S.sel.has(x.id)); if (it) renameItem(it); }
   else if (k === 'Enter') { const i = S.items.findIndex(it => S.sel.has(it.id)); if (i >= 0) playIndex(i); }
+  else if (k === 'Escape' && kd === WM.doc('settings') && SETV.visible) setClose();     // 2.9.2
   else if (k === 'Escape') { const popOpen = !$('#popMenu').classList.contains('hidden'); hidePop(); hideCtx(); if (!popOpen && WM.body.contains('fs')) toggleFullscreen(false); }
   else if (k === 'F11' || (k.toLowerCase() === 'f' && !e.ctrlKey)) { e.preventDefault(); toggleFullscreen(); }
+  else if (e.ctrlKey && k === ',') { e.preventDefault(); setOpen(); }          // 2.9.2: Settings
   else if (e.ctrlKey && k === 'Tab') { e.preventDefault(); switchTab((S.tab + (e.shiftKey ? S.tabs.length - 1 : 1)) % S.tabs.length); }
   else if (e.ctrlKey && k.toLowerCase() === 't') { e.preventDefault(); renameTab(newTab()); }
   else if (e.ctrlKey && k.toLowerCase() === 'w') { e.preventDefault(); closeTab(S.tab); }
@@ -2503,7 +2510,7 @@ async function startDownload(item, kind, quality, quiet, batch) {
   } catch (_) {}
   const d0 = DL.get(item.id);
   if (!(d0 && DL_BUSY.includes(d0.status)) && await roomCheck(item, kind, quality, batch) !== 'go') return { ok: false, reason: 'room' };   // 2.9.1: the size limit
-  const res = await P.dlStart({ id: item.id, vid: item.vid, url: item.url, kind, quality, title: item.title });
+  const res = await P.dlStart({ id: item.id, vid: item.vid, url: item.url, kind, quality, mp3q: S.mp3q, title: item.title });
   if (res && res.ok && CD.itemId === item.id) {   // the choice sheet waits for this download now
     cdStop();
     $('#ovText').textContent = item.type === 'x' ? 'It’s downloading now and plays when it’s done.' : 'It’s downloading now. You can play it when it’s done.';
@@ -2701,6 +2708,8 @@ WM.onDocs('mousedown', (e) => { const m = $('#popMenu'); if (!m.contains(e.targe
 // ------------------------------------------------------------------ resume where you left off
 const RESUME_MIN_LEN = 300;   // only items 5 minutes or longer
 let resumeAtBoot = null, resumeBarTimer = null;
+let bootLast = null;          // 2.9.2: the last item at startup, kept as the playlist's last item until something plays (a restart without playing keeps the spot)
+let bootFromStart = null;     // 2.9.2: Open where you left off → the last item, from the start: its first play skips the resume point
 function resumeKey(item) {
   if (!item) return null;
   if (item.type === 'file' && item.path) return 'f:' + item.path.toLowerCase();
@@ -3140,14 +3149,14 @@ function roomPlan(rows, names, need) {
 // about how big a download is when yt-dlp can't say: its length × a usual bitrate for the quality (0: unknown)
 function roomGuess(item, kind, quality) {
   const d = item && item.duration; if (!d) return 0;
-  const kbps = kind === 'audio' ? 256 : { best: 8000, 480: 1200, 720: 2500 }[quality] || 4000;
+  const kbps = kind === 'audio' ? ({ 320: 320, 192: 192, 128: 128 }[S.mp3q] || 256) : { best: 8000, 480: 1200, 720: 2500 }[quality] || 4000;
   return Math.round(d * kbps * 1000 / 8);
 }
 // before a download: 'go' or 'stop' (the box decided). batch: DOWNLOAD ALL's state, for "Do the same for the rest".
 async function roomCheck(item, kind, quality, batch) {
   const lim = limitBytes(); if (!lim) return 'go';
   if (!batch) showDlBar({ text: `Checking the size of "${item.title}"…`, pct: 0, busy: true });
-  let size = await P.dlSize({ url: item.url, kind, quality }).catch(() => null);
+  let size = await P.dlSize({ url: item.url, kind, quality, mp3q: S.mp3q }).catch(() => null);
   const guessed = !size;
   if (!size) size = roomGuess(item, kind, quality);
   const u = await roomUsage();
@@ -3155,7 +3164,12 @@ async function roomCheck(item, kind, quality, batch) {
   const reserved = [...ROOM.pending.entries()].filter(([id, p]) => id !== item.id && !onDisk.has(`${p.vid}|${p.kind}`)).reduce((a, [, p]) => a + p.n, 0);
   const need = u.total + reserved + size - lim;
   const mine = { n: size, vid: item.vid, kind };
-  if (need <= 0) { ROOM.pending.set(item.id, mine); return 'go'; }
+  if (need <= 0) {
+    ROOM.pending.set(item.id, mine);
+    const after = u.total + reserved + size;      // 2.9.2: Settings → Downloads → Warn me at 90% / 80%
+    if (S.dlWarn && after >= lim * S.dlWarn / 100) toast(`After this download your downloads folder is ${Math.min(100, Math.round(after / lim * 100))}% full (${fmtGB(after)} of ${S.dlLimit} GB).`, 5000);
+    return 'go';
+  }
   const names = await roomProtect();
   const plan = roomPlan(u.rows, names, need);
   const kindOf = plan.enough ? 'room' : 'full';
@@ -4862,6 +4876,174 @@ $('#xwMinBtn').onclick = () => { XW.shade = !XW.shade; syncWindows(); };
 $('#xwOpen').onclick = () => { if (XW.item) P.openExternal(XW.item.url); };
 $('#xwDl').onclick = (e) => { if (!XW.item) return; const r = e.currentTarget.getBoundingClientRect(); openDlMenu(XW.item, { doc: e.currentTarget.ownerDocument, x: r.left, y: r.bottom + 6, flipY: r.top }); };
 
+// ------------------------------------------------------------------ SETTINGS window (2.9.2)
+// Every setting in one window: ⚙ in the title bar, Ctrl+,, the tray menu, "?" → Settings… and the ⚙ on the
+// playlist's bottom bar. Sections on the left, a search box on top (it filters rows across all sections).
+// Changes apply and save as they're made. The old spots (the History ⚙ menus, Layout menu, the clock…) still
+// work as shortcuts; setPaint() reads the current values every time the window shows or gets focus.
+var SETV = { visible: false, shade: false, sec: 'general' };     // var: syncWindows() reads it
+const SET_SECS = ['general', 'playback', 'downloads', 'web', 'history', 'look', 'keys', 'updates', 'about'];
+function setOpen(sec) {
+  if (WM.body.contains('mini')) toggleMini(false);
+  if (SET_SECS.includes(sec)) SETV.sec = sec;
+  SETV.visible = true; SETV.shade = false;
+  syncWindows();
+  setPaint(); setShowSec();
+  const w = WM.wins.settings; if (w) setTimeout(() => { try { w.focus(); } catch (_) {} }, 30);
+}
+function setClose() { SETV.visible = false; syncWindows(); }
+WM.settings = { open: setOpen, close: setClose, get visible() { return SETV.visible; } };
+let setPaintT = null;
+function setPaintSoon() { if (!SETV.visible) return; clearTimeout(setPaintT); setPaintT = setTimeout(setPaint, 60); }
+function setShowSec() {
+  const q = $('#setSearch').value.trim();
+  for (const b of $$('#setNav button')) b.classList.toggle('on', !q && b.dataset.s === SETV.sec);
+  if (q) { setSearch(q); return; }
+  $('#setPanel').classList.remove('searching'); $('#setNone').classList.add('hidden'); $('#setSearchX').classList.add('hidden');
+  for (const s of $$('#setMain .set-sec')) s.classList.toggle('on', s.dataset.s === SETV.sec);
+  for (const r of $$('#setMain .set-row, #setMain h4, #setMain .set-note, #setMain .set-two > div')) r.classList.remove('set-hide');
+  $('#setMain').scrollTop = 0;
+}
+// search: a row matches when every word is in its label, its note, its options or its data-k words (or the section's name)
+function setSearch(q) {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  $('#setPanel').classList.add('searching'); $('#setSearchX').classList.remove('hidden');
+  let hits = 0;
+  for (const s of $$('#setMain .set-sec')) {
+    const secName = (s.querySelector('h3') || {}).textContent || '';
+    let n = 0;
+    for (const r of s.querySelectorAll('.set-row')) {
+      const opts = [...r.querySelectorAll('option')].map(o => o.textContent).join(' ');
+      const head = r.closest('.set-two > div') ? (r.closest('.set-two > div').querySelector('h4') || {}).textContent || '' : '';
+      const txt = `${secName} ${head} ${r.textContent} ${opts} ${r.dataset.k || ''} ${[...r.querySelectorAll('[title]')].map(e => e.title).join(' ')}`.toLowerCase();
+      const ok = words.every(w => txt.includes(w)) && !!r.querySelector('.set-lbl').textContent.trim();
+      r.classList.toggle('set-hide', !ok); if (ok) n++;
+    }
+    for (const h of s.querySelectorAll('h4, .set-note')) h.classList.add('set-hide');
+    for (const c of s.querySelectorAll('.set-two > div')) c.classList.toggle('set-hide', !c.querySelector('.set-row:not(.set-hide)'));
+    s.classList.toggle('on', n > 0); hits += n;
+  }
+  const none = $('#setNone');
+  none.classList.toggle('hidden', hits > 0);
+  if (!hits) none.innerHTML = `Nothing matches “${htmlEsc(q)}”.<small>Try fewer words, or pick a section on the left.</small>`;
+}
+for (const b of $$('#setNav button')) b.onclick = () => { $('#setSearch').value = ''; SETV.sec = b.dataset.s; setShowSec(); };
+$('#setSearch').addEventListener('input', () => setShowSec());
+$('#setSearch').addEventListener('keydown', (e) => { if (e.key === 'Escape' && e.target.value) { e.preventDefault(); e.stopPropagation(); e.target.value = ''; setShowSec(); } });
+$('#setSearchX').onclick = () => { $('#setSearch').value = ''; setShowSec(); $('#setSearch').focus(); };
+$('#setDone').onclick = () => setClose();
+$('#setCloseBtn').onclick = () => setClose();
+$('#setMinBtn').onclick = () => { SETV.shade = !SETV.shade; syncWindows(); };
+if (WM.wins.settings) WM.wins.settings.addEventListener('focus', () => { if (SETV.visible) setPaint(); });
+$('#btnSettings').onclick = () => setOpen();
+$('#pSet').onclick = () => setOpen();
+P.onSysSettings(() => setOpen());
+
+// fills every control from the current values
+async function setPaint() {
+  clearTimeout(setPaintT);
+  const opt = (sel, list, val) => { sel.innerHTML = list.map(([v, l, off]) => `<option value="${htmlEsc(String(v))}"${off ? ' disabled' : ''}>${htmlEsc(l)}</option>`).join(''); sel.value = String(val); };
+  // General
+  $('#setStart').value = S.startMode; $('#setAskClose').checked = S.askCloseDl;
+  // Playback
+  $('#setRemaining').checked = !!S.remaining; $('#setSkip').value = String(S.skipSecs); $('#setEq').checked = !!S.eq.on;
+  // Downloads
+  $('#dlFmtSel').value = dlDefault(); $('#setMp3').value = S.mp3q; $('#setWarn').value = String(S.dlWarn);
+  roomPaintSettings();
+  // YouTube & X
+  $('#xPlaySel').value = xStreamOn() ? 'stream' : 'ask'; $('#setXq').value = String(S.xq);
+  const tabs = S.tabs.filter(t => !isHist(t)), tt = ytwTargetTab();
+  opt($('#setYwTab'), tabs.map(t => [t.id, t.name]), tt >= 0 ? S.tabs[tt].id : (tabs[0] && tabs[0].id));
+  // History
+  for (const k of HIST_KINDS) {
+    const h = hs(k), p = `#setH${k}`;
+    $(`${p}On`).checked = !!h.on; $(`${p}Order`).value = h.order; $(`${p}Again`).value = h.replay; $(`${p}Mirror`).checked = !!h.mirror;
+    const caps = HIST_CAPS.map(n => [n, `The newest ${n}`]);
+    if (h.cap && !HIST_CAPS.includes(h.cap)) caps.push([h.cap, `The newest ${h.cap.toLocaleString()}`]);
+    opt($(`${p}Cap`), [...caps, [0, 'All (no limit)'], ['custom', 'Custom…']], h.cap);
+  }
+  // Look
+  const sk = WM.skins;
+  if (sk) {
+    const g = (label, list) => list.length ? `<optgroup label="${htmlEsc(label)}">${list.map(s => `<option value="${htmlEsc(s.id)}">${htmlEsc(sk.nameOf(s.id))}</option>`).join('')}</optgroup>` : '';
+    $('#setSkin').innerHTML = g('Mine', sk.user) + g('Built-in', sk.list);
+    $('#setSkin').value = sk.saved;
+  }
+  const pn = WM.presetNames || [];
+  opt($('#setLayout'), [...pn, ...(pn.some(([k]) => k === WM.info.preset) ? [] : [[WM.info.preset || 'custom', 'Your own (moved by hand)', true]])], WM.info.preset || 'custom');
+  $('#setSnap').checked = !!WM.info.snap; $('#setOnTop').checked = !!WM.info.onTop;
+  $('#setVis').value = S.vis.mode === 'bars' ? 'bars' : 'milkdrop';
+  $('#setVisCycle').checked = !!S.vis.cycle; $('#setVisTitle').checked = !!S.vis.showTitle;
+  const favN = (S.vis.favs || []).length;
+  $('#setVisFav').checked = !!S.vis.favOnly && favN > 0; $('#setVisFav').disabled = !favN;
+  // Keys & Windows, Updates
+  WM.sys.get().then(c => c && sysRender(c)).catch(() => {});
+  const info = await P.info().catch(() => null);
+  if (info) { $('#setVer').textContent = `SlopAMP ${info.version}`; $('#assocRow').classList.toggle('hidden', info.platform !== 'win32'); }
+  const dirs = await P.dlInfo().then(i => i && i.dirs).catch(() => null);
+  if (dirs) for (const [k, id] of [['video', '#setDirVideoP'], ['audio', '#setDirAudioP']]) { $(id).textContent = dirs[k]; $(id).title = dirs[k]; }
+}
+// General
+$('#setStart').onchange = (e) => { S.startMode = ['spot', 'top', 'none'].includes(e.target.value) ? e.target.value : 'spot'; saveSoon(); };
+$('#setAskClose').onchange = (e) => { S.askCloseDl = e.target.checked; saveNow(); };
+// Playback
+$('#setRemaining').onchange = (e) => { S.remaining = e.target.checked; saveSoon(); drawClock(); };
+$('#setSkip').onchange = (e) => { const n = +e.target.value; S.skipSecs = [0, 5, 10, 15, 30].includes(n) ? n : 10; saveSoon(); };
+$('#setEq').onchange = (e) => { S.eq.on = e.target.checked; applyEq(); renderEq(); saveSoon(); };
+// Downloads
+$('#setMp3').onchange = (e) => { S.mp3q = ['best', '320', '192', '128'].includes(e.target.value) ? e.target.value : 'best'; saveSoon(); };
+$('#setWarn').onchange = (e) => { const n = +e.target.value; S.dlWarn = [0, 80, 90].includes(n) ? n : 90; saveSoon(); };
+const setDirs = (dirs) => { if (dirs) { histDirs = dirs; setPaint(); } };
+$('#setDirVideo').onclick = async () => setDirs(await P.dlChooseDir('video'));
+$('#setDirAudio').onclick = async () => setDirs(await P.dlChooseDir('audio'));
+$('#setDirReset').onclick = async () => setDirs(await P.dlResetDirs());
+// YouTube & X
+$('#setXq').onchange = (e) => { const n = +e.target.value; S.xq = [480, 720, 1080].includes(n) ? n : 720; saveSoon(); };
+$('#setYwTab').onchange = (e) => { YW.tabId = e.target.value; ytwRenderTarget(); };
+$('#setYwClear').onclick = async () => {
+  if (await confirmBox('Clear YouTube data?', 'This signs you out of YouTube in SlopAMP’s YOUTUBE window and clears its cookies and cache. Your playlists and downloads aren’t touched.', 'Clear')) { await P.ytwClear(); toast('YouTube data cleared.', 2000); }
+};
+// History (histSet asks before removing anything and redraws the tabs)
+for (const k of HIST_KINDS) {
+  const p = `#setH${k}`, set = async (patch) => { await histSet(patch, k); setPaint(); };
+  $(`${p}On`).onchange = (e) => set({ on: e.target.checked });
+  $(`${p}Order`).onchange = (e) => set({ order: e.target.value === 'oldest' ? 'oldest' : 'newest' });
+  $(`${p}Again`).onchange = (e) => set({ replay: ['bump', 'keep', 'dup'].includes(e.target.value) ? e.target.value : 'bump' });
+  $(`${p}Mirror`).onchange = (e) => set({ mirror: e.target.checked });
+  $(`${p}Cap`).onchange = (e) => { if (e.target.value === 'custom') { setPaint(); histCustomCap(k); return; } set({ cap: Math.max(0, Math.round(+e.target.value) || 0) }); };
+  $(`${p}Copy`).onclick = () => histSaveCopy(k);
+  $(`${p}Clear`).onclick = async () => { await histClear(k); setPaint(); };
+}
+$('#histCapDlg').addEventListener('close', () => setTimeout(setPaintSoon, 50));
+// Look
+$('#setSkin').onchange = async (e) => {
+  const sk = WM.skins; if (!sk) return;
+  if (sk.editorOpen) { toast('Close the Skin Editor first, or pick the skin in its “Start from” list.'); setPaint(); return; }
+  await sk.apply(e.target.value); toast(`Skin: ${sk.nameOf(e.target.value)}`, 1600);
+};
+$('#setSkinEd').onclick = () => { if (WM.skins) WM.skins.openEditor(); };
+$('#setLayout').onchange = async (e) => { await WM.preset(e.target.value); setPaint(); };
+$('#setLayoutReset').onclick = async () => { await WM.reset(); setPaint(); };
+$('#setSnap').onchange = async (e) => { WM.info = await P.wmOption('snap', e.target.checked); };
+$('#setOnTop').onchange = async (e) => { WM.info = await P.wmOption('onTop', e.target.checked); };
+$('#setVis').onchange = (e) => setVisMode(e.target.value === 'bars' ? 'bars' : 'milkdrop');
+$('#setVisCycle').onchange = (e) => { S.vis.cycle = e.target.checked; MD.lastSwitch = performance.now(); saveSoon(); renderMdName(); };
+$('#setVisFav').onchange = (e) => { S.vis.favOnly = e.target.checked && (S.vis.favs || []).length > 0; saveSoon(); };
+$('#setVisTitle').onchange = (e) => { S.vis.showTitle = e.target.checked; saveSoon(); };
+$('#setAbout').onclick = () => openAbout();
+
+// ✕ (and the tray's Quit): main.js asks the player first while something downloads (Settings → General)
+function closeApp() { recordResume(); saveNow(); P.close(); }
+let closeAsking = false;
+P.onCloseAsk(async () => {
+  if (closeAsking) return; closeAsking = true;
+  const n = [...DL.values()].filter(d => DL_BUSY.includes(d.status)).length;
+  const ok = await confirmBox(n > 1 ? `${n} downloads are still running` : 'A download is still running',
+    'Closing SlopAMP stops it now; you can download it again later.\n\n(Settings → General → “Ask before closing while something downloads” turns this question off.)', 'Close anyway');
+  closeAsking = false;
+  if (ok) { recordResume(); saveNow(); P.closeForce(); }
+});
+
 // ------------------------------------------------------------------ YOUTUBE window (2.3)
 // youtube.com in a SlopAMP window: the YOUTUBE button on the playlist (or Layout → YOUTUBE). Opening it moves
 // the player's windows to the left edge and the YOUTUBE window fills the rest of the screen (windows.js
@@ -5214,10 +5396,10 @@ let saveT;
 function stateSnapshot() {
   return {
     version: 2,
-    tabs: S.tabs.map(t => ({ id: t.id, name: t.name, current: t.current, src: t.src || undefined, items: t.items.map(({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at }) => ({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at })) })),
+    tabs: S.tabs.map(t => ({ id: t.id, name: t.name, current: t.current >= 0 || !bootLast || t !== PT() ? t.current : t.items.indexOf(bootLast), src: t.src || undefined, items: t.items.map(({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at }) => ({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at })) })),
     tab: S.tab, playTab: S.playTab, vis: S.vis, volume: S.volume, muted: S.muted, shuffle: S.shuffle, repeat: S.repeat,
     showVideo: S.showVideo, showPlaylist: S.showPlaylist, plShade: S.plShade, vidShade: S.vidShade, remaining: S.remaining, plHeight: S.plHeight, visMode, eq: S.eq,
-    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, xPlay: S.xPlay, dlLimit: S.dlLimit, favs: S.favs, hist: S.hist, xhist: S.xhist
+    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, xPlay: S.xPlay, dlLimit: S.dlLimit, favs: S.favs, startMode: S.startMode, askCloseDl: S.askCloseDl, skipSecs: S.skipSecs, mp3q: S.mp3q, dlWarn: S.dlWarn, xq: S.xq, hist: S.hist, xhist: S.xhist
   };
 }
 function saveSoon() {
@@ -5291,6 +5473,12 @@ setInterval(() => { blink = !blink; }, 500);
     S.subsOn = !!st.subsOn;
     S.dlFormat = st.dlFormat === 'best' ? 'best' : 'xready';
     S.xPlay = st.xPlay === 'ask' ? 'ask' : 'stream';
+    S.startMode = ['spot', 'top', 'none'].includes(st.startMode) ? st.startMode : 'spot';      // 2.9.2
+    S.askCloseDl = st.askCloseDl !== false;
+    S.skipSecs = [0, 5, 10, 15, 30].includes(st.skipSecs) ? st.skipSecs : 10;
+    S.mp3q = ['best', '320', '192', '128'].includes(st.mp3q) ? st.mp3q : 'best';
+    S.dlWarn = [0, 80, 90].includes(st.dlWarn) ? st.dlWarn : 90;
+    S.xq = [480, 720, 1080].includes(st.xq) ? st.xq : 720;
     S.dlLimit = Number.isFinite(+st.dlLimit) && +st.dlLimit > 0 ? Math.min(100000, +st.dlLimit) : 0;
     S.favs = st.favs && typeof st.favs === 'object' ? { ...st.favs } : {};
     if (st.lib && typeof st.lib === 'object') {
@@ -5304,8 +5492,12 @@ setInterval(() => { blink = !blink; }, 500);
         cap: Number.isInteger(h.cap) && h.cap >= 0 && h.cap <= 100000 ? h.cap : 100 };
     }
     const pit = PT().items[savedCur];
-    if (pit && S.tab === S.playTab) { S.sel = new Set([pit.id]); S.anchor = savedCur; }
-    resumeAtBoot = pit || null;
+    bootLast = pit || null;
+    if (S.startMode !== 'none') {             // 2.9.2: Open where you left off (none: Play starts at the top of the playlist)
+      if (pit && S.tab === S.playTab) { S.sel = new Set([pit.id]); S.anchor = savedCur; }
+      resumeAtBoot = pit || null;
+      if (S.startMode === 'top') bootFromStart = pit || null;
+    }
   }
   // History tabs: first in the tab strip, YT History then X History (each made on its first run while
   // recording is on), only their own kind of item in them; there's always an ordinary tab too
@@ -5322,7 +5514,7 @@ setInterval(() => { blink = !blink; }, 500);
   verifyLocalCopies().then(() => attachKnownCopies());
   showLayer('empty');
   if (resumeAtBoot) setMarquee(resumeAtBoot); else if (S.anchor >= 0) setMarquee(S.items[S.anchor]); else setMarquee(null);
-  if (resumeAtBoot && resumePoint(resumeAtBoot)) toast(`Press Play to continue "${resumeAtBoot.title}" from ${fmt(resumePoint(resumeAtBoot))}`, 5000);
+  if (resumeAtBoot && resumePoint(resumeAtBoot) && S.startMode === 'spot') toast(`Press Play to continue "${resumeAtBoot.title}" from ${fmt(resumePoint(resumeAtBoot))}`, 5000);
   renderSpeed(); renderCc(); updateDlInfo(); renderVisPanel();
   if (WM.info.miniAtStart) { await P.setMini(true); WM.body.add('mini'); renderMini(); $('#btnMini').title = 'Back to the full player (Ctrl+M)'; }   // quit in mini mode (2.4)
   syncWindows({ reflow: false });      // first layout: the windows appear where they were last time

@@ -168,10 +168,10 @@ const VID = path.join(os.tmpdir(), 'slopamp-test-280-media');
   const c10 = calls(1010).length;
   await ev(() => playIndex(4)); s = await waitFor(playing);
   ok(playing(s) && s.src === 'FILE' && !s.x && calls(1010).length === c10 && !s.tag, `a downloaded post plays its file (light ${s.src}, no new yt-dlp call)`);
-  // ================= 9. "?" → X posts: Ask me
-  await ev(() => openAbout()); await sleep(500);
-  ok((await ev(() => [...WM.$('#xPlaySel').options].map(o => o.textContent).join('|'))) === 'Play right away|Ask me', '"?" has X posts: Play right away / Ask me');
-  await ev(() => { const sel = WM.$('#xPlaySel'); sel.value = 'ask'; sel.dispatchEvent(new Event('change')); WM.$('#aboutDlg').close(); });
+  // ================= 9. Settings → YouTube & X → X posts: Ask me (2.9.2: it was in "?")
+  await ev(() => setOpen('web')); await sleep(500);
+  ok((await ev(() => [...WM.$('#xPlaySel').options].map(o => o.textContent).join('|'))) === 'Play right away|Ask me', 'Settings has X posts: Play right away / Ask me');
+  await ev(() => { const sel = WM.$('#xPlaySel'); sel.value = 'ask'; sel.dispatchEvent(new Event('change')); setClose(); });
   ok((await ev(() => stateSnapshot().xPlay)) === 'ask', 'the choice is saved');
   await ev(() => { playIndex(1); }); await sleep(600);
   s = await st();

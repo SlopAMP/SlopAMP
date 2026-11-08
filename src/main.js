@@ -52,6 +52,7 @@ const MAIN_KEYS = ['window', 'layout', 'playlistDir', 'dlVideoDir', 'dlAudioDir'
 const ytdlpDir = [path.join(process.resourcesPath || '', 'ytdlp'), path.join(__dirname, '..', 'vendor', 'ytdlp', process.platform)]
   .find(d => fs.existsSync(path.join(d, process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'))) || path.join(process.resourcesPath || '', 'ytdlp');
 let closing = false;
+let closeOk = false;    // 2.9.2: closing was confirmed (or nothing was downloading)
 const pendingOpen = [];
 
 // Another SlopAMP is already running: the lock request has handed it our files (second-instance).
@@ -200,7 +201,11 @@ function createWindow() {
       if (!reloaded) { reloaded = true; wm.closeAll(); wm.quitting = false; wm.wins = new Map([['main', w]]); wm.started = false; w.reload(); } else w.destroy();
     }, 200);
   });
-  win.on('close', () => {
+  win.on('close', (e) => {
+    // 2.9.2: Settings → General → Ask before closing while something downloads (on by default): the player asks
+    if (!closeOk && (currentState || loadState()).askCloseDl !== false && downloader && (downloader.active || downloader.queue.length) && !win.webContents.isDestroyed()) {
+      e.preventDefault(); win.webContents.send('app:close-ask'); return;
+    }
     // If the page hangs while closing, close the window anyway.
     setTimeout(() => { if (!w.isDestroyed()) { log('window did not close in 5 s; forcing it'); w.destroy(); } }, 5000);
     closing = true;
@@ -710,7 +715,7 @@ function registerIpc() {
     } catch (e) { log('history mirror failed', e.message); return { ok: false, error: e.message }; }
   });
   ipcMain.handle('playlist:quicksave', (_e, items, name) => {
-    if (!Array.isArray(items) || !items.length) return { saved: false, error: 'empty' };
+    if (!Array.isArray(items)) return { saved: false, error: 'empty' };     // 2.9.2: an empty tab saves too (its file is emptied)
     const file = path.join(playlistsDir(), `${safeFileName(name)}.m3u8`);
     try {
       const tmp = file + '.tmp';
@@ -719,16 +724,17 @@ function registerIpc() {
       return { saved: true, name: path.basename(file), path: file };
     } catch (e) { log('quick save failed', e); return { saved: false, error: String(e.message || e) }; }
   });
-  // Quick Save All: every non-empty tab to Playlists\\<tab name>.m3u8 (same-named tabs get " (2)", " (3)"...).
+  // Quick Save All: every tab to Playlists\\<tab name>.m3u8 (same-named tabs get " (2)", " (3)"...). 2.9.2: empty tabs too,
+  // so emptying a tab and saving empties its file.
   ipcMain.handle('playlist:quicksave-all', (_e, tabs) => {
     const out = []; const used = new Set();
     for (const t of Array.isArray(tabs) ? tabs : []) {
-      if (!t || !Array.isArray(t.items) || !t.items.length) continue;
+      if (!t || !Array.isArray(t.items)) continue;
       const base = safeFileName(t.name); let name = base, n = 2;
       while (used.has(name.toLowerCase())) name = `${base} (${n++})`;
       used.add(name.toLowerCase());
       const file = path.join(playlistsDir(), `${name}.m3u8`);
-      try { fs.writeFileSync(file + '.tmp', buildM3U(t.items), 'utf8'); fs.renameSync(file + '.tmp', file); out.push({ name: path.basename(file), ok: true }); }
+      try { fs.writeFileSync(file + '.tmp', buildM3U(t.items), 'utf8'); fs.renameSync(file + '.tmp', file); out.push({ name: path.basename(file), ok: true, empty: !t.items.length }); }
       catch (e) { log('quick save all failed', e); out.push({ name: path.basename(file), ok: false, error: String(e.message || e) }); }
     }
     return out;
@@ -798,7 +804,7 @@ function registerIpc() {
     if (!job || typeof job.url !== 'string' || !downloader || !downloader.available()) return null;
     const x = X_POST_URL_RE.test(job.url);
     if (!x && !/^https:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(job.url)) return null;
-    try { return await downloader.sizeOf({ url: job.url, kind: job.kind === 'audio' ? 'audio' : 'video', quality: ['xready', 'best', '1080', '720', '480'].includes(job.quality) ? job.quality : 'xready', x }); } catch (e) { log('size check failed', e.message); return null; }
+    try { return await downloader.sizeOf({ url: job.url, kind: job.kind === 'audio' ? 'audio' : 'video', quality: ['xready', 'best', '1080', '720', '480'].includes(job.quality) ? job.quality : 'xready', mp3q: ['320', '192', '128'].includes(String(job.mp3q)) ? String(job.mp3q) : 'best', x }); } catch (e) { log('size check failed', e.message); return null; }
   });
   ipcMain.handle('dl:start', (_e, job) => {
     const isX = !!job && typeof job.url === 'string' && X_POST_URL_RE.test(job.url);
@@ -806,7 +812,7 @@ function registerIpc() {
     if (!downloader.available()) return { ok: false, reason: 'missing' };
     const vid = KEY_RE.test(job.vid || '') && (!isX || /^x\d/.test(job.vid)) ? job.vid : null;
     if (isX && !vid) return { ok: false, reason: 'unsupported' };
-    return downloader.start({ id: String(job.id), vid, x: isX, url: job.url, kind: job.kind === 'audio' ? 'audio' : 'video', quality: ['xready', 'best', '1080', '720', '480'].includes(job.quality) ? job.quality : 'xready', title: String(job.title || '') });
+    return downloader.start({ id: String(job.id), vid, x: isX, url: job.url, kind: job.kind === 'audio' ? 'audio' : 'video', quality: ['xready', 'best', '1080', '720', '480'].includes(job.quality) ? job.quality : 'xready', mp3q: ['320', '192', '128'].includes(String(job.mp3q)) ? String(job.mp3q) : 'best', title: String(job.title || '') });
   });
   ipcMain.on('dl:cancel', (_e, id) => downloader.cancel(String(id)));
   // ---- user skins (see "user skins (1.7)" above)
@@ -1042,7 +1048,7 @@ function registerIpc() {
   });
   ipcMain.handle('web:meta', (_e, url) => fetchMeta(url));
   // 2.8: an X post's video link for the player (opts: fresh = ask X again, prefetch = the next item, early)
-  ipcMain.handle('x:resolve', (_e, url, opts) => (xstream ? xstream.resolve(url, opts && typeof opts === 'object' ? { fresh: !!opts.fresh } : {}) : { ok: false, code: 'other', error: 'not ready' }));
+  ipcMain.handle('x:resolve', (_e, url, opts) => (xstream ? xstream.resolve(url, opts && typeof opts === 'object' ? { fresh: !!opts.fresh, height: +opts.height || 720 } : {}) : { ok: false, code: 'other', error: 'not ready' }));
   ipcMain.handle('web:resolve', async (_e, urls) => {
     const list = (Array.isArray(urls) ? urls : []).filter(u => typeof u === 'string' && /^https?:\/\/t\.co\/\w{1,30}\/?$/i.test(u)).slice(0, 100);
     const out = {};
@@ -1064,6 +1070,7 @@ function registerIpc() {
   });
   ipcMain.on('sys:title', (_e, t) => { trayTitle = String(t || '').replace(/[\r\n]+/g, ' ').slice(0, 120); if (tray) { tray.setToolTip(trayTip()); tray.setContextMenu(trayMenu()); } });
   ipcMain.on('win:close', () => win && win.close());
+  ipcMain.on('win:close-force', () => { closeOk = true; if (win) win.close(); });   // 2.9.2: after "Close anyway"
   ipcMain.handle('win:fullscreen', (_e, on) => wm.setFullscreen(on));
   ipcMain.handle('win:mini', (_e, on) => wm.setMini(on));
   // ---- movable windows (windows.js). A bug here must never freeze SlopAMP behind an error box: log it.
@@ -1249,6 +1256,7 @@ function trayMenu() {
     { label: 'Previous', click: key('prev') }, { label: 'Play / Pause', click: key('playpause') }, { label: 'Next', click: key('next') }, { label: 'Stop', click: key('stop') },
     { type: 'separator' },
     { label: 'Show SlopAMP', click: () => fromTray() },
+    { label: 'Settings…', click: () => { fromTray(); if (win && !win.isDestroyed()) win.webContents.send('sys:settings'); } },   // 2.9.2
     { label: 'Quit', click: () => { if (win && !win.isDestroyed()) win.webContents.send('sys:quit'); else app.quit(); } }
   ]);
 }

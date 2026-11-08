@@ -151,7 +151,8 @@ class Downloader {
     a.push(...this.pick(job));
     if (job.kind === 'audio') {
       // 2.7: the video's thumbnail goes into the MP3 as its cover art (shown in Library → Preview and in other players)
-      a.push('-x', '--audio-format', 'mp3', '--audio-quality', '0', '--embed-metadata', '--embed-thumbnail', '--convert-thumbnails', 'jpg');
+      // 2.9.2: Settings → Downloads → MP3 quality (best VBR, or a fixed 320 / 192 / 128 kb/s)
+      a.push('-x', '--audio-format', 'mp3', '--audio-quality', { 320: '320K', 192: '192K', 128: '128K' }[job.mp3q] || '0', '--embed-metadata', '--embed-thumbnail', '--convert-thumbnails', 'jpg');
     } else a.push('--merge-output-format', 'mp4', '--remux-video', 'webm>mp4', '--embed-metadata');
     a.push(job.url);
     return a;
@@ -184,7 +185,7 @@ class Downloader {
     });
     let j = null;
     for (const line of out.split('\n')) { if (!line.trim().startsWith('{')) continue; try { j = JSON.parse(line); break; } catch (_) {} }
-    return sizeFromInfo(j, job.kind);
+    return sizeFromInfo(j, job.kind, job.mp3q);
   }
 
   run(job, android) {
@@ -231,10 +232,10 @@ class Downloader {
   }
 }
 
-function sizeFromInfo(j, kind) {
+function sizeFromInfo(j, kind, mp3q) {
   if (!j || typeof j !== 'object') return null;
   const dur = Number(j.duration) || 0;
-  if (kind === 'audio') return dur ? Math.round(dur * 256000 / 8) : null;
+  if (kind === 'audio') return dur ? Math.round(dur * ({ 320: 320, 192: 192, 128: 128 }[mp3q] || 256) * 1000 / 8) : null;
   const one = (f) => Number(f && (f.filesize || f.filesize_approx)) || (f && f.tbr && dur ? Math.round(f.tbr * 1000 / 8 * dur) : 0);
   const parts = Array.isArray(j.requested_formats) && j.requested_formats.length ? j.requested_formats : [j];
   const n = parts.reduce((a, f) => a + one(f), 0);

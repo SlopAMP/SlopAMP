@@ -187,8 +187,9 @@
       <span class="pltime lcd-inset" id="plTime">0 items</span>
     </div>
     <div id="plbar2">
+      <button class="pb pset" id="pSet" title="Settings (Ctrl+,)">&#9881;</button>
       <button class="pb wide" id="pDlAll" title="Download every YouTube item in the playlist"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M7 1h2v7l2.5-2.5 1.4 1.4L8 11.8 3.1 6.9l1.4-1.4L7 8zM2 13h12v2H2z"/></svg>DOWNLOAD ALL</button>
-      <button class="pb wide" id="pDlm" title="Your downloads and saved playlists: see, search, open and delete"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M1 3h5l2 2h7v9H1z"/></svg>MANAGE LIBRARY</button>
+      <button class="pb wide" id="pDlm" title="Library: your downloads, clips, saved playlists and skins"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M1 3h5l2 2h7v9H1z"/></svg>LIBRARY</button>
       <button class="pb wide" id="pQuick" title="Quick save this tab to Downloads\SlopAMP\Playlists, replacing the old copy (Ctrl+Shift+S)"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M2 1h10l3 3v11H1V1zm2 1v4h7V2zm1 8v4h6v-4z"/></svg>QUICK SAVE</button>
       <button class="pb wide" id="pQuickAll" title="Quick save every tab to Downloads\SlopAMP\Playlists, replacing the old copies (Ctrl+Alt+S)"><svg viewBox="0 0 16 16" class="tog-ico"><path d="M2 1h10l3 3v11H1V1zm2 1v4h7V2zm1 8v4h6v-4z"/></svg>SAVE ALL</button>
       <span class="spacer"></span>
@@ -282,6 +283,112 @@
     </div>
     <div class="ytw-view" id="ytwView"><div class="ytw-wait" id="ytwWait">Loading YouTube&#8230;</div></div>
     <div class="ytw-stat"><span id="ytwStatL"></span><span class="ed-sp"></span><span id="ytwStatR">links to other sites open in your normal browser</span></div>
+  </section>
+
+  <!-- SETTINGS (2.9.2): its own window (winmgr.js); app.js "Settings window". Controls that lived in "?" keep their ids. -->
+  <section id="setPanel">
+    <div class="set-top"><input type="text" id="setSearch" placeholder="Search settings&#8230;" spellcheck="false"><button type="button" id="setSearchX" class="hidden" title="Clear search">&#x2715;</button></div>
+    <div class="set-body">
+      <nav class="set-nav" id="setNav">
+        <button type="button" data-s="general"><i>&#9881;</i>General</button>
+        <button type="button" data-s="playback"><i>&#9654;</i>Playback</button>
+        <button type="button" data-s="downloads"><i>&#8681;</i>Downloads</button>
+        <button type="button" data-s="web"><i>&#120143;</i>YouTube &amp; X</button>
+        <button type="button" data-s="history"><i>&#128338;</i>History</button>
+        <button type="button" data-s="look"><i>&#9680;</i>Look</button>
+        <button type="button" data-s="keys"><i>&#9000;</i>Keys &amp; Windows</button>
+        <hr>
+        <button type="button" data-s="updates"><i>&#9889;</i>Updates</button>
+        <button type="button" data-s="about"><i>?</i>About</button>
+      </nav>
+      <div class="set-main" id="setMain">
+      <div class="set-sec" data-s="general"><h3>General</h3>
+        <h4>When SlopAMP starts</h4>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Open where you left off</span><small>What Play does first after a restart</small></div><div class="set-c"><select id="setStart"><option value="spot">The last item, at the same spot</option><option value="top">The last item, from the start</option><option value="none">The top of the playlist</option></select></div></div>
+        <h4>Closing</h4>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Minimize to the tray</span><small>The &#8211; button (and the taskbar) hides SlopAMP next to the clock; click its icon to come back. &#10005; still quits.</small></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="sysTray"><i></i></label></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Ask before closing while something downloads</span><small>Otherwise closing stops the download</small></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="setAskClose"><i></i></label></div></div>
+      </div>
+      <div class="set-sec" data-s="playback"><h3>Playback</h3>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Show remaining time on the clock</span><small>Same as clicking the clock</small></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="setRemaining"><i></i></label></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Skip countdown on the choice boxes</span><small>The X / YouTube boxes skip to the next item after this long</small></div><div class="set-c"><select id="setSkip"><option value="10">10 seconds</option><option value="5">5 seconds</option><option value="15">15 seconds</option><option value="30">30 seconds</option><option value="0">Off (wait for me)</option></select></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Equalizer on</span><small>Also the ON button on the equalizer</small></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="setEq"><i></i></label></div></div>
+      </div>
+      <div class="set-sec" data-s="downloads"><h3>Downloads</h3>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Video quality</span><small>What DOWNLOAD&#8217;s &#10003; item, DOWNLOAD ALL and EDIT use. X-ready posts to X; Best may not.</small></div><div class="set-c"><select id="dlFmtSel"><option value="xready">X-ready (H.264, up to 1080p)</option><option value="best">Best quality (4K / AV1)</option></select></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">MP3 quality</span></div><div class="set-c"><select id="setMp3"><option value="best">Best (VBR, about 245 kb/s)</option><option value="320">320 kb/s</option><option value="192">192 kb/s</option><option value="128">128 kb/s (smaller)</option></select></div></div>
+        <h4>Folders</h4>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Videos</span><small><span class="set-path" id="setDirVideoP"></span></small></div><div class="set-c"><button type="button" id="setDirVideo">Change&#8230;</button></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">MP3s</span><small><span class="set-path" id="setDirAudioP"></span></small></div><div class="set-c"><button type="button" id="setDirAudio">Change&#8230;</button></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl"></span></div><div class="set-c"><button type="button" id="setDirReset">Reset to Downloads\SlopAMP</button></div></div>
+        <h4>Size limit</h4>
+        <div class="set-row dl-room" data-k="size limit downloads folder bar"><div class="set-l"><span class="set-lbl">Limit for the downloads folder</span><div class="room-bar" id="dlUseBar"></div><div class="room-leg" id="dlUseLeg"></div><small>Videos, MP3s and clips count. Before a download would pass the limit, SlopAMP asks first; it never deletes anything on its own.</small></div><div class="set-c"><select id="dlLimitSel"><option value="0">Off</option><option value="1">1 GB</option><option value="5">5 GB</option><option value="10">10 GB</option><option value="25">25 GB</option><option value="50">50 GB</option><option value="100">100 GB</option><option value="custom">Custom&#8230;</option></select><input type="number" id="dlLimitGb" class="hidden" min="1" max="100000" step="1" title="Your limit in GB (Enter)"><span class="dl-gb">GB</span></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Make room now</span><small>Oldest first, never favorites or files in a playlist</small></div><div class="set-c"><button type="button" id="dlRoomBtn" title="Move the oldest downloads (not in a playlist, not ★ favorites) to the Recycle Bin">Make room&#8230;</button></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Warn me at</span><small>With a limit on: a note before a download takes the folder past this</small></div><div class="set-c"><select id="setWarn"><option value="90">90% full</option><option value="80">80% full</option><option value="0">Never</option></select></div></div>
+      </div>
+      <div class="set-sec" data-s="web"><h3>YouTube &amp; X</h3>
+        <h4>X posts</h4>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">X posts that aren&#8217;t downloaded</span><small>Play right away: in SlopAMP&#8217;s own player, nothing is saved</small></div><div class="set-c"><select id="xPlaySel"><option value="stream">Play right away</option><option value="ask">Ask me</option></select></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Streaming quality</span><small>For X posts played without downloading</small></div><div class="set-c"><select id="setXq"><option value="720">Up to 720p</option><option value="480">Up to 480p (faster)</option><option value="1080">Up to 1080p</option></select></div></div>
+        <h4>YOUTUBE window</h4>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">+ Add puts videos in</span><small>Same as the &#9662; next to + Add</small></div><div class="set-c"><select id="setYwTab"></select></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Sign-in and cookies in that window</span><small>Signs you out of YouTube in the YOUTUBE window only</small></div><div class="set-c"><button type="button" id="setYwClear">Clear YouTube data&#8230;</button></div></div>
+      </div>
+      <div class="set-sec" data-s="history"><h3>History</h3><div class="set-two"><div>
+        <h4>&#128338; YT History</h4>
+                <div class="set-row"><div class="set-l"><span class="set-lbl">Record YouTube plays</span></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="setHytOn"><i></i></label></div></div>
+                <div class="set-row"><div class="set-l"><span class="set-lbl">Order</span></div><div class="set-c"><select id="setHytOrder"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></div></div>
+                <div class="set-row"><div class="set-l"><span class="set-lbl">When a video plays again</span></div><div class="set-c"><select id="setHytAgain"><option value="bump">Move it up</option><option value="keep">Leave it</option><option value="dup">Add it again</option></select></div></div>
+                <div class="set-row"><div class="set-l"><span class="set-lbl">Keep</span></div><div class="set-c"><select id="setHytCap"></select></div></div>
+                <div class="set-row"><div class="set-l"><span class="set-lbl">Synced copy in Playlists</span><small>Playlists\YouTube History.m3u8</small></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="setHytMirror"><i></i></label></div></div>
+                <div class="set-row"><div class="set-l"><span class="set-lbl"></span></div><div class="set-c"><button type="button" id="setHytCopy">Save a copy&#8230;</button><button type="button" id="setHytClear">Clear&#8230;</button></div></div>
+        </div><div>
+        <h4>&#128338; X History</h4>
+                <div class="set-row"><div class="set-l"><span class="set-lbl">Record X plays and downloads</span></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="setHxOn"><i></i></label></div></div>
+                <div class="set-row"><div class="set-l"><span class="set-lbl">Order</span></div><div class="set-c"><select id="setHxOrder"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></div></div>
+                <div class="set-row"><div class="set-l"><span class="set-lbl">When a post plays or downloads again</span></div><div class="set-c"><select id="setHxAgain"><option value="bump">Move it up</option><option value="keep">Leave it</option><option value="dup">Add it again</option></select></div></div>
+                <div class="set-row"><div class="set-l"><span class="set-lbl">Keep</span></div><div class="set-c"><select id="setHxCap"></select></div></div>
+                <div class="set-row"><div class="set-l"><span class="set-lbl">Synced copy in Playlists</span><small>Playlists\X History.m3u8</small></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="setHxMirror"><i></i></label></div></div>
+                <div class="set-row"><div class="set-l"><span class="set-lbl"></span></div><div class="set-c"><button type="button" id="setHxCopy">Save a copy&#8230;</button><button type="button" id="setHxClear">Clear&#8230;</button></div></div>
+        </div></div><p class="set-note">The &#9881; on each History tab is a shortcut to these.</p>
+      </div>
+      <div class="set-sec" data-s="look"><h3>Look</h3>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Skin</span></div><div class="set-c"><select id="setSkin"></select><button type="button" id="setSkinEd">Skin editor&#8230;</button></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Window layout</span><small>Reset layout: Ctrl+Alt+R</small></div><div class="set-c"><select id="setLayout"></select><button type="button" id="setLayoutReset">Reset layout</button></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Snap to edges &amp; windows</span></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="setSnap"><i></i></label></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Keep windows on top</span></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="setOnTop"><i></i></label></div></div>
+        <h4>Visualizer</h4>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Style</span></div><div class="set-c"><select id="setVis"><option value="milkdrop">MilkDrop (Butterchurn)</option><option value="bars">Classic bars</option></select></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Change preset by itself</span><small>Every 30 seconds (K locks it)</small></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="setVisCycle"><i></i></label></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Only my &#9733; presets</span><small>When you have some (H marks one)</small></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="setVisFav"><i></i></label></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Show the song title when a song starts</span></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="setVisTitle"><i></i></label></div></div>
+      </div>
+      <div class="set-sec" data-s="keys"><h3>Keys &amp; Windows</h3>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Use media keys</span><small>Your keyboard&#8217;s play / next / previous / stop keys, also in the background. Off: other players get them (fully after a restart).</small></div><div class="set-c"><label class="set-tg"><input type="checkbox" id="sysKeys"><i></i></label></div></div>
+        <div id="assocRow">        <div class="set-row"><div class="set-l"><span class="set-lbl">Make SlopAMP open playlists</span><small><span id="assocHint">Then pick SlopAMP for .m3u8 / .m3u in Windows&#8217; Default apps.</span></small></div><div class="set-c"><button type="button" id="assocBtn" title="Lets Windows open .m3u8 / .m3u / .pls playlists in SlopAMP (no admin needed)">Set up&#8230;</button></div></div></div>
+        <h4>Keyboard</h4>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Settings</span></div><div class="set-c"><span class="set-key">Ctrl+,</span></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Play / pause</span></div><div class="set-c"><span class="set-key">Space</span></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Seek 5 s / 30 s</span></div><div class="set-c"><span class="set-key">&#8592; &#8594;</span> <span class="set-key">Shift</span></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Volume</span></div><div class="set-c"><span class="set-key">&#8593; &#8595;</span></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Fullscreen</span></div><div class="set-c"><span class="set-key">F</span> <span class="set-key">F11</span></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Mini mode</span></div><div class="set-c"><span class="set-key">Ctrl+M</span></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Rename</span></div><div class="set-c"><span class="set-key">F2</span></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">New tab / next tab</span></div><div class="set-c"><span class="set-key">Ctrl+T</span> <span class="set-key">Ctrl+Tab</span></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Reset layout</span></div><div class="set-c"><span class="set-key">Ctrl+Alt+R</span></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Favorite (in the Library)</span></div><div class="set-c"><span class="set-key">F</span></div></div>
+      </div>
+      <div class="set-sec" data-s="updates"><h3>Updates</h3>
+        <div class="set-row" data-k="updates check version"><div class="set-l"><span class="set-lbl" id="setVer">Version</span><small><span class="upd-status" id="updStatus"></span></small></div><div class="set-c"><button type="button" id="updCheck">Check for updates</button></div></div>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">When a new version is out</span><small><span class="upd-hint" id="updHint"></span></small></div><div class="set-c"><select id="updModeSel"><option value="auto">Install automatically</option><option value="notify">Notify me</option><option value="off">Off</option></select></div></div>
+      </div>
+      <div class="set-sec" data-s="about"><h3>About</h3>
+        <div class="set-row"><div class="set-l"><span class="set-lbl">Version, links and licenses</span></div><div class="set-c"><button type="button" id="setAbout">Open About&#8230;</button></div></div>
+      </div>
+      <div class="set-none hidden" id="setNone"></div>
+      </div>
+    </div>
+    <div class="set-foot"><span>Changes save as you make them.</span><button type="button" id="setDone">Done</button></div>
   </section>
 
   <!-- X PLAYER (2.8): X's own post card, for a post SlopAMP couldn't stream (app.js "X PLAYER"; opened from that error box) -->
@@ -457,39 +564,10 @@
       <div class="about-body">
         <p>A retro-styled player for your own media files plus YouTube videos through YouTube’s official embedded player, and X video posts streamed in its own player. The DOWNLOAD button saves a copy with yt-dlp — only download videos you have the right to save.</p>
         <p id="aboutEnc"></p>
-        <p>SlopAMP is free software (MIT). It bundles Electron/Chromium and FFmpeg (LGPL v3). It includes the Butterchurn visualizer (MIT) and its preset collection. Not affiliated with or endorsed by Winamp, VideoLAN, or YouTube/Google.</p>
+        <p>SlopAMP is free software (MIT). It bundles Electron/Chromium and FFmpeg (LGPL v3). It includes the Butterchurn visualizer (MIT) and its preset collection. Not affiliated with or endorsed by Winamp, VideoLAN, YouTube/Google, or X.</p>
         <iframe id="licFrame" title="Licenses" class="hidden"></iframe>
       </div>
-      <div class="upd">
-        <div class="upd-head"><span class="upd-lbl">Updates</span><span class="upd-status" id="updStatus"></span><button type="button" id="updCheck">Check for updates</button></div>
-        <label class="upd-mode" for="updModeSel">When a new version is out
-          <select id="updModeSel"><option value="auto">Install automatically</option><option value="notify">Notify me</option><option value="off">Off</option></select>
-        </label>
-        <div class="upd-hint" id="updHint"></div>
-      </div>
-      <div class="upd sys" id="aboutSys">
-        <label class="upd-mode" for="dlFmtSel" title="X-ready: H.264 + AAC (posts to X), the best H.264 up to 1080p. Best quality: the largest picture (4K / 1440p, often VP9 / AV1), may not post to X.">Video downloads
-          <select id="dlFmtSel"><option value="xready">X-ready (H.264, up to 1080p)</option><option value="best">Best quality (4K / AV1)</option></select>
-        </label>
-        <label class="upd-mode" for="xPlaySel" title="Play right away: an X post that isn&#8217;t downloaded plays in SlopAMP&#8217;s own player (up to 720p, nothing is saved). Ask me: SlopAMP asks first: play here, download or open it on X.">X posts
-          <select id="xPlaySel"><option value="stream">Play right away</option><option value="ask">Ask me</option></select>
-        </label>
-        <!-- 2.9.1: the downloads folder's size limit (app.js "size limit + Favorites") -->
-        <div class="dl-room"><div class="upd-head"><span class="upd-lbl">Downloads folder</span><button type="button" id="dlRoomBtn" title="Move the oldest downloads (not in a playlist, not ★ favorites) to the Recycle Bin">Make room&#8230;</button></div>
-        <label class="upd-mode" for="dlLimitSel" title="Before a download would pass the limit, SlopAMP asks first. It never deletes anything on its own.">Size limit
-          <select id="dlLimitSel"><option value="0">Off</option><option value="1">1 GB</option><option value="5">5 GB</option><option value="10">10 GB</option><option value="25">25 GB</option><option value="50">50 GB</option><option value="100">100 GB</option><option value="custom">Custom&#8230;</option></select>
-          <input type="number" id="dlLimitGb" class="hidden" min="1" max="100000" step="1" title="Your limit in GB (Enter)"><span class="dl-gb">GB</span>
-        </label>
-        <div class="room-bar" id="dlUseBar"></div>
-        <div class="room-leg" id="dlUseLeg"></div>
-        <div class="sys-hint">Videos, MP3s and clips count. Before a download would pass the limit, SlopAMP asks first; it never deletes anything on its own.</div></div>
-        <div class="upd-head"><span class="upd-lbl">Windows &amp; keys</span></div>
-        <label class="sys-ck" title="The &#8211; button (and the taskbar) hides SlopAMP next to the clock instead; click its icon to bring it back. &#10005; still quits."><input type="checkbox" id="sysTray"><span>Minimize to the tray <small>(click its icon to come back)</small></span></label>
-        <label class="sys-ck" title="Your keyboard&#8217;s play / next / previous / stop keys control SlopAMP even in the background. Off: other players (Spotify, your browser) get them; fully after restarting SlopAMP."><input type="checkbox" id="sysKeys"><span>Use media keys <small>(also in the background)</small></span></label>
-        <div id="assocRow"><div class="upd-head"><span class="upd-lbl">Playlist files</span><button type="button" id="assocBtn" title="Lets Windows open .m3u8 / .m3u / .pls playlists in SlopAMP (no admin needed)">Make SlopAMP open playlists&#8230;</button></div>
-        <div class="sys-hint" id="assocHint" title="Or right-click a playlist &rarr; Open with &rarr; Choose another app &rarr; SlopAMP &rarr; Always">Then pick SlopAMP for .m3u8 / .m3u in Windows&#8217; Default apps.</div></div>
-      </div>
-      <div class="dlg-btns"><button type="button" id="aboutLic">View licenses</button><button value="close">Close</button></div>
+      <div class="dlg-btns"><button type="button" id="aboutSet" class="about-set" title="Settings (Ctrl+,)">&#9881; Settings&#8230;</button><button type="button" id="aboutLic">View licenses</button><button value="close">Close</button></div>
     </form>
   </dialog>
 

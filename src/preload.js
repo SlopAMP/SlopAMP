@@ -60,6 +60,9 @@ contextBridge.exposeInMainWorld('phosphor', {
   showInFolder: (p) => ipcRenderer.send('shell:show', p),
   minimize: () => ipcRenderer.send('win:minimize'),
   close: () => ipcRenderer.send('win:close'),
+  closeForce: () => ipcRenderer.send('win:close-force'),                  // 2.9.2: Close anyway (a download is running)
+  onCloseAsk: (cb) => ipcRenderer.on('app:close-ask', () => cb()),
+  onSysSettings: (cb) => ipcRenderer.on('sys:settings', () => cb()),
   setFullscreen: (on) => ipcRenderer.invoke('win:fullscreen', on),
   setMini: (on) => ipcRenderer.invoke('win:mini', on),
   // movable windows (renderer/winmgr.js <-> windows.js)

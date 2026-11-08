@@ -13,7 +13,10 @@
 const { execFile } = require('child_process');
 const crypto = require('crypto');
 
-const FORMAT = 'best[protocol^=http][ext=mp4][height<=720]/best[protocol^=http][ext=mp4]/best[protocol^=http]';
+// 2.9.2: the picture size cap is a setting (Settings → YouTube & X → Streaming quality: 480 / 720 / 1080, 720 by default)
+const formatFor = (h) => `best[protocol^=http][ext=mp4][height<=${h}]/best[protocol^=http][ext=mp4]/best[protocol^=http]`;
+const FORMAT = formatFor(720);
+const HEIGHTS = [480, 720, 1080];
 const ASK_TIMEOUT = 45000;
 const FINAL = new Set(['novideo', 'signin', 'gone']);   // asking X again won't change these
 
@@ -50,24 +53,25 @@ class XStream {
   async resolve(raw, opts = {}) {
     const url = postUrl(raw);
     if (!url) return { ok: false, code: 'other', error: 'That isn’t a link to an X post.' };
-    if (!opts.fresh && this.cache.has(url)) return { ...this.cache.get(url), cached: true };
-    if (this.asking.has(url)) return this.asking.get(url);
-    const p = this.ask(url).then((r) => {
-      this.asking.delete(url);
-      const old = this.cache.get(url);
+    const h = HEIGHTS.includes(+opts.height) ? +opts.height : 720, ck = `${url}|${h}`;
+    if (!opts.fresh && this.cache.has(ck)) return { ...this.cache.get(ck), cached: true };
+    if (this.asking.has(ck)) return this.asking.get(ck);
+    const p = this.ask(url, h).then((r) => {
+      this.asking.delete(ck);
+      const old = this.cache.get(ck);
       if (old && old.key && old.key !== r.key) this.server.unregisterRemote(old.key);
       // a link, or X's final answer (no video / sign-in only / gone), is kept for the session; other failures aren't
-      if (r.ok || FINAL.has(r.code)) this.cache.set(url, r); else this.cache.delete(url);
+      if (r.ok || FINAL.has(r.code)) this.cache.set(ck, r); else this.cache.delete(ck);
       return r;
     });
-    this.asking.set(url, p);
+    this.asking.set(ck, p);
     return p;
   }
-  ask(url) {
+  ask(url, h = 720) {
     const exe = this.downloader.ensureExe();
     if (!exe) return Promise.resolve({ ok: false, code: 'other', error: 'The downloader (yt-dlp) is missing from this copy of SlopAMP.' });
     const n = +((/\/video\/(\d+)$/.exec(url) || [])[1] || 1);
-    const args = [...this.downloader.baseArgs(false), '-j', '--playlist-items', String(n), '-f', FORMAT, url];
+    const args = [...this.downloader.baseArgs(false), '-j', '--playlist-items', String(n), '-f', formatFor(h), url];
     const js = this.downloader.jsRuntime;
     const env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', ...(js ? js.env : {}) };
     const t0 = Date.now();
@@ -103,4 +107,4 @@ class XStream {
   }
 }
 
-module.exports = { XStream, postUrl, classify, FORMAT };
+module.exports = { XStream, postUrl, classify, FORMAT, formatFor };

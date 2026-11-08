@@ -1,8 +1,27 @@
 # Changelog
 
-## 2.9.1 — unreleased
+## 2.9.2 — unreleased
 
-- **Downloads folder size limit** ("?" → Downloads folder): **Off** (the default), 1, 5, 10, 25, 50 or 100 GB, or **Custom…**, with a bar of what's in SlopAMP's folders (videos, MP3s and clips count) that turns amber past 90%. With a limit on, the Library shows the bar next to the file count too.
+- **Settings window**: every setting in one place, in its own window that opens next to the player (like CLIP) and remembers where you put it. Open it with **⚙** in the title bar, **Ctrl+,**, the tray menu's **Settings…**, **"?" → ⚙ Settings…** or the new **⚙** at the left of the playlist's bottom bar. **Esc** or **Done** closes it.
+  - Sections: General, Playback, Downloads, YouTube & X, History, Look, Keys & Windows, Updates, About. **Search settings…** at the top finds a setting in any section.
+  - Changes apply and save as you make them. The old spots still work as shortcuts (the History tabs' ⚙ menu, the Layout menu, the clock, the EQ's ON button…) and the window always shows the current values.
+  - "?" is now just About, with a **⚙ Settings…** button. Everything that was under "?" moved to Settings.
+- **New settings** (the defaults match what SlopAMP did before):
+  - General → **Open where you left off**: the last item at the same spot (the default), the last item from the start, or the top of the playlist.
+  - General → **Ask before closing while something downloads** (on): ✕ (or the tray's Quit) asks first while a download runs; **Close anyway** stops it.
+  - Playback → **Skip countdown** on the X / YouTube choice boxes: 10 seconds (the default), 5, 15, 30, or **Off (wait for me)**.
+  - Downloads → **MP3 quality**: Best (VBR, about 245 kb/s, the default), 320, 192 or 128 kb/s. The size limit's size check uses it too.
+  - Downloads → **Warn me at** 90% (the default), 80% or never: with a size limit on, a note when a download will take the downloads folder past that much of the limit.
+  - YouTube & X → **Streaming quality** for X posts played without downloading: up to 720p (the default), 480p or 1080p.
+- **SAVE ALL also saves empty tabs**, so emptying a tab and saving empties its file in Playlists (before, an emptied tab's old file stayed, with its old items). **QUICK SAVE** on an empty tab does the same.
+- The playlist's **MANAGE LIBRARY** button is now **LIBRARY**.
+- Restarting SlopAMP without playing anything keeps the last item (it used to be forgotten after the second restart).
+- About: "Not affiliated with or endorsed by Winamp, VideoLAN, YouTube/Google, or X."
+- Tests: `tests/settings-292.js`; `tests/size-limit-favorites.js` and `tests/x-streaming.js` now use the Settings window.
+
+## 2.9.1 — released Nov 8, 2026
+
+- **Downloads folder size limit** ("?" → Downloads folder; Settings → Downloads from 2.9.2): **Off** (the default), 1, 5, 10, 25, 50 or 100 GB, or **Custom…**, with a bar of what's in SlopAMP's folders (videos, MP3s and clips count) that turns amber past 90%. With a limit on, the Library shows the bar next to the file count too.
   - With a limit on, SlopAMP checks how big a download will be before it starts (yt-dlp, about 2 seconds; from the length and quality when YouTube or X doesn't say). A download that fits just goes.
   - If it would pass the limit, nothing downloads until you answer a box. The box lists exactly which downloads would go to the Recycle Bin: the oldest first, never one that's in a playlist (any tab or saved playlist; YT History and X History don't count, nor their synced copies in Playlists) or a ★ favorite, and never clips, shots, skins or saved playlists. **Cancel download** is selected by default, so pressing Enter never deletes. **Choose files…** opens the Library oldest-first with those files ticked. A note says files go to the Recycle Bin and can be restored. **Why are these kept?** lists every kept file and what keeps it (which tab, which saved playlist, or ★).
   - When even that wouldn't make enough room, a second box says so and offers **Open Library**, **Cancel download** or **Download anyway**.

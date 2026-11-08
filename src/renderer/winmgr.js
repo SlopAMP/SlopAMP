@@ -16,13 +16,13 @@
 'use strict';
 (() => {
   const P = window.phosphor;
-  const PANELS = ['main', 'eq', 'video', 'playlist', 'skined', 'clip', 'ytweb', 'xweb'];
+  const PANELS = ['main', 'eq', 'video', 'playlist', 'skined', 'clip', 'ytweb', 'xweb', 'settings'];
 
   // ---------------------------------------------------------------- frames
   // Each window's frame: title, extra title slot, buttons (ids are what app.js wires up) and content.
   const FRAMES = {
     main: { title: 'SLOPAMP', tbId: 'titlebar', logo: true, fit: true, content: ['#miniBar', '#deck', '#updBar'],
-      buttons: [['btnAbout', '?', 'About / licenses'], ['btnLayout', '&#x29C9;', 'Window layout'], ['btnMin', '&#x2013;', 'Minimize'], ['btnMini', '&#x25AD;', 'Mini mode (Ctrl+M)'], ['btnClose', '&#x2715;', 'Close']] },
+      buttons: [['btnSettings', '&#9881;', 'Settings (Ctrl+,)'], ['btnAbout', '?', 'About / licenses'], ['btnLayout', '&#x29C9;', 'Window layout'], ['btnMin', '&#x2013;', 'Minimize'], ['btnMini', '&#x25AD;', 'Mini mode (Ctrl+M)'], ['btnClose', '&#x2715;', 'Close']] },
     eq: { title: 'EQUALIZER', tbId: 'eqTitle', sumId: 'eqSum', fit: true, content: ['#eqPanel'],
       buttons: [['eqMinBtn', '&#x2013;', 'Minimize equalizer'], ['eqCloseBtn', '&#x2715;', 'Close equalizer']] },
     video: { title: 'VIDEO', tbId: 'visTitle', sumId: 'visSum', grip: true, content: ['#screen'],
@@ -40,7 +40,10 @@
       buttons: [['ytwMinBtn', '&#x2013;', 'Minimize YOUTUBE'], ['ytwCloseBtn', '&#x2715;', 'Close YOUTUBE']] },
     // X PLAYER (2.8): X's own post card, for a post SlopAMP couldn't stream (app.js "X PLAYER")
     xweb: { title: 'X PLAYER', tbId: 'xwTitle', sumId: 'xwSum', grip: true, content: ['#xwPanel'],
-      buttons: [['xwMinBtn', '&#x2013;', 'Minimize X PLAYER'], ['xwCloseBtn', '&#x2715;', 'Close X PLAYER']] }
+      buttons: [['xwMinBtn', '&#x2013;', 'Minimize X PLAYER'], ['xwCloseBtn', '&#x2715;', 'Close X PLAYER']] },
+    // SETTINGS (2.9.2): app.js "Settings window"
+    settings: { title: 'SETTINGS', tbId: 'setTitle', sumId: 'setSum', grip: true, content: ['#setPanel'],
+      buttons: [['setMinBtn', '&#x2013;', 'Minimize Settings'], ['setCloseBtn', '&#x2715;', 'Close Settings (Esc)']] }
   };
   function buildFrame(id) {
     const f = FRAMES[id];
@@ -72,7 +75,7 @@
     wins: { main: window },        // id -> window object
     docs: [document],             // every document we own (panels + helper windows)
     activeDoc: document,          // where the user last clicked or typed
-    state: { main: { visible: true }, eq: {}, video: {}, playlist: {}, skined: {}, clip: {}, ytweb: {}, xweb: {} },
+    state: { main: { visible: true }, eq: {}, video: {}, playlist: {}, skined: {}, clip: {}, ytweb: {}, xweb: {}, settings: {} },
     info: { preset: 'classic', snap: true, onTop: false, skin: 'default' },
     onReset: null, onClose: null  // set by app.js
   };
@@ -236,6 +239,7 @@
   }
   WM.openLayoutMenu = openLayoutMenu;
   // app.js may show/hide windows first (Classic (stacked, No EQ) hides the EQ window, Classic shows it again)
+  WM.presetNames = PRESET_NAMES;      // 2.9.2: Settings → Look → Window layout
   WM.preset = async (name) => { if (WM.beforePreset) await WM.beforePreset(name); WM.info = await P.wmPreset(name); };
   // Reset layout: every window back, unshaded, stacked on the main screen. Rescues off-screen windows.
   WM.reset = async () => {
@@ -346,7 +350,7 @@
     for (const id of PANELS) frames[id] = buildFrame(id);
     document.body.prepend(frames.main);
     document.body.classList.add('win-main', 'fit');
-    const ids = ['eq', 'video', 'playlist', 'skined', 'clip', 'ytweb', 'xweb', 'popup', 'dialog'];
+    const ids = ['eq', 'video', 'playlist', 'skined', 'clip', 'ytweb', 'xweb', 'settings', 'popup', 'dialog'];
     const opened = await Promise.all(ids.map(openWindow));
     ids.forEach((id, i) => {
       const w = opened[i];

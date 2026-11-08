@@ -61,24 +61,24 @@ const MB = 1024 * 1024;
   const waitFile = async (re, ms = 15000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (fs.readdirSync(V).some(f => re.test(f))) return true; await sleep(200); } return false; };
   const exists = (f) => fs.existsSync(f);
 
-  // ================= Settings: "?" → Downloads folder
-  await ev(() => { openAbout(); }); await sleep(800);
+  // ================= Settings → Downloads → Size limit (2.9.2: the Settings window; it was in "?")
+  await ev(() => { setOpen('downloads'); }); await sleep(800);
   const st = await ev(() => ({ opts: [...WM.$$('#dlLimitSel option')].map(o => o.textContent), val: WM.$('#dlLimitSel').value, leg: WM.$('#dlUseLeg').textContent, bar: WM.$$('#dlUseBar i').length, btn: WM.$('#dlRoomBtn').textContent }));
   ok(JSON.stringify(st.opts) === JSON.stringify(['Off', '1 GB', '5 GB', '10 GB', '25 GB', '50 GB', '100 GB', 'Custom…']) && st.val === '0', `limit choices ${JSON.stringify(st.opts)}, Off by default`);
   ok(/820 MB/.test(st.leg) && /Videos 750 MB/.test(st.leg) && /MP3s 20\.0 MB/.test(st.leg) && /Clips 50\.0 MB/.test(st.leg) && st.bar >= 3, `the bar: ${st.leg}`);
   ok(st.btn === 'Make room…', 'Make room… button');
   // limit off: no size check
-  await ev(async (id) => { WM.$('#aboutDlg').close(); startDownload(S.items.find(i => i.id === id), 'video', 'xready'); }, await item('yyyyyyyyyy5'));
+  await ev(async (id) => { setClose(); startDownload(S.items.find(i => i.id === id), 'video', 'xready'); }, await item('yyyyyyyyyy5'));
   ok(await waitFile(/Limit Off/), 'limit off: a download just goes');
   ok(sizeCalls('yyyyyyyyyy5') === 0, 'limit off: no size check');
   fs.rmSync(fs.readdirSync(V).map(f => `${V}/${f}`).find(f => /Limit Off/.test(f)));
   // Custom: 1 GB
-  await ev(() => { openAbout(); }); await sleep(600);
+  await ev(() => { setOpen('downloads'); }); await sleep(600);
   await ev(() => { const s = WM.$('#dlLimitSel'); s.value = 'custom'; s.dispatchEvent(new Event('change')); });
   ok(await ev(() => !WM.$('#dlLimitGb').classList.contains('hidden')), 'Custom… shows a GB box');
   await ev(() => { const g = WM.$('#dlLimitGb'); g.value = '1'; g.dispatchEvent(new Event('change')); }); await sleep(500);
   ok((await ev(() => S.dlLimit)) === 1 && /of 1 GB/.test(await ev(() => WM.$('#dlUseLeg').textContent)), 'custom limit 1 GB is set and shown');
-  await ev(() => WM.$('#aboutDlg').close());
+  await ev(() => setClose());
 
   // ================= a download that fits
   await ev((id) => { startDownload(S.items.find(i => i.id === id), 'video', 'xready'); }, await item('yyyyyyyyyy1'));
@@ -188,7 +188,7 @@ const MB = 1024 * 1024;
   ok(!plw.some(t => /Favorites/.test(t)), 'a link with no file has no Favorites entry');
 
   // ================= Make room…
-  await ev(() => { S.dlLimit = 1; delete S.favs['y:dddddddddd4']; openAbout(); }); await sleep(500);     // un-star D: the only download not in a playlist
+  await ev(() => { S.dlLimit = 1; delete S.favs['y:dddddddddd4']; setOpen('downloads'); }); await sleep(500);     // un-star D: the only download not in a playlist
   await ev(() => WM.$('#dlRoomBtn').click());
   b = await waitBox();
   ok(b.open && b.title === 'Make room' && JSON.stringify(b.btns) === JSON.stringify(['Cancel', 'Delete 1']) && JSON.stringify(b.list) === '["Newer Video"]' && /Recycle Bin/.test(b.bin), `Make room… opens the same box ${JSON.stringify([b.title, b.btns, b.list])}`);
