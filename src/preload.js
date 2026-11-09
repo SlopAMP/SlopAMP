@@ -113,6 +113,9 @@ contextBridge.exposeInMainWorld('phosphor', {
   clipRename: (p, name) => ipcRenderer.invoke('clip:rename', p, name),
   clipPick: () => ipcRenderer.invoke('clip:pick'),
   clipFolder: (kind) => ipcRenderer.send('clip:folder', kind),
+  clipLoudness: (o) => ipcRenderer.invoke('clip:loudness', o),          // 2.9.4
+  clipGifEstimate: (o) => ipcRenderer.invoke('clip:gif-estimate', o),
+  clipOpenFile: (p) => ipcRenderer.send('clip:open-file', p),
   onClip: (cb) => ipcRenderer.on('clip:event', (_e, ev) => cb(ev)),
   // 2.5 #22: X-ready MP4s
   xStatus: (files) => ipcRenderer.invoke('x:status', files),

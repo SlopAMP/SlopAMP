@@ -454,6 +454,7 @@ function downloadDirs() {
   const base = path.join(app.getPath('downloads'), 'SlopAMP');
   return { video: s.dlVideoDir || path.join(base, 'Video'), audio: s.dlAudioDir || path.join(base, 'Audio'), playlists: path.join(base, 'Playlists'),
     mp3clips: path.join(base, 'mp3clips'), mp4clips: path.join(base, 'mp4clips'), shots: path.join(base, 'Shots'),   // CLIP (2.3)
+    gifs: path.join(base, 'gifs'),         // CLIP GIFs (2.9.4)
     shared: path.join(base, 'Shared') };   // Share playlist (2.4): .zips made here, and shared .zips unpacked here
 }
 function playlistsDir() {
@@ -845,6 +846,11 @@ function registerIpc() {
   ipcMain.handle('clip:save', (_e, o) => clipper.save(o).catch((e) => { log('clip save failed', e); return { ok: false, error: 'Couldn’t save the clip.' }; }));
   ipcMain.on('clip:cancel', (_e, job) => clipper.cancel(job));
   ipcMain.handle('clip:list', () => clipper.list());
+  // 2.9.4: Sound's "this clip: -23 LUFS" (loudnorm pass 1) and the GIF size estimate (a 1 s test GIF)
+  ipcMain.handle('clip:loudness', (_e, o) => clipper.loudness(o).catch((e) => { log('clip loudness failed', e); return { ok: false }; }));
+  ipcMain.handle('clip:gif-estimate', (_e, o) => clipper.gifEstimate(o).catch((e) => { log('gif estimate failed', e); return { ok: false }; }));
+  // a saved GIF opens in the computer's picture viewer (SlopAMP plays sound and video, not GIFs)
+  ipcMain.on('clip:open-file', (_e, p) => { if (clipper.inClipDir(p) && fs.existsSync(p)) shell.openPath(p); });
   // ---- 2.5 #22: X-ready MP4s (clip.js "X-ready", xready.js)
   ipcMain.handle('x:status', (_e, files) => clipper.xStatus(files));
   ipcMain.handle('x:plan', (_e, f) => (typeof f === 'string' ? clipper.xPlan(f) : { ok: false }));
@@ -862,7 +868,7 @@ function registerIpc() {
     ipcMain.handle(ch, (_e, o) => (o && typeof o === 'object' && typeof o.file === 'string' ? clipper[fn](o).catch((e) => { log(`${ch} failed`, e); return { error: 'That didn’t work.' }; }) : { error: 'No file.' }));
   }
   ipcMain.on('clip:shot-folder', (_e, o) => { const d = clipper.shotDir(o || {}); try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} shell.openPath(d); });
-  ipcMain.on('clip:folder', (_e, kind) => { const d = downloadDirs()[kind === 'mp4' ? 'mp4clips' : 'mp3clips']; try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} shell.openPath(d); });
+  ipcMain.on('clip:folder', (_e, kind) => { const d = downloadDirs()[kind === 'mp4' ? 'mp4clips' : kind === 'gif' ? 'gifs' : 'mp3clips']; try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} shell.openPath(d); });
   // ---- the YOUTUBE window (2.3): ytweb.js
   ipcMain.on('ytweb:rect', (_e, r) => ytweb && ytweb.setRect(r));
   ipcMain.handle('ytweb:nav', (_e, cmd, arg) => (ytweb ? ytweb.nav(String(cmd), arg) : null));
@@ -1012,7 +1018,7 @@ function registerIpc() {
   ipcMain.handle('files:exists', (_e, paths) => (Array.isArray(paths) ? paths.map(p => typeof p === 'string' && fs.existsSync(p)) : []));
   // 2.6 Rename: a song / video / downloaded copy (check: only test the name); a saved playlist; a download's title
   ipcMain.handle('file:rename', async (_e, p, base, check) => {
-    if (typeof p !== 'string' || !isMediaFile(p)) return { error: 'That isn’t a song or video file.' };
+    if (typeof p !== 'string' || !(isMediaFile(p) || (/\.gif$/i.test(p) && clipper.inClipDir(p)))) return { error: 'That isn’t a song or video file.' };   // 2.9.4: or a CLIP GIF
     let r = renameFileCore(p, base, !!check);
     for (let i = 0; i < 4 && r.busy; i++) { await new Promise(res => setTimeout(res, 300)); r = renameFileCore(p, base, false); }   // SlopAMP's own player lets go of a file a moment after it stops
     if (r.error || check || r.same) return r;
@@ -1173,7 +1179,7 @@ app.whenReady().then(async () => {
   server = new MediaServer({ uiDir: path.join(__dirname, 'renderer'), ffmpegDir, log });
   clipper = new Clipper({
     ffmpeg: ffmpegExe, server, encoderArgs, log, fileSafe,
-    dirs: () => { const d = downloadDirs(); return { mp3: d.mp3clips, mp4: d.mp4clips, shots: d.shots }; },
+    dirs: () => { const d = downloadDirs(); return { mp3: d.mp3clips, mp4: d.mp4clips, gif: d.gifs, shots: d.shots }; },
     urlOf: (f) => fileUrl(f),
     getIndex: () => { const c = (currentState || loadState()).clips; return c && typeof c === 'object' ? c : {}; },
     setIndex: (idx) => setMainState({ clips: idx }),

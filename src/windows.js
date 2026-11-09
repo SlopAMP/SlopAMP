@@ -25,7 +25,7 @@ const FLOAT = ['skined', 'clip', 'ytweb', 'xweb', 'settings'];
 const HOSTS = ['popup', 'dialog'];
 const FIT = new Set(['main', 'eq']);            // height follows the content
 const MIN = { main: [420, 60], eq: [420, 40], video: [320, 180], playlist: [300, 150], skined: [460, 420], clip: [600, 420], ytweb: [800, 400], xweb: [420, 360], settings: [600, 400] };
-const DEF = { w: 420, main: 190, eq: 160, video: 240, playlist: 300, skined: 680, skinedW: 540, clip: 640, clipW: 780, ytweb: 800, ytwebW: 1100, xweb: 640, xwebW: 620, settings: 600, settingsW: 780 };
+const DEF = { w: 420, main: 190, eq: 160, video: 240, playlist: 300, skined: 680, skinedW: 540, clip: 770, clipW: 860, ytweb: 800, ytwebW: 1100, xweb: 640, xwebW: 620, settings: 600, settingsW: 780 };
 const MINI_W = 480;       // mini mode (2.4): the player window becomes a bar this wide
 const YT_MIN_W = 800;     // the YOUTUBE window is never narrower: on a small screen it overlaps the stack instead
 const SNAP = 10;          // px: how close an edge must be to snap
@@ -58,7 +58,7 @@ class WindowManager {
   // ---------- layout model ----------
   normalize(l, legacy, legacyPl) {
     const ok = (b) => b && [b.x, b.y, b.w, b.h].every(Number.isFinite);
-    const out = { version: 1, skin: 'default', preset: 'classic', snap: true, onTop: false, windows: {}, heights: {}, panels: {} };
+    const out = { version: 1, clip294: true, skin: 'default', preset: 'classic', snap: true, onTop: false, windows: {}, heights: {}, panels: {} };
     if (l && typeof l === 'object') {
       if (typeof l.skin === 'string' && /^(user:)?[a-z0-9-]{1,60}$/.test(l.skin)) out.skin = l.skin;   // user:<slug> = a user skin (1.7)
       if (PRESETS.includes(l.preset) || l.preset === 'custom') out.preset = l.preset;
@@ -77,6 +77,13 @@ class WindowManager {
     if (STACK.every(id => out.windows[id])) {
       for (const id of FLOAT) if (!out.windows[id]) out.windows[id] = this.floatSpot(out.windows, id);   // layouts saved before 1.6 / 1.7
       for (const id of PANELS) { const b = out.windows[id]; b.w = Math.max(MIN[id][0], b.w); b.h = Math.max(MIN[id][1], b.h); }
+      // 2.9.4: CLIP has tabs now and needs more room: a CLIP window saved smaller than the new size grows once
+      if (!(l && l.clip294)) {
+        const b = out.windows.clip, wa = screen.getDisplayMatching({ x: b.x, y: b.y, width: b.w, height: b.h }).workArea;
+        b.w = Math.max(b.w, Math.min(DEF.clipW, wa.width)); b.h = Math.max(b.h, Math.min(DEF.clip, wa.height));
+        b.x = Math.max(wa.x, Math.min(b.x, wa.x + wa.width - b.w)); b.y = Math.max(wa.y, Math.min(b.y, wa.y + wa.height - b.h));
+      }
+      out.clip294 = true;
       return out;
     }
     // First launch of 1.3 (or a broken layout): the classic stack, where the old single window was.

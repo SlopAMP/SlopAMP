@@ -36,6 +36,8 @@ const S = {
   startMode: 'spot',   // 2.9.2 Settings → General → Open where you left off: spot (the last item, same spot) | top | none
   askCloseDl: true,    // 2.9.2 Settings → General → Ask before closing while something downloads
   skipSecs: 10,        // 2.9.2 Settings → Playback → Skip countdown (0 = off)
+  clipPreset: 0,       // 2.9.4 CLIP: the length preset used last (s), underlined
+  clipGif: null,       // 2.9.4 CLIP: GIF width / fps / loop / colours (null: 480, 15, loops, 256)
   mp3q: 'best',        // 2.9.2 Settings → Downloads → MP3 quality: best | 320 | 192 | 128
   dlWarn: 90,          // 2.9.2 Settings → Downloads → Warn me at (% of the limit; 0 = never)
   xq: 720,             // 2.9.2 Settings → YouTube & X → Streaming quality (480 | 720 | 1080)
@@ -3634,7 +3636,7 @@ function dlmRender() {
   const miss = DLM.rows.filter(r => r.missing).length;
   $('#dlmCount').textContent = `${present.length} FILE${present.length === 1 ? '' : 'S'} · ${total ? fmtSize(total).toUpperCase() : '0 MB'} · ${pls} PLAYLIST${pls === 1 ? '' : 'S'}`;
   if (cm) { const c = DLM.rows.filter(isClipRow), cs = c.reduce((a, r) => a + r.size, 0); $('#dlmCount').textContent = `${c.length} CLIP${c.length === 1 ? '' : 'S'} · ${cs ? fmtSize(cs).toUpperCase() : '0 MB'}`;
-    for (const b of $('#clsub').children) { const n = b.dataset.c === 'all' ? c.length : c.filter(r => r.kind === b.dataset.c).length; b.classList.toggle('on', b.dataset.c === CLS.sub); b.textContent = `${{ all: 'All clips', mp3clip: 'MP3 clips', mp4clip: 'MP4 clips' }[b.dataset.c]} (${n})`; } }
+    for (const b of $('#clsub').children) { const n = b.dataset.c === 'all' ? c.length : c.filter(r => r.kind === b.dataset.c).length; b.classList.toggle('on', b.dataset.c === CLS.sub); b.textContent = `${{ all: 'All clips', mp3clip: 'MP3 clips', mp4clip: 'MP4 clips', gifclip: 'GIFs' }[b.dataset.c]} (${n})`; } }
   if (DLM.favOnly && !cm) { const fv = vis.filter(r => !r.missing), fs = fv.reduce((a, r) => a + r.size, 0); $('#dlmCount').textContent = `${fv.length} FAVORITE${fv.length === 1 ? '' : 'S'} · ${fs ? fmtSize(fs).toUpperCase() : '0 MB'}`; }
   $('#dlmFav').classList.toggle('on', DLM.favOnly);
   dlmUsePaint();
@@ -3652,7 +3654,7 @@ function dlmRender() {
     const on = DLM.sel.has(dlmKey(r));
     tr.className = (on ? 'sel' : '') + (r.missing ? ' miss' : '');
     tr.dataset.i = i;
-    const tag = r.missing ? 'MISSING' : { audio: 'MP3', playlist: 'PLAYLIST', mp3clip: 'MP3 CLIP', mp4clip: 'MP4 CLIP' }[r.kind] || 'VIDEO';
+    const tag = r.missing ? 'MISSING' : { audio: 'MP3', playlist: 'PLAYLIST', mp3clip: 'MP3 CLIP', mp4clip: 'MP4 CLIP', gifclip: 'GIF' }[r.kind] || 'VIDEO';
     tr.innerHTML = cm ? `<td class="c"><span class="dlm-cb${on ? ' on' : ''}"></span></td><td class="t"></td><td><span class="dlm-tag ${r.kind}">${tag}</span></td><td class="r">${r.dur ? fmtShort(r.dur) || '0:00' : '—'}</td><td class="from"></td><td class="r">${fmtSize(r.size)}</td><td class="r">${fmtDate(r.mtime)}</td><td class="c"><button class="dlm-show" title="Show in folder">📁</button></td>`
       : `<td class="c"><span class="dlm-cb${on ? ' on' : ''}"></span></td><td class="t"></td><td><span class="dlm-tag ${r.missing ? 'missing' : r.kind}">${tag}</span></td><td class="r">${r.missing ? '—' : fmtSize(r.size)}</td><td class="r">${fmtDate(r.mtime)}</td><td class="c">${r.missing ? '' : '<button class="dlm-show" title="Show in folder">📁</button>'}</td>`;
     if (cm) { const fr = tr.querySelector('.from'); fr.textContent = r.from || '—'; fr.title = r.src ? `${r.from || ''}\n${r.src}${r.srcExists ? '' : ' (not there any more)'}` : 'Not made with CLIP (or its original isn\u2019t known)'; }
@@ -3683,7 +3685,7 @@ function dlmEmptyHtml(q, cm) {
   const f = DLM.filter, ql = q.toLowerCase();
   if (DLM.favOnly) return `<div class="dlm-nomatch"><b>No ★ favorites${q ? ` match “${htmlEsc(q)}”` : ' here yet'}.</b><div class="nm-btns"><button type="button" data-a="favoff">Show everything</button></div><small>Click ☆ before a title (or select and press F) to make one. Favorites are kept when SlopAMP makes room.</small></div>`;
   if (cm) {
-    const sub = CLS.sub, noun = { all: 'clips', mp3clip: 'MP3 clips', mp4clip: 'MP4 clips' }[sub] || 'clips';
+    const sub = CLS.sub, noun = { all: 'clips', mp3clip: 'MP3 clips', mp4clip: 'MP4 clips', gifclip: 'GIFs' }[sub] || 'clips';
     const clips = DLM.rows.filter(isClipRow), inSub = clips.filter(r => sub === 'all' || r.kind === sub);
     const allBtn = '<button type="button" data-a="allclips">All clips</button>';
     if (q) return dlmNoMatch(noun, q, inSub.length ? plural(inSub.length, noun.replace(/s$/, ''), noun) : '', sub !== 'all' && clips.some(r => dlmHit(r, ql)) ? allBtn : '');
@@ -3725,7 +3727,7 @@ const lpKey = (r) => `${dlmKey(r)}|${r.size || 0}|${Math.round(r.mtime || 0)}`;
 function lpTile(r, doc) {
   const t = doc.createElement('div');
   t.className = 'lt' + (r.missing ? ' miss' : '');
-  const tag = r.missing ? 'MISSING' : { audio: 'MP3', playlist: 'PLAYLIST', mp3clip: 'MP3 CLIP', mp4clip: 'MP4 CLIP' }[r.kind] || 'VIDEO';
+  const tag = r.missing ? 'MISSING' : { audio: 'MP3', playlist: 'PLAYLIST', mp3clip: 'MP3 CLIP', mp4clip: 'MP4 CLIP', gifclip: 'GIF' }[r.kind] || 'VIDEO';
   const ph = r.missing ? '?' : r.kind === 'playlist' ? '☰' : /audio|mp3clip/.test(r.kind) ? '♫' : '▶';
   const showKind = DLM.filter === 'all' || (DLM.filter === 'clips' && CLS.sub === 'all') || r.missing;
   t.innerHTML = `<div class="lt-im"><span class="lt-ph">${ph}</span><span class="lt-spr"></span><span class="lt-scrub"><i></i></span>${showKind ? `<span class="lt-kd">${tag}</span>` : ''}<span class="dlm-cb"></span><span class="lt-du hidden"></span>${isClipRow(r) ? '<span class="lt-io hidden"><i></i></span>' : ''}${r.kind !== 'playlist' && !r.missing ? '<span class="lt-fav off" title="Add to Favorites (F)">\u2606</span>' : ''}</div><div class="lt-n"></div><div class="lt-s"></div>`;
@@ -3899,7 +3901,7 @@ for (const host of [$('#dlmBody'), $('#dlmGrid')]) host.addEventListener('moused
   const r = dlmVisible()[+tr.dataset.i]; if (!r || r.missing) return;
   e.preventDefault();
   DLM.sel = new Set([dlmKey(r)]); DLM.anchor = +tr.dataset.i; dlmRender();
-  if (r.kind === 'playlist') openPlaylistFiles([r]); else if (isClipRow(r)) libAdd([r], true); else P.showInFolder(r.path);
+  if (r.kind === 'playlist') openPlaylistFiles([r]); else if (r.kind === 'gifclip') P.clipOpenFile(r.path); else if (isClipRow(r)) libAdd([r], true); else P.showInFolder(r.path);
 });
 // the header is rebuilt for Library → CLIPS (2.3), so its clicks are handled here
 $('#dlmDlg thead').addEventListener('click', (e) => {
@@ -3914,7 +3916,7 @@ $('#dlmDlg thead').addEventListener('click', (e) => {
 });
 for (const b of $('#dlmSeg').children) b.onclick = async () => { dlmSection(b.dataset.f); if (skinMode()) await sklRefresh(); dlmApplySize(); dlmRender(); };
 $('#dlmX').onclick = () => $('#dlmDlg').close();
-$('#dlmOpen').onclick = () => clipMode() ? P.clipFolder(CLS.sub === 'mp4clip' ? 'mp4' : 'mp3') : P.dlOpenDir(DLM.filter === 'audio' ? 'audio' : DLM.filter === 'playlist' ? 'playlists' : 'video');
+$('#dlmOpen').onclick = () => clipMode() ? P.clipFolder(CLS.sub === 'mp4clip' ? 'mp4' : CLS.sub === 'gifclip' ? 'gif' : 'mp3') : P.dlOpenDir(DLM.filter === 'audio' ? 'audio' : DLM.filter === 'playlist' ? 'playlists' : 'video');
 $('#dlmSearch').addEventListener('input', (e) => { DLM.q[DLM.filter] = e.target.value; DLM.anchor = -1; dlmRender(); });
 $('#dlmSearch').addEventListener('keydown', (e) => { if (e.key === 'Escape' && e.target.value) { e.preventDefault(); e.stopPropagation(); dlmClearQ(); } });
 $('#dlmSearchX').onclick = () => dlmClearQ();
@@ -4114,14 +4116,19 @@ async function dlmDelete(allRows, all) {
 $('#pDlm').onclick = () => openDownloadsManager();
 // ------------------------------------------------------------------ CLIP (2.3, ideas #12 / #13)
 // One window for both: cut one piece out of a song or video and save it as a NEW MP3 (Downloads\SlopAMP\
-// mp3clips) or MP4 (Downloads\SlopAMP\mp4clips). The original is never changed. Trim only (no splicing,
-// volume, crop, text…). The cutting is done by main.js / clip.js; this draws the window and the Library rows.
+// mp3clips), MP4 (Downloads\SlopAMP\mp4clips) or GIF (Downloads\SlopAMP\gifs, 2.9.4). The original is never changed.
+// 2.9.4 (CLIP editor, part 1): tabs Trim / Shape / Sound / Speed / Shots, length presets, the output line above Save.
+// The cutting is done by main.js / clip.js; this draws the window and the Library rows.
 // The preview plays inside CLIP (the main player pauses, so there's never double audio). I / O / Space /
 // arrows act on CLIP only while the CLIP window is the active one.
 var clipVisible = false, clipShade = false;   // var: syncWindows() reads them, and it can run before this line
 const CL = { file: null, info: null, item: null, srcTitle: '', kind: 'mp3', in: 0, out: 0, v0: 0, v1: 0, peaks: null, last: 'out', loop: false,
   range: null, raf: 0, nameTouched: false, saved: [], job: null, pending: null, framesKey: '', framesT: 0, quality: '320', cut: 'exact',
-  shots: null, shotSel: null, shotsOpen: false, shotBusy: false, burstPick: null };
+  shots: null, shotSel: null, shotsOpen: false, shotBusy: false, burstPick: null,
+  // 2.9.4 tools: reset for each new file (the length preset and the GIF settings are remembered in S)
+  tab: 'trim', shape: null, even: false, vol: 0, speed: 1, loud: null, loudT: 0, gifEst: null, gifT: 0 };
+const CLIP_RATIOS = { '16:9': 16 / 9, '9:16': 9 / 16, '1:1': 1, '4:5': 4 / 5 };
+const CLIP_PRESETS = [5, 10, 15, 20, 25, 30, 60];
 const clipMedia = $('#clipVideo');
 const clipDoc = () => WM.doc('clip');
 function clipFmt(t, dec = true) {
@@ -4301,7 +4308,7 @@ async function clipOpen(file, o = {}) {
   CL.file = file; CL.info = info;
   CL.item = o.item && isWeb(o.item) ? { type: o.item.type, vid: o.item.vid, url: o.item.url } : (same ? CL.item : null);
   CL.srcTitle = String(o.title || (same && CL.srcTitle) || info.title).replace(/\s*\[(?:[\w-]{11}|x\d{1,25}(?:-\d{1,2})?)\]$/, '') || info.title;   // no " [video id]" from a download's file name
-  CL.kind = o.kind === 'mp4' && info.hasVideo ? 'mp4' : info.hasAudio ? 'mp3' : 'mp4';
+  CL.kind = (o.kind === 'mp4' || o.kind === 'gif') && info.hasVideo ? o.kind : info.hasAudio ? 'mp3' : 'mp4';
   const d = info.duration;
   if (Number.isFinite(o.in) && Number.isFinite(o.out) && o.out > o.in) { CL.in = Math.max(0, Math.min(o.in, d - 0.1)); CL.out = Math.max(CL.in + 0.1, Math.min(o.out, d)); }
   else { CL.in = 0; CL.out = d; }
@@ -4310,7 +4317,12 @@ async function clipOpen(file, o = {}) {
   CL.last = 'out'; CL.loop = false; CL.nameTouched = false; CL.peaks = null; CL.framesKey = '';
   if (!same) { CL.saved = []; CL.shots = null; CL.shotSel = null; CL.shotsOpen = false; CL.burstPick = null; }
   CL.quality = info.canCopyMp3 ? 'copy' : '320'; CL.cut = 'exact';
+  // 2.9.4: the tools start fresh with each file (GE); "Clip again" of a sped-up clip brings its speed back
+  if (!same) { CL.tab = 'trim'; CL.shape = null; CL.even = false; CL.vol = 0; }
+  CL.speed = [0.5, 1.5, 2].includes(o.speed) ? o.speed : same ? CL.speed : 1;
+  CL.loud = null; CL.gifEst = null;
   $('#clipFadeIn').checked = false; $('#clipFadeOut').checked = false; $('#clipAlsoMp3').checked = false; $('#clipAddTo').checked = true;
+  clipMedia.playbackRate = CL.speed;
   clipMedia.removeAttribute('src');
   CL.seekTo = CL.in;          // the preview starts at In (applied once the file's loaded)
   if (info.previewUrl) { clipMedia.src = info.previewUrl; clipMedia.load(); }
@@ -4328,14 +4340,77 @@ function clipRenderX() {
   const info = $('#clipFmtInfo'); for (const el of [...info.querySelectorAll('.clip-x, .clip-xwarn')]) el.remove();
   const i = CL.info || {}, V = CL.kind === 'mp4' && i.hasVideo;
   if (V) {
-    const fits = (i.width >= i.height ? i.width <= 1920 && i.height <= 1200 : i.width <= 1200 && i.height <= 1900);
-    const src = xOf(CL.file), ok = CL.cut === 'fast' ? !!(src && src.ready) : fits;
+    const [ow, oh] = clipOutSize(), fast = clipCutEff() === 'fast';
+    const fits = (ow >= oh ? ow <= 1920 && oh <= 1200 : ow <= 1200 && oh <= 1900);
+    const src = xOf(CL.file), ok = fast ? !!(src && src.ready) : fits;
     const tag = document.createElement('span'); tag.className = 'clip-x'; tag.textContent = ok ? 'X ✓' : 'not for X';
-    tag.title = ok ? 'This clip posts to X as it is (H.264 + AAC)' : CL.cut === 'fast' ? 'A fast cut copies the file as it is; this one isn’t X-ready. Use Exact cut, or Fix for X after saving.' : 'Bigger than X takes (1920×1200): right-click the saved clip → Fix for X';
+    tag.title = ok ? 'This clip posts to X as it is (H.264 + AAC)' : fast ? 'A fast cut copies the file as it is; this one isn’t X-ready. Use Exact cut, or Fix for X after saving.' : 'Bigger than X takes (1920×1200): right-click the saved clip → Fix for X';
     $('#clipFmtInfo').appendChild(tag);
-    const len = (CL.out || 0) - (CL.in || 0);
+    const len = clipLenOut();
     if (len > 140) { const w = document.createElement('span'); w.className = 'clip-xwarn'; w.textContent = ` ⚠ ${Math.floor(len / 60)}:${String(Math.round(len % 60)).padStart(2, '0')}: over X's 2:20 for free accounts`; $('#clipFmtInfo').appendChild(w); }
   }
+}
+// ---- 2.9.4: what the tools add up to
+const clipLen = () => (CL.out || 0) - (CL.in || 0);
+const clipLenOut = () => clipLen() / (CL.speed || 1);
+const clipHasPic = () => !!(CL.info && CL.info.hasVideo) && CL.kind !== 'mp3';
+// the shape box that will be used (null: Original, or a box that's the whole picture and isn't upscaled), with its output size
+function clipShapeEff() {
+  const s = CL.shape, i = CL.info;
+  if (!s || !clipHasPic() || !CLIP_RATIOS[s.ratio] || !i.width || !i.height) return null;
+  const W = i.width & ~1, H = i.height & ~1, r = CLIP_RATIOS[s.ratio];
+  const ow = s.up ? (r >= 1 ? Math.round(1080 * r / 2) * 2 : 1080) : s.w, oh = s.up ? (r >= 1 ? 1080 : Math.round(1080 / r / 2) * 2) : s.h;
+  if (!s.up && s.w >= W && s.h >= H) return null;
+  return { ...s, ow, oh };
+}
+const clipSoundOn = () => !!(CL.info && CL.info.hasAudio) && CL.kind !== 'gif' && (CL.even || CL.vol !== 0 || $('#clipFadeIn').checked || $('#clipFadeOut').checked);
+const clipPicTool = () => !!clipShapeEff() || CL.speed !== 1;          // these change the picture: re-encode
+function clipCutEff() { return CL.kind === 'mp4' && CL.cut === 'fast' && CL.info && CL.info.canFast && !clipPicTool() ? 'fast' : 'exact'; }
+function clipQualityEff() { return CL.quality === 'copy' && CL.info && CL.info.canCopyMp3 && !clipSoundOn() && CL.speed === 1 ? 'copy' : '320'; }
+function clipOutSize() {
+  const i = CL.info || {}, s = clipShapeEff();
+  let w = s ? s.ow : i.width || 0, h = s ? s.oh : i.height || 0;
+  if (CL.kind === 'gif') { const g = clipGifSet(), sw = s ? s.w : i.width || 0, sh = s ? s.h : i.height || 0; w = g.w && g.w < sw ? g.w : sw; h = sw ? Math.round(sh * w / sw / 2) * 2 : 0; }
+  else if (!s) { w &= ~1; h &= ~1; }
+  return [w, h];
+}
+function clipGifSet() {
+  const g = S.clipGif || {};
+  return { w: [320, 480, 640, 0].includes(g.w) ? g.w : 480, fps: [10, 15, 24].includes(g.fps) ? g.fps : 15, loop: g.loop !== false, colors: [256, 64].includes(g.colors) ? g.colors : 256 };
+}
+// about how big: MB from what's known (the GIF one comes from a 1 s test GIF)
+function clipSizeEst() {
+  const i = CL.info || {}, len = clipLen(), lo = clipLenOut();
+  if (CL.kind === 'gif') return CL.gifEst && CL.gifEst.key === clipGifKey() ? CL.gifEst.bytes : null;
+  if (CL.kind === 'mp3') return clipQualityEff() === 'copy' ? (i.abr || 192000) * len / 8 : 320000 * lo / 8;
+  if (clipCutEff() === 'fast') {
+    const copy = i.size && i.duration ? i.size * len / i.duration : 0;
+    return clipSoundOn() ? Math.max(0, copy - (i.abr || 128000) * len / 8) + 192000 * len / 8 : copy;
+  }
+  const [w, h] = clipOutSize(), mbps = Math.max(1.5, Math.min(12, (w || 1280) * (h || 720) / 1e6 * 4));
+  return (mbps * 1e6 + (i.hasAudio ? 192000 : 0)) * lo / 8;
+}
+const clipMB = (b) => (b >= 10485760 ? `${Math.round(b / 1048576)} MB` : b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+// the line above Save (GB): what will be saved, whether it re-encodes, about how big
+function clipOutLine() {
+  const i = CL.info, esc = htmlEsc, sz = clipSizeEst(), [w, h] = clipOutSize(), sh = clipShapeEff();
+  const est = sz == null ? ' &middot; &asymp; <b>&hellip;</b>' : ` &middot; &asymp; <b>${clipMB(sz)}</b>`;
+  const sp = CL.speed !== 1 ? ` &middot; ${CL.speed}&times;` : '';
+  const re = (t) => ` <span class="re">RE-ENCODE</span>${t ? ` ${t}` : ''}`, ok = (t) => ` <span class="fast">${t}</span>`;
+  const snd = [CL.even && 'evened out', CL.vol && `${CL.vol > 0 ? '+' : ''}${CL.vol} dB`, ($('#clipFadeIn').checked || $('#clipFadeOut').checked) && 'fades'].filter(Boolean);
+  if (CL.kind === 'gif') {
+    const g = clipGifSet();
+    return `<span class="k">GIF</span> &middot; ${w}&times;${h}${sh ? ` (${sh.ratio})` : ''} &middot; ${g.fps} fps &middot; ${clipFmt(clipLenOut())}${sp} &middot; ${g.loop ? 'loops' : 'plays once'} &middot;${re('(always)')}${est}`;
+  }
+  if (CL.kind === 'mp3') {
+    const q = clipQualityEff();
+    return `<span class="k">MP3</span> &middot; ${clipFmt(clipLenOut())} &middot; ${q === 'copy' ? 'same quality as the file' : '320 kbps'}${snd.length ? ` &middot; ${esc(snd.join(', '))}` : ''}${sp} &middot;${q === 'copy' ? ok('NO RE-ENCODE') : re()}${est}`;
+  }
+  const fast = clipCutEff() === 'fast', lost = CL.cut === 'fast' && i.canFast && !fast;
+  const dims = `${w}&times;${h}${sh ? ` (${sh.ratio}${sh.up ? ', upscaled' : ''})` : ''}`;
+  if (fast && clipSoundOn()) return `<span class="k">MP4</span> &middot; ${dims} &middot; picture copied, <b>sound re-encoded</b> (AAC 192k${snd.length ? `: ${esc(snd.join(', '))}` : ''}) &middot;${ok('FAST CUT OK')}${est}`;
+  if (fast) return `<span class="k">MP4</span> &middot; ${dims} &middot; copied as it is &middot;${ok('FAST CUT')} no re-encode${est}`;
+  return `<span class="k">MP4</span> &middot; ${dims} &middot; H.264 + AAC${snd.length ? ` &middot; ${esc(snd.join(', '))}` : ''}${sp} &middot;${re(lost ? '<span class="w">(Fast cut is off: Shape and Speed change the picture)</span>' : 'exact cut')}${CL.speed !== 1 ? ` &middot; length ${clipFmt(clipLenOut())}` : ''}${est}`;
 }
 function clipRender() {
   const has = !!CL.info;
@@ -4351,35 +4426,55 @@ function clipRender() {
   $('#clipSrc').title = CL.file;
   for (const b of $('#clipKind').children) {
     const k = b.dataset.k;
+    if (k === 'more') continue;               // More formats… comes with Convert (2.9.5)
     b.classList.toggle('on', k === CL.kind);
-    b.disabled = k === 'mp4' ? !i.hasVideo : !i.hasAudio;
-    b.title = b.disabled ? (k === 'mp4' ? 'This file has no video' : 'This file has no sound') : '';
+    b.disabled = k === 'mp3' ? !i.hasAudio : !i.hasVideo;
+    b.title = b.disabled ? (k === 'mp3' ? 'This file has no sound' : 'This file has no video') : k === 'gif' ? 'An animated GIF (no sound) → Downloads\\SlopAMP\\gifs' : '';
   }
-  const V = CL.kind === 'mp4';
+  const V = CL.kind === 'mp4', G = CL.kind === 'gif';
   $('#clipPrev').classList.toggle('hidden', !i.hasVideo);
   $('#clipFilm').classList.toggle('hidden', !i.hasVideo);
   $('#clipWave').classList.toggle('short', !!i.hasVideo);
   $('#clipPrevMsg').classList.toggle('hidden', !!i.previewUrl);
   $('#clipPrevMsg').textContent = 'No preview for this kind of file. The clip is still cut exactly where you set it.';
   for (const id of ['#clipPlay', '#clipEdgeIn', '#clipEdgeOut', '#clipLoop', '#clipSetIn', '#clipSetOut']) $(id).disabled = !i.previewUrl;
-  $('#clipExt').textContent = V ? '.mp4' : '.mp3';
-  $('#clipOptsMp3').classList.toggle('hidden', V);
+  $('#clipExt').textContent = `.${CL.kind}`;
+  // ---- tabs (GA): greyed when they can't do anything here; a dot when in use
+  const off = { shape: !clipHasPic(), sound: G || !i.hasAudio, speed: false, shots: !i.hasVideo, trim: false };
+  if (off[CL.tab]) CL.tab = 'trim';
+  const dot = { shape: !!clipShapeEff(), sound: clipSoundOn(), speed: CL.speed !== 1 };
+  for (const b of $('#clipTabs').children) {
+    const t = b.dataset.t;
+    if (t === 'captions' || t === 'join') continue;          // 2.9.6
+    b.disabled = !!off[t];
+    b.classList.toggle('on', t === CL.tab);
+    b.title = off[t] ? { shape: CL.kind === 'mp3' ? 'An MP3 has no picture' : 'This file has no video', sound: G ? 'GIFs have no sound' : 'This file has no sound', shots: 'This file has no video' }[t] || '' : '';
+    let d = b.querySelector('.dot'); if (dot[t] && !d) { d = document.createElement('span'); d.className = 'dot'; b.appendChild(d); } else if (!dot[t] && d) d.remove();
+  }
+  for (const [t, id] of [['trim', '#clipPaneTrim'], ['shape', '#clipPaneShape'], ['sound', '#clipPaneSound'], ['speed', '#clipPaneSpeed'], ['shots', '#clipPaneShots']]) $(id).classList.toggle('hidden', CL.tab !== t);
+  // ---- Trim
+  $('#clipOptsMp3').classList.toggle('hidden', V || G);
   $('#clipOptsMp4').classList.toggle('hidden', !V);
-  const fades = $('#clipFadeIn').checked || $('#clipFadeOut').checked;
-  if (fades || !i.canCopyMp3) CL.quality = '320';
-  $('#clipQCopy').disabled = fades || !i.canCopyMp3;
-  $('#clipQCopyNote').textContent = !i.canCopyMp3 ? '· for MP3 files (this is re-encoded)' : '· no re-encode (off when a fade is on)';
-  $('#clipQCopy').checked = CL.quality === 'copy'; $('#clipQ320').checked = CL.quality !== 'copy';
+  $('#clipOptsGif').classList.toggle('hidden', !G);
+  $('#clipAddRow').classList.toggle('hidden', G);
+  const q = clipQualityEff(), qLock = !i.canCopyMp3 || clipSoundOn() || CL.speed !== 1;
+  $('#clipQCopy').disabled = qLock;
+  $('#clipQCopyNote').textContent = !i.canCopyMp3 ? '· for MP3 files (this is re-encoded)' : qLock ? '· off while Sound or Speed is used' : '· no re-encode';
+  $('#clipQCopy').checked = q === 'copy'; $('#clipQ320').checked = q !== 'copy';
   if (!i.canFast) CL.cut = 'exact';
-  $('#clipCutFast').disabled = !i.canFast;
-  $('#clipFastNote').textContent = i.canFast ? '· no re-encode, may start up to a few seconds early (keyframes)' : '· for H.264 .mp4 videos only (this one is re-encoded)';
-  $('#clipCutExact').checked = CL.cut === 'exact'; $('#clipCutFast').checked = CL.cut === 'fast';
+  const cut = clipCutEff(), fLock = !i.canFast || clipPicTool();
+  $('#clipCutFast').disabled = fLock;
+  $('#clipFastNote').textContent = !i.canFast ? '· for H.264 .mp4 videos only (this one is re-encoded)' : clipPicTool() ? '· off while Shape or Speed is used (they change the picture)' : clipSoundOn() ? '· the picture is copied, only the sound is re-encoded' : '· no re-encode, may start up to a few seconds early (keyframes)';
+  $('#clipCutExact').checked = cut === 'exact'; $('#clipCutFast').checked = cut === 'fast';
   $('#clipAlsoMp3').disabled = !i.hasAudio;
-  $('#clipFmtInfo').textContent = V ? (CL.cut === 'fast' ? 'MP4 · copied as it is (no re-encode)' : `MP4 · H.264 + AAC${i.height ? ` · ${i.width}×${i.height}` : ''}`) : `MP3${CL.quality === 'copy' ? ' · same quality as the file' : ' · 320 kbps'}`;
+  if (G) clipRenderGif();
+  // ---- Shape / Sound / Speed
+  clipRenderShape(); clipRenderSound(); clipRenderSpeed();
+  $('#clipFmtInfo').innerHTML = clipOutLine();
   clipRenderX();
   const t = clipTargetTab();
   $('#clipAddToLabel').textContent = `Add to "${t >= 0 ? S.tabs[t].name : 'Main'}" when it’s saved`;
-  $('#clipFolderBtn').innerHTML = `&#x1F4C1; Open ${V ? 'mp4clips' : 'mp3clips'} folder`;
+  $('#clipFolderBtn').innerHTML = `&#x1F4C1; Open ${{ mp4: 'mp4clips', gif: 'gifs', mp3: 'mp3clips' }[CL.kind]} folder`;
   $('#clipReset').textContent = `Reset to the whole ${i.hasVideo ? 'video' : 'song'}`;
   clipRenderTimes();
   clipRenderSaved();
@@ -4389,22 +4484,36 @@ function clipRenderTimes() {
   if (!CL.info) return;
   const inEl = $('#clipIn'), outEl = $('#clipOut'), d = clipDoc();
   if (!d || d.activeElement !== inEl) inEl.value = clipFmt(CL.in);
-  clipRenderX();
   if (!d || d.activeElement !== outEl) outEl.value = clipFmt(CL.out);
-  $('#clipLen').textContent = `LENGTH ${clipFmt(CL.out - CL.in)}`;
-  $('#clipSave').innerHTML = CL.job ? $('#clipSave').innerHTML : `&#9986; Save clip ${clipFmt(CL.out - CL.in)} &#9656;`;
-  if (!CL.nameTouched) $('#clipName').value = `${CL.srcTitle} (${clipCut(CL.in)}-${clipCut(CL.out)})`;
+  const len = clipLen(), lo = clipLenOut();
+  $('#clipLen').textContent = `LENGTH ${clipFmt(len)}${CL.speed !== 1 ? ` ▸ ${clipFmt(lo)}` : ''}`;
+  $('#clipLen').title = CL.speed !== 1 ? `${clipFmt(len)} of the original, ${clipFmt(lo)} at ${CL.speed}×` : '';
+  $('#clipSave').innerHTML = CL.job ? $('#clipSave').innerHTML : `&#9986; Save ${CL.kind === 'gif' ? 'GIF' : 'clip'} ${clipFmt(lo)} &#9656;`;
+  if (!CL.nameTouched) $('#clipName').value = `${CL.srcTitle} (${clipCut(CL.in)}-${clipCut(CL.out)})${CL.speed !== 1 ? ` ${CL.speed}x` : ''}`;
   const z = CL.v1 - CL.v0 < clipDur() - 0.05;
   $('#clipZoomInfo').textContent = z ? `showing ${clipFmt(CL.v0, false)} – ${clipFmt(CL.v1, false)} of ${clipFmt(clipDur(), false)} ·` : '';
   for (const el of $$('#clipFilm > *')) { const t = +el.dataset.t; el.classList.toggle('in', t >= CL.in && t <= CL.out); }
+  // length presets (1A–1C): greyed when longer than the file, the one that fits is lit, the last one used underlined
+  for (const b of $('#clipPresets').children) {
+    const L = +b.dataset.l;
+    b.disabled = L > clipDur() + 0.05;
+    b.classList.toggle('on', Math.abs(len - L) < 0.05);
+    b.classList.toggle('last', L === S.clipPreset);
+    b.title = b.disabled ? `Longer than the ${CL.info.hasVideo ? 'video' : 'song'} (${clipFmt(clipDur(), false)})` : `${L} s · Out = In + ${L} s (stops at the end of the file)\nShift-click: In = Out − ${L} s (stops at 0:00) · key ${CLIP_PRESETS.indexOf(L) + 1}`;
+  }
+  // the parts that depend on the length
+  clipRenderSpeed();
+  $('#clipFmtInfo').innerHTML = clipOutLine();
+  clipRenderX();
+  clipLoudSoon(); clipGifSoon();
 }
 function clipRenderSaved() {
   const box = $('#clipSaved');
   box.classList.toggle('hidden', !CL.saved.length);
   if (!CL.saved.length) return;
   const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const dirs = [...new Set(CL.saved.map(f => f.kind === 'mp4' ? 'mp4clips' : 'mp3clips'))].map(d => `Downloads\\SlopAMP\\${d}`).join(' · ');
-  box.innerHTML = `<div class="ed-lh">SAVED FROM THIS ${CL.info && CL.info.hasVideo ? 'VIDEO' : 'FILE'} · ${esc(dirs)}</div><div class="ed-files">${CL.saved.map((f, i) => `<span class="ed-file clip-file" data-i="${i}" title="${esc(f.path)}\nClick: show in folder">${f.kind === 'mp4' ? '&#x1F39E;' : '&#9835;'} ${esc(f.path.split(/[\\/]/).pop())} ${clipFmt(f.duration, false)}</span>`).join('')}</div>`;
+  const dirs = [...new Set(CL.saved.map(f => ({ mp4: 'mp4clips', gif: 'gifs' }[f.kind] || 'mp3clips')))].map(d => `Downloads\\SlopAMP\\${d}`).join(' · ');
+  box.innerHTML = `<div class="ed-lh">SAVED FROM THIS ${CL.info && CL.info.hasVideo ? 'VIDEO' : 'FILE'} · ${esc(dirs)}</div><div class="ed-files">${CL.saved.map((f, i) => `<span class="ed-file clip-file" data-i="${i}" title="${esc(f.path)}\nClick: show in folder">${{ mp4: '&#x1F39E;', gif: '&#x1F5BC;' }[f.kind] || '&#9835;'} ${esc(f.path.split(/[\\/]/).pop())} ${clipFmt(f.duration, false)}</span>`).join('')}</div>`;
 }
 $('#clipSaved').addEventListener('click', (e) => { const el = e.target.closest('.clip-file'); if (el) { const f = CL.saved[+el.dataset.i]; if (f) P.showInFolder(f.path); } });
 function clipZoomTo(a, b) {
@@ -4501,11 +4610,206 @@ $('#clipSetOut').onclick = () => clipSet('out', clipMedia.currentTime || 0);
 $('#clipReset').onclick = () => { CL.in = 0; CL.out = clipDur(); CL.v0 = 0; CL.v1 = clipDur(); clipDraw(); clipRuler(); clipRenderTimes(); clipFrames(); };
 for (const b of $('#clipKind').children) b.onclick = () => { if (b.disabled) return; CL.kind = b.dataset.k; clipRender(); };
 $('#clipName').addEventListener('input', () => { CL.nameTouched = !!$('#clipName').value.trim(); });
-for (const id of ['#clipFadeIn', '#clipFadeOut']) $(id).addEventListener('change', () => { if ($(id).checked) CL.quality = '320'; clipRender(); });
+for (const id of ['#clipFadeIn', '#clipFadeOut']) $(id).addEventListener('change', () => clipRender());     // 2.9.4: in Sound, for MP4 too
 $('#clipQCopy').addEventListener('change', () => { if ($('#clipQCopy').checked) CL.quality = 'copy'; clipRender(); });
 $('#clipQ320').addEventListener('change', () => { if ($('#clipQ320').checked) CL.quality = '320'; clipRender(); });
 $('#clipCutExact').addEventListener('change', () => { if ($('#clipCutExact').checked) CL.cut = 'exact'; clipRender(); });
 $('#clipCutFast').addEventListener('change', () => { if ($('#clipCutFast').checked) CL.cut = 'fast'; clipRender(); });
+
+// ---- 2.9.4 tabs
+for (const b of $('#clipTabs').children) b.onclick = () => { if (b.disabled) return; CL.tab = b.dataset.t; if (CL.tab === 'shots') CL.shotsOpen = true; clipRender(); };
+
+// ---- length presets (1A–1C): click = Out = In + length, Shift-click = In = Out − length (keys 1–7). Nothing is re-encoded.
+function clipPreset(L, back) {
+  const d = clipDur(); if (!d || L > d + 0.05) return;
+  if (back) { CL.in = Math.max(0, CL.out - L); if (CL.out - CL.in < L - 0.05) CL.out = Math.min(d, CL.in + L); CL.last = 'in'; }
+  else { CL.out = Math.min(d, CL.in + L); if (CL.out - CL.in < L - 0.05) CL.in = Math.max(0, CL.out - L); CL.last = 'out'; }
+  S.clipPreset = L; saveSoon();
+  if (CL.in < CL.v0 || CL.out > CL.v1) clipZoomTo(CL.in, CL.out);
+  clipDraw(); clipRuler(); clipRenderTimes(); clipFrames();
+}
+for (const b of $('#clipPresets').children) b.addEventListener('click', (e) => clipPreset(+b.dataset.l, e.shiftKey));
+
+// ---- Shape (2A–2C): one box for the whole clip, in the video's own pixels; drawn on the picture in white / black
+function clipShapeBox(ratio, pos, keep) {
+  const i = CL.info, W = i.width & ~1, H = i.height & ~1, r = CLIP_RATIOS[ratio];
+  let w, h;
+  if (keep && keep.ratio === ratio) { w = keep.w; h = keep.h; }
+  else if (W / H > r) { h = H; w = Math.min(W, Math.round(H * r / 2) * 2); } else { w = W; h = Math.min(H, Math.round(W / r / 2) * 2); }
+  const x = pos === 'l' ? 0 : pos === 'r' ? W - w : keep && keep.ratio === ratio && pos == null ? keep.x : Math.round((W - w) / 4) * 2;
+  const y = keep && keep.ratio === ratio ? keep.y : Math.round((H - h) / 4) * 2;
+  return { ratio, x: Math.max(0, Math.min(x, W - w)), y: Math.max(0, Math.min(y, H - h)), w, h, up: keep ? !!keep.up : false };
+}
+function clipRenderShape() {
+  const i = CL.info; if (!i) return;
+  const s = CL.shape, pic = clipHasPic();
+  for (const b of $('#clipRatio').children) b.classList.toggle('on', (s ? s.ratio : 'orig') === b.dataset.r);
+  for (const b of $('#clipBoxPos').children) {
+    b.disabled = !s;
+    const W = i.width & ~1;
+    b.classList.toggle('on', !!s && (b.dataset.p === 'l' ? s.x === 0 && s.w < W : b.dataset.p === 'r' ? s.x + s.w >= W && s.w < W : Math.abs(s.x - (W - s.w) / 2) <= 2));
+  }
+  $('#clipShapeOutRow').classList.toggle('hidden', !s);
+  const eff = clipShapeEff();
+  if (s) {
+    const r = CLIP_RATIOS[s.ratio], uw = r >= 1 ? Math.round(1080 * r / 2) * 2 : 1080, uh = r >= 1 ? 1080 : Math.round(1080 / r / 2) * 2;
+    const [b0, b1] = $('#clipShapeOut').children;
+    b0.textContent = `${s.w}×${s.h} (sharp, as filmed)`; b1.textContent = `${uw}×${uh} (${uw > s.w ? 'upscaled' : 'resized'})`;
+    b0.classList.toggle('on', !s.up); b1.classList.toggle('on', !!s.up);
+    $('#clipShapeNote').textContent = !eff ? `this box is the whole picture: nothing to crop (${s.ratio} already)` : `${s.ratio} from a ${i.height}p video is ${s.w} px wide${s.up && uw > s.w ? ' · upscaling makes it bigger, not sharper' : ''}`;
+  }
+  const w = $('#clipShapeWarn');
+  w.textContent = eff && CL.kind === 'mp4' ? '⚠ Shape changes the picture, so this clip re-encodes (Fast cut is off). The box stays where you put it for the whole clip.' : '';
+  w.classList.toggle('hidden', !w.textContent);
+  clipCropDraw();
+}
+// where the picture is inside the preview box (the video is letterboxed: object-fit contain)
+function clipPicRect() {
+  const box = $('#clipPrev'), v = clipMedia, i = CL.info;
+  const bw = box.clientWidth, bh = box.clientHeight; if (!bw || !bh || !i.width) return null;
+  const vr = v.getBoundingClientRect(), br = box.getBoundingClientRect();
+  const ew = vr.width || bw, eh = vr.height || bh, ex = (vr.width ? vr.left - br.left - box.clientLeft : 0), ey = (vr.height ? vr.top - br.top - box.clientTop : 0);
+  const ar = i.width / i.height;
+  let w = ew, h = ew / ar; if (h > eh) { h = eh; w = eh * ar; }
+  return { x: ex + (ew - w) / 2, y: ey + (eh - h) / 2, w, h, k: w / (i.width & ~1 || i.width) };
+}
+function clipCropDraw() {
+  const c = $('#clipCrop'), s = CL.shape, show = !!(s && clipHasPic() && CL.info && CL.info.previewUrl);
+  c.classList.toggle('hidden', !show);
+  const badge = $('#clipSpeedBadge');
+  badge.textContent = `${CL.speed}×`; badge.classList.toggle('hidden', !(CL.speed !== 1 && CL.info && CL.info.hasVideo));
+  if (!show) return;
+  const r = clipPicRect(); if (!r) return;
+  Object.assign(c.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
+  Object.assign($('#clipCropBox').style, { left: `${s.x * r.k}px`, top: `${s.y * r.k}px`, width: `${s.w * r.k}px`, height: `${s.h * r.k}px` });
+  const lab = $('#clipCropLab'), pv = $('#clipPrev').getBoundingClientRect();
+  lab.textContent = `${s.ratio} · drag to move · edges to zoom`;
+  lab.style.setProperty('--lab-dx', '0px');
+  const lr = lab.getBoundingClientRect();           // keep the label inside the preview
+  lab.style.setProperty('--lab-dx', `${lr.left < pv.left + 2 ? pv.left + 2 - lr.left : lr.right > pv.right - 2 ? pv.right - 2 - lr.right : 0}px`);
+}
+WM.wins.clip && new ResizeObserver(() => { if (clipVisible && CL.shape) clipCropDraw(); }).observe($('#clipPrev'));
+clipMedia.addEventListener('loadedmetadata', () => clipCropDraw());
+for (const b of $('#clipRatio').children) b.onclick = () => {
+  const r = b.dataset.r;
+  CL.shape = r === 'orig' ? null : clipShapeBox(r, 'c', CL.shape && CL.shape.ratio === r ? CL.shape : (CL.shape ? { ratio: r, up: CL.shape.up } : null));
+  clipRender();
+};
+for (const b of $('#clipBoxPos').children) b.onclick = () => { if (!CL.shape) return; const s = CL.shape, W = CL.info.width & ~1; s.x = b.dataset.p === 'l' ? 0 : b.dataset.p === 'r' ? W - s.w : Math.round((W - s.w) / 4) * 2; clipRender(); };
+for (const b of $('#clipShapeOut').children) b.onclick = () => { if (!CL.shape) return; CL.shape.up = b.dataset.u === '1'; clipRender(); };
+// drag the box to move it; drag a corner or an edge to make it smaller / bigger (it keeps its shape)
+$('#clipCropBox').addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || !CL.shape) return;
+  e.preventDefault(); e.stopPropagation();
+  const box = e.currentTarget, hd = e.target.dataset && e.target.dataset.h, s = CL.shape, i = CL.info;
+  const W = i.width & ~1, H = i.height & ~1, R = CLIP_RATIOS[s.ratio], rc = clipPicRect(); if (!rc) return;
+  const s0 = { ...s }, x0 = e.clientX, y0 = e.clientY;
+  const dx = hd ? (hd.includes('e') ? 1 : hd.includes('w') ? -1 : 0) : 0, dy = hd ? (hd.includes('s') ? 1 : hd.includes('n') ? -1 : 0) : 0;
+  const ax = dx > 0 ? s0.x : dx < 0 ? s0.x + s0.w : s0.x + s0.w / 2, ay = dy > 0 ? s0.y : dy < 0 ? s0.y + s0.h : s0.y + s0.h / 2;
+  const ev2 = (n) => Math.round(n / 2) * 2;
+  try { box.setPointerCapture(e.pointerId); } catch (_) {}
+  const move = (ev) => {
+    const mx = (ev.clientX - x0) / rc.k, my = (ev.clientY - y0) / rc.k;
+    if (!hd) { s.x = ev2(Math.max(0, Math.min(W - s.w, s0.x + mx))); s.y = ev2(Math.max(0, Math.min(H - s.h, s0.y + my))); }
+    else {
+      const px = (dx > 0 ? s0.x + s0.w : dx < 0 ? s0.x : ax) + mx, py = (dy > 0 ? s0.y + s0.h : dy < 0 ? s0.y : ay) + my;
+      let w = dx && dy ? Math.max(Math.abs(px - ax), Math.abs(py - ay) * R) : dx ? Math.abs(px - ax) : Math.abs(py - ay) * R;
+      const maxW = Math.min(dx > 0 ? W - ax : dx < 0 ? ax : 2 * Math.min(ax, W - ax), (dy > 0 ? H - ay : dy < 0 ? ay : 2 * Math.min(ay, H - ay)) * R);
+      const minW = Math.max(32, 32 * R, Math.min(W, H * R) / 8);
+      w = Math.max(minW, Math.min(maxW, w));
+      const h = w / R;
+      s.w = ev2(w); s.h = Math.min(H, ev2(h));
+      s.x = ev2(Math.max(0, Math.min(W - s.w, dx > 0 ? ax : dx < 0 ? ax - w : ax - w / 2)));
+      s.y = ev2(Math.max(0, Math.min(H - s.h, dy > 0 ? ay : dy < 0 ? ay - h : ay - h / 2)));
+    }
+    clipCropDraw();
+  };
+  const up = () => { box.removeEventListener('pointermove', move); box.removeEventListener('pointerup', up); box.removeEventListener('pointercancel', up); clipRender(); };
+  box.addEventListener('pointermove', move); box.addEventListener('pointerup', up); box.addEventListener('pointercancel', up);
+});
+
+// ---- Sound (3A–3D): even out (loudnorm, measured first), volume after that, fades
+function clipRenderSound() {
+  const i = CL.info; if (!i) return;
+  $('#clipEven').checked = CL.even;
+  $('#clipVol').value = String(CL.vol);
+  $('#clipVolLcd').textContent = `${CL.vol > 0 ? '+' : CL.vol < 0 ? '−' : ''}${Math.abs(CL.vol)} dB`;
+  const L = CL.loud, li = $('#clipLoudInfo');
+  li.classList.toggle('hidden', !CL.even);
+  if (CL.even) {
+    if (!L || L.key !== clipLoudKey()) li.textContent = 'this clip: measuring…';
+    else if (L.error) li.textContent = `this clip: ${L.error}`;
+    else if (L.silent) li.textContent = 'this clip is silent: nothing to even out';
+    else { const I = L.I, word = I < -18 ? 'quiet' : I > -11 ? 'loud' : 'about right'; li.innerHTML = `this clip: <b>${I.toFixed(0).replace('-', '−')} LUFS</b> (${word}) &rarr; <b>−14 LUFS</b> &middot; peaks kept under −1 dB so it doesn’t clip`; }
+  }
+  const n = [];
+  if (CL.kind === 'mp4') n.push(clipCutEff() === 'fast' ? 'The picture is copied as it is (Fast cut still works); only the sound is re-encoded.' : 'The sound is re-encoded with the picture (exact cut).');
+  if (CL.kind === 'mp3' && i.canCopyMp3) n.push('“Same quality as the file” is off while Sound is used (MP3 320 kbps).');
+  n.push('Play clip plays the original sound; the saved clip has the changes.');
+  $('#clipSoundNote').textContent = n.join(' ');
+}
+const clipLoudKey = () => `${CL.file}|${CL.in.toFixed(2)}|${CL.out.toFixed(2)}`;
+function clipLoudSoon() {
+  if (!CL.info || !CL.even || !CL.info.hasAudio || CL.kind === 'gif') return;
+  const key = clipLoudKey(); if (CL.loud && CL.loud.key === key) return;
+  clearTimeout(CL.loudT);
+  CL.loudT = setTimeout(async () => {
+    const r = await P.clipLoudness({ file: CL.file, in: CL.in, out: CL.out });
+    if (clipLoudKey() !== key) return;
+    CL.loud = { key, ...(r && r.ok ? r : { error: (r && r.error) || 'couldn’t measure it (it’s still evened out when saved)' }) };
+    clipRenderSound();
+  }, 600);
+}
+$('#clipEven').addEventListener('change', (e) => { CL.even = e.target.checked; clipRender(); });
+const clipVolSet = (v) => { CL.vol = Math.max(-12, Math.min(12, Math.round(v))); clipRender(); };
+$('#clipVol').addEventListener('input', (e) => clipVolSet(+e.target.value));
+$('#clipVol').addEventListener('dblclick', () => clipVolSet(0));
+$('#clipVolDn').onclick = () => clipVolSet(CL.vol - 1);
+$('#clipVolUp').onclick = () => clipVolSet(CL.vol + 1);
+
+// ---- Speed (4A–4B): In / Out pick the original's part; the saved clip is shorter / longer
+function clipRenderSpeed() {
+  if (!CL.info) return;
+  for (const b of $('#clipSpeed').children) b.classList.toggle('on', +b.dataset.s === CL.speed);
+  $('#clipSpeedLcd').textContent = `${clipFmt(clipLen())} → ${clipFmt(clipLenOut())}`;
+  $('#clipSpeedNote').innerHTML = CL.speed === 1 ? 'normal speed' : `the saved clip is ${clipFmt(clipLenOut())} long &middot; the Length presets still pick the part of the <b>original</b> to use`;
+  const w = $('#clipSpeedWarn');
+  w.textContent = CL.speed === 1 ? '' : CL.kind === 'mp4' ? '⚠ Speed re-encodes the picture and the sound (Fast cut is off).' : CL.kind === 'mp3' && CL.info.canCopyMp3 ? '⚠ Speed re-encodes the sound (MP3 320 kbps).' : '';
+  w.classList.toggle('hidden', !w.textContent);
+  if (clipMedia.playbackRate !== CL.speed) clipMedia.playbackRate = CL.speed;
+  clipCropDraw();
+}
+for (const b of $('#clipSpeed').children) b.onclick = () => { CL.speed = +b.dataset.s; clipRender(); };
+
+// ---- GIF (5A–5D): 480 px, 15 fps, loops; the size comes from a 1 s test GIF; settings remembered
+function clipRenderGif() {
+  const g = clipGifSet();
+  for (const [id, v] of [['#clipGifW', g.w], ['#clipGifFps', g.fps], ['#clipGifCol', g.colors]]) for (const b of $(id).children) b.classList.toggle('on', +b.dataset.v === v);
+  $('#clipGifLoop').checked = g.loop;
+  const sz = clipSizeEst();
+  $('#clipGifEst').textContent = sz == null ? (CL.gifEst && CL.gifEst.error ? '≈ ?' : '≈ …') : `≈ ${clipMB(sz)}`;
+  $('#clipGifEstNote').textContent = CL.gifEst && CL.gifEst.error && CL.gifEst.key === clipGifKey() ? CL.gifEst.error : 'estimated from a quick 1 s test · X takes up to 15 MB on the web, 5 MB on phones';
+  const w = $('#clipGifWarn'), MB = 1048576;
+  w.textContent = sz == null ? '' : sz > 15 * MB ? `⚠ About ${clipMB(sz)}: over the 15 MB X takes on the web (and phones take only 5 MB). Make it shorter, smaller (width) or use fewer colours.`
+    : sz > 5 * MB ? `⚠ About ${clipMB(sz)}: fine for X on the web (15 MB), but phones only take 5 MB.` : '';
+  w.classList.toggle('hidden', !w.textContent);
+}
+function clipGifKey() { const s = clipShapeEff(); return JSON.stringify([CL.file, +CL.in.toFixed(2), +CL.out.toFixed(2), s && [s.x, s.y, s.w, s.h], CL.speed, clipGifSet()]); }
+function clipGifSoon() {
+  if (!CL.info || CL.kind !== 'gif' || !CL.info.hasVideo) return;
+  const key = clipGifKey(); if (CL.gifEst && CL.gifEst.key === key) return;
+  clearTimeout(CL.gifT);
+  CL.gifT = setTimeout(async () => {
+    const s = clipShapeEff();
+    const r = await P.clipGifEstimate({ file: CL.file, in: CL.in, out: CL.out, speed: CL.speed, shape: s, gif: clipGifSet() });
+    if (clipGifKey() !== key) return;
+    CL.gifEst = { key, ...(r && r.ok ? { bytes: r.bytes } : { error: (r && r.error) || 'Couldn’t estimate the size.' }) };
+    if (CL.kind === 'gif') { clipRenderGif(); $('#clipFmtInfo').innerHTML = clipOutLine(); }
+  }, 500);
+}
+const clipGifPut = (k, v) => { S.clipGif = { ...clipGifSet(), [k]: v }; saveSoon(); clipRender(); };
+for (const [id, k] of [['#clipGifW', 'w'], ['#clipGifFps', 'fps'], ['#clipGifCol', 'colors']]) for (const b of $(id).children) b.onclick = () => clipGifPut(k, +b.dataset.v);
+$('#clipGifLoop').addEventListener('change', (e) => clipGifPut('loop', e.target.checked));
 
 // ---- the wave: click = move the preview there; drag an edge / the clip; drag elsewhere = a new range
 $('#clipWaveC').addEventListener('pointerdown', (e) => {
@@ -4582,6 +4886,9 @@ $('#clipEdgeOut').onclick = () => clipPlayRange(CL.out - 1.5, CL.out + 1.5);
 function clipKey(e) {
   if (!CL.info) return false;
   const k = e.key;
+  if (e.target && e.target.type === 'range' && /^Arrow/.test(k)) return true;       // the Volume slider takes its own arrows
+  const dg = /^(?:Digit|Numpad)([1-7])$/.exec(e.code || '');                          // 2.9.4: length presets, Shift = back from Out
+  if (dg && !e.ctrlKey && !e.altKey && !e.metaKey) { e.preventDefault(); clipPreset(CLIP_PRESETS[+dg[1] - 1], e.shiftKey); return true; }
   if (k === ' ') { e.preventDefault(); clipToggle(); return true; }
   if (k === 'ArrowLeft' || k === 'ArrowRight') { e.preventDefault(); clipSet(CL.last, CL[CL.last] + (k === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 1 : 0.1)); return true; }
   if (!e.ctrlKey && !e.altKey && (k === 'i' || k === 'I')) { if (CL.info.previewUrl) clipSet('in', clipMedia.currentTime || 0); return true; }
@@ -4615,9 +4922,12 @@ async function clipSave() {
   $('#clipCancel').classList.remove('hidden');
   let res;
   try {
+    const G = CL.kind === 'gif';
     res = await P.clipSave({ job, file: CL.file, in: CL.in, out: CL.out, kind: CL.kind, name: $('#clipName').value,
-      fadeIn: $('#clipFadeIn').checked ? 0.5 : 0, fadeOut: $('#clipFadeOut').checked ? 2 : 0, quality: CL.quality, cut: CL.cut,
-      alsoMp3: CL.kind === 'mp4' && $('#clipAlsoMp3').checked, srcTitle: CL.srcTitle, item: CL.item });
+      fadeIn: !G && $('#clipFadeIn').checked ? 0.5 : 0, fadeOut: !G && $('#clipFadeOut').checked ? 2 : 0, quality: clipQualityEff(), cut: clipCutEff(),
+      alsoMp3: CL.kind === 'mp4' && $('#clipAlsoMp3').checked, srcTitle: CL.srcTitle, item: CL.item,
+      // 2.9.4 tools
+      even: !G && CL.even, vol: G ? 0 : CL.vol, speed: CL.speed, shape: clipShapeEff(), gif: G ? clipGifSet() : undefined });
   } finally {
     CL.job = null; btn.classList.remove('busy'); btn.disabled = false;
     $('#clipCancel').classList.add('hidden');
@@ -4626,7 +4936,8 @@ async function clipSave() {
   for (const f of (res && res.files) || []) CL.saved.unshift(f);
   clipRenderSaved();
   if (!res || !res.ok) { toast(res && res.canceled ? 'Clip canceled.' : (res && res.error) || 'Couldn’t save the clip.', 3500); return res; }
-  if ($('#clipAddTo').checked) { const t = clipTargetTab(); if (t >= 0) await addFilesToTab(res.files.map(f => f.path), t); }
+  const playable = res.files.filter(f => f.kind !== 'gif');        // a GIF isn't a song or a video: it stays in the gifs folder
+  if (playable.length && $('#clipAddTo').checked) { const t = clipTargetTab(); if (t >= 0) await addFilesToTab(playable.map(f => f.path), t); }
   const names = res.files.map(f => f.path.split(/[\\/]/).pop());
   toast(`✓ Saved ${names.join(' and ')}`, 3500);
   if ($('#dlmDlg').open) dlmRefresh();
@@ -4635,7 +4946,7 @@ async function clipSave() {
 $('#clipSave').onclick = clipSave;
 $('#clipCancel').onclick = () => { if (CL.job) P.clipCancel(CL.job); };
 P.onClip((ev) => { if (ev && ev.type === 'progress' && ev.job === CL.job) $('#clipSave').textContent = `Saving ${Math.max(0, Math.min(100, ev.pct))}%…`; });
-$('#clipFolderBtn').onclick = () => P.clipFolder(CL.kind);
+$('#clipFolderBtn').onclick = () => P.clipFolder(CL.kind);    // mp3 / mp4 / gif
 $('#clipLibBtn').onclick = () => openDownloadsManager('clips');
 $('#clipEmptyLib').onclick = () => openDownloadsManager('clips');
 $('#clipEmptyPick').onclick = async () => { const f = await P.clipPick(); if (f) clipOpen(f); };
@@ -4670,7 +4981,7 @@ function clipRenderShots() {
   if (!has) return;
   const shots = (v && v.shots) || [], burst = (v && v.burst) || [];
   $('#clipShotCount').textContent = shots.length ? `${shots.length} shot${shots.length === 1 ? '' : 's'}` : '';
-  $('#clipShotBody').classList.toggle('hidden', !CL.shotsOpen);
+  $('#clipShotBody').classList.toggle('hidden', !CL.shotsOpen && CL.tab !== 'shots');
   $('#clipShotToggle').innerHTML = CL.shotsOpen ? '&#9652;' : '&#9662;';
   $('#clipShotToggle').title = CL.shotsOpen ? 'Hide the shots' : 'Show the shots';
   $('#clipBurst').disabled = !!CL.shotBusy;
@@ -4790,16 +5101,16 @@ $('#bEdit').onclick = () => editClick();
 $('#bEdit').addEventListener('contextmenu', (e) => { e.preventDefault(); editMenu(); });
 
 // ------------------------------------------------------------------ Library → CLIPS (2.3)
-// The CLIPS button: every file in mp3clips / mp4clips, with All / MP3 clips / MP4 clips. Clip rows are part
-// of DLM.rows (kind 'mp3clip' / 'mp4clip'), so ALL lists them too.
+// The CLIPS button: every file in mp3clips / mp4clips / gifs, with All / MP3 clips / MP4 clips / GIFs (2.9.4). Clip rows
+// are part of DLM.rows (kind 'mp3clip' / 'mp4clip' / 'gifclip'), so ALL lists them too. A GIF opens in the picture viewer.
 const CLS = { sub: 'all' };
 const clipMode = () => DLM.filter === 'clips';
-const isClipRow = (r) => r && (r.kind === 'mp3clip' || r.kind === 'mp4clip');
+const isClipRow = (r) => r && (r.kind === 'mp3clip' || r.kind === 'mp4clip' || r.kind === 'gifclip');
 for (const b of $('#clsub').children) b.onclick = () => { CLS.sub = b.dataset.c; DLM.anchor = -1; dlmRender(); };
 function clipLibSel() { return dlmVisible().filter(r => isClipRow(r) && DLM.sel.has(dlmKey(r))); }
 function clipLibButtons() {
   const sel = clipLibSel();
-  $('#clAdd').disabled = !sel.length;
+  $('#clAdd').disabled = !sel.some(r => r.kind !== 'gifclip');
   $('#clAgain').disabled = !(sel.length === 1 && sel[0].srcExists);
   $('#clAgain').title = sel.length === 1 && !sel[0].srcExists ? 'The file it was cut from isn’t there any more' : 'Open CLIP on the original with the same In / Out';
   $('#clDel').disabled = !sel.length;
@@ -4809,11 +5120,11 @@ function clipAgain(r) {
   if (!r || !r.srcExists) { toast('The file this clip was cut from isn’t there any more.'); return; }
   if ($('#dlmDlg').open) $('#dlmDlg').close();
   const it = r.item && allItems().find(i => isWeb(i) && i.vid === r.item.vid);
-  clipOpen(r.src, { kind: r.kind === 'mp4clip' ? 'mp4' : 'mp3', item: it || (r.item ? { ...r.item } : null), title: r.from || undefined, in: r.in, out: r.out });
+  clipOpen(r.src, { kind: { mp4clip: 'mp4', gifclip: 'gif' }[r.kind] || 'mp3', item: it || (r.item ? { ...r.item } : null), title: r.from || undefined, in: r.in, out: r.out, speed: r.speed });
 }
 // Library rows -> play / add (files, or the clip / download as a file item)
 async function libAdd(rows, play) {
-  rows = rows.filter(r => r && !r.missing && r.kind !== 'playlist');
+  rows = rows.filter(r => r && !r.missing && r.kind !== 'playlist' && r.kind !== 'gifclip');     // GIFs aren't songs or videos
   if (!rows.length) return;
   const t = clipTargetTab(); if (t < 0) return;
   const tab = S.tabs[t];
@@ -5047,9 +5358,13 @@ for (const host of [$('#dlmBody'), $('#dlmGrid')]) host.addEventListener('contex
   if (r.kind === 'playlist') {
     en.push([sel.length > 1 ? `Open ${sel.length} in new tabs` : 'Open in new tab', () => openPlaylistFiles(sel.filter(x => x.kind === 'playlist'))]);
     en.push(['Share (.zip)…', async () => { const res = await P.plOpen(r.path); if (res && res.entries) shareOpenDlg(res.entries.map(x => (x.url ? { url: x.url, title: x.title, duration: x.duration } : { type: 'file', path: x.path, title: x.title, duration: x.duration })), r.title); }]);
+  } else if (!r.missing && r.kind === 'gifclip') {        // 2.9.4: a GIF opens in the computer's picture viewer
+    en.push(['Open', () => P.clipOpenFile(r.path)], null, [r.srcExists ? '✂ Clip again…  (same In/Out)' : '✂ Clip again…  (the original is gone)', () => clipAgain(r), !r.srcExists]);
+    if (r.srcExists) en.push(['Show original', () => P.showInFolder(r.src)]);
+    en.push(null, ['Rename…\tF2', () => libRename(r)]);
   } else if (!r.missing) {
     en.push(['Play', () => libAdd([r], true)], [`Add to "${tname}"${sel.length > 1 ? ` (${sel.length})` : ''}`, () => libAdd(sel, false)],
-      ['Add to new tab', async () => { const n = newTab(); renderList(); await addFilesToTab(sel.filter(x => !x.missing && x.kind !== 'playlist').map(x => x.path), n); }]);
+      ['Add to new tab', async () => { const n = newTab(); renderList(); await addFilesToTab(sel.filter(x => !x.missing && x.kind !== 'playlist' && x.kind !== 'gifclip').map(x => x.path), n); }]);
     if (isClipRow(r)) {
       en.push(null, [r.srcExists ? '✂ Clip again…  (same In/Out)' : '✂ Clip again…  (the original is gone)', () => clipAgain(r), !r.srcExists]);
       if (r.srcExists) en.push(['Show original', () => P.showInFolder(r.src)]);
@@ -5621,7 +5936,7 @@ function stateSnapshot() {
     tabs: S.tabs.map(t => ({ id: t.id, name: t.name, current: t.current >= 0 || !bootLast || t !== PT() ? t.current : t.items.indexOf(bootLast), src: t.src || undefined, items: t.items.map(({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at }) => ({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at })) })),
     tab: S.tab, playTab: S.playTab, vis: S.vis, volume: S.volume, muted: S.muted, shuffle: S.shuffle, repeat: S.repeat,
     showVideo: S.showVideo, showPlaylist: S.showPlaylist, plShade: S.plShade, vidShade: S.vidShade, remaining: S.remaining, plHeight: S.plHeight, visMode, eq: S.eq,
-    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, xPlay: S.xPlay, dlLimit: S.dlLimit, favs: S.favs, startMode: S.startMode, askCloseDl: S.askCloseDl, skipSecs: S.skipSecs, mp3q: S.mp3q, dlWarn: S.dlWarn, xq: S.xq, hist: S.hist, xhist: S.xhist
+    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, xPlay: S.xPlay, dlLimit: S.dlLimit, favs: S.favs, startMode: S.startMode, askCloseDl: S.askCloseDl, skipSecs: S.skipSecs, clipPreset: S.clipPreset, clipGif: S.clipGif, mp3q: S.mp3q, dlWarn: S.dlWarn, xq: S.xq, hist: S.hist, xhist: S.xhist
   };
 }
 function saveSoon() {
@@ -5697,6 +6012,8 @@ setInterval(() => { blink = !blink; }, 500);
     S.xPlay = st.xPlay === 'ask' ? 'ask' : 'stream';
     S.startMode = ['spot', 'top', 'none'].includes(st.startMode) ? st.startMode : 'spot';      // 2.9.2
     S.askCloseDl = st.askCloseDl !== false;
+    S.clipPreset = [5, 10, 15, 20, 25, 30, 60].includes(st.clipPreset) ? st.clipPreset : 0;          // 2.9.4 CLIP: remembered
+    if (st.clipGif && typeof st.clipGif === 'object') S.clipGif = { w: +st.clipGif.w, fps: +st.clipGif.fps, loop: st.clipGif.loop !== false, colors: +st.clipGif.colors };
     S.skipSecs = [0, 5, 10, 15, 30].includes(st.skipSecs) ? st.skipSecs : 10;
     S.mp3q = ['best', '320', '192', '128'].includes(st.mp3q) ? st.mp3q : 'best';
     S.dlWarn = [0, 80, 90].includes(st.dlWarn) ? st.dlWarn : 90;

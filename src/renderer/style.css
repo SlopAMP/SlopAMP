@@ -826,7 +826,7 @@ body.win-clip.dropping .clip-wave, body.win-clip.dropping .ed-empty { outline: 2
 #dlmDlg.clipmode .dlm-table th:nth-child(4) { width: 62px; } #dlmDlg.clipmode .dlm-table th:nth-child(5) { width: 30%; } #dlmDlg.clipmode .dlm-table th:nth-child(6) { width: 66px; } #dlmDlg.clipmode .dlm-table th:nth-child(7) { width: 62px; } #dlmDlg.clipmode .dlm-table th:nth-child(8) { width: 26px; }
 /* 2.3: Library type tags keep their coloured border; the text uses the menus' ink so it reads in every skin
    (amber / light blue were too light on the Chrome and Pocket skins' light Library) */
-.dlm-tag.video, .dlm-tag.audio, .dlm-tag.playlist, .dlm-tag.mp3clip, .dlm-tag.mp4clip { color: var(--ink-menu); }
+.dlm-tag.video, .dlm-tag.audio, .dlm-tag.playlist, .dlm-tag.mp3clip, .dlm-tag.mp4clip, .dlm-tag.gifclip { color: var(--ink-menu); }
 
 /* CLIP → SHOTS (2.3: SLOP's LOOK, moved into CLIP; collapsed it's one line) */
 .clip-shots .clip-opt { color: var(--ink-dim); font-weight: normal; letter-spacing: 0; font-size: var(--fs-s); }
@@ -1092,3 +1092,68 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .tab-bar::before, .tab-bar::after { content: ''; position: absolute; left: -3px; border: 4.5px solid transparent; }
 .tab-bar::before { top: -4px; border-top-color: var(--green); }
 .tab-bar::after { bottom: -4px; border-bottom-color: var(--green); }
+
+/* ---- CLIP editor, part 1 (2.9.4): tabs, length presets, Shape / Sound / Speed / GIF, the output line ---- */
+.clip-top { padding-bottom: 6px; }
+.clip-seg { display: inline-flex; flex-wrap: wrap; }
+.clip-seg button { border: 1px solid var(--vctl-line); background: var(--menu-bg); color: var(--ink-menu); padding: 2px 9px; font: var(--fs-m) var(--font-ui); margin-left: -1px; min-width: 30px; cursor: pointer; }
+.clip-seg button.on { background: var(--btn-green); border-color: var(--line-green); color: var(--menu-accent); font-weight: bold; position: relative; z-index: 1; }
+.clip-seg button.last { box-shadow: inset 0 -3px 0 var(--amber); }
+.clip-seg button:disabled { opacity: .4; cursor: default; }
+.clip-lab { color: var(--menu-accent); font-weight: bold; letter-spacing: 1.5px; font-size: var(--fs-m); }
+.clip-l2 { min-width: 52px; color: var(--ink); }
+.clip-len-row { margin-top: 6px; }
+.clip-len-hint { font-size: var(--fs-s); }
+.clip-len-hint b { color: var(--ink-dim); font-weight: bold; }
+.clip-zoom { margin-left: auto; display: inline-flex; gap: 5px; align-items: center; }
+.clip-tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--line-green); padding: 4px 10px 0; position: sticky; top: 0; z-index: 3; background: var(--dialog-bg); }
+.clip-tabs button { padding: 4px 11px 5px; border: 1px solid transparent; border-bottom: 0; background: none; color: var(--ink-muted); font: var(--fs-m) var(--font-ui); position: relative; top: 1px; white-space: nowrap; cursor: pointer; }
+.clip-tabs button.on { color: var(--menu-accent); background: var(--dialog-bg); border-color: var(--line-green); font-weight: bold; }
+.clip-tabs button:disabled { opacity: .4; cursor: default; }
+.clip-dot, .clip-tabs .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); margin-left: 5px; vertical-align: 1px; }
+.clip-hint .clip-dot { margin: 0 2px; }
+.clip-pane .clip-hint { display: block; }
+.clip-pane { border-bottom: 0; }
+.clip-pane .ed-row:first-child { margin-top: 2px; }
+.clip-warn { color: var(--ink); font-size: var(--fs-s); border-left: 3px solid #ffb627; padding-left: 6px; }   /* ink + a fixed amber bar: readable in every skin (amber text wasn't, on Pocket) */
+.clip-sub { font-size: var(--fs-s); margin-top: 3px; padding-left: 2px; }
+.clip-sub b { color: var(--ink); }
+.clip-tg-l { cursor: pointer; }
+.clip-tg { -webkit-appearance: none; appearance: none; width: 30px; height: 16px; border-radius: 8px; background: var(--base-18); border: 1px solid var(--vctl-line); position: relative; margin: 0; cursor: pointer; flex: none; }
+.clip-tg::after { content: ''; position: absolute; left: 2px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink-dim); }
+.clip-tg:checked { background: var(--btn-green); border-color: var(--line-green); }
+.clip-tg:checked::after { left: 16px; background: var(--green); }
+.clip-tg:disabled { opacity: .4; }
+.clip-vol { display: inline-flex; align-items: center; gap: 4px; }
+.clip-vol input[type=range] { -webkit-appearance: none; appearance: none; width: 170px; height: 6px; margin: 0 4px; background: linear-gradient(90deg, transparent calc(50% - 1px), var(--ink-dim) calc(50% - 1px), var(--ink-dim) calc(50% + 1px), transparent calc(50% + 1px)), var(--base-18); border: 1px solid var(--vctl-line); border-radius: 3px; cursor: pointer; }
+.clip-vol input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 16px; background: var(--green); border: 1px solid var(--line-green); border-radius: 2px; box-shadow: 0 0 4px var(--green-a50); }
+.clip-vol .sb { min-width: 22px; padding: 0 4px; }
+#clipVolLcd, #clipSpeedLcd, #clipGifEst { min-width: 54px; text-align: center; }
+.clip-pane.off { opacity: .45; pointer-events: none; }
+#clipPaneShots .clip-shots { padding-top: 6px; border-bottom: 0; }
+#clipPaneShots #clipShotToggle { display: none; }
+/* the line above Save: what will be saved */
+.clip-out { flex: none; display: flex; align-items: center; gap: 6px 8px; padding: 6px 10px; border-top: 1px solid var(--base-18); background: var(--menu-bg); font-size: var(--fs-m); color: var(--ink-dim); flex-wrap: wrap; min-height: 28px; }
+.clip-out #clipFmtInfo { display: contents; }
+.clip-out b { color: var(--ink); }
+.clip-out .k { color: var(--ink); font-weight: bold; }
+.clip-out .re { font: bold var(--fs-s) var(--font-ui); color: #000; background: #ffb627; padding: 1px 5px; white-space: nowrap; }   /* fixed: reads the same in every skin */
+.clip-out .fast { font: bold var(--fs-s) var(--font-ui); color: var(--menu-accent); border: 1px solid var(--line-green); padding: 0 5px; white-space: nowrap; }
+.clip-out .w { color: var(--amber); }
+.clip-name-row { flex: none; padding: 6px 10px; margin-top: 0; border-top: 1px solid var(--base-18); flex-wrap: nowrap; }
+.clip-prev { height: 220px; overflow: hidden; }
+/* drawn on the picture: fixed white / black, so every skin reads the same (GD) */
+.clip-crop { position: absolute; pointer-events: none; }
+.cc-box { position: absolute; border: 2px solid #fff; outline: 1px solid #000; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .58); cursor: move; pointer-events: auto; touch-action: none; }
+.cc-box i { position: absolute; pointer-events: none; border: 0 dashed rgba(255, 255, 255, .45); }
+.cc-box .cc-g1 { left: 33.3%; right: 33.3%; top: 0; bottom: 0; border-left-width: 1px; border-right-width: 1px; }
+.cc-box .cc-g2 { top: 33.3%; bottom: 33.3%; left: 0; right: 0; border-top-width: 1px; border-bottom-width: 1px; }
+.cc-box b { position: absolute; width: 9px; height: 9px; background: #fff; border: 1px solid #000; margin: -5px 0 0 -5px; }
+.cc-box b[data-h=nw] { left: 0; top: 0; cursor: nwse-resize; } .cc-box b[data-h=se] { left: 100%; top: 100%; cursor: nwse-resize; }
+.cc-box b[data-h=ne] { left: 100%; top: 0; cursor: nesw-resize; } .cc-box b[data-h=sw] { left: 0; top: 100%; cursor: nesw-resize; }
+.cc-box b[data-h=n] { left: 50%; top: 0; cursor: ns-resize; } .cc-box b[data-h=s] { left: 50%; top: 100%; cursor: ns-resize; }
+.cc-box b[data-h=e] { left: 100%; top: 50%; cursor: ew-resize; } .cc-box b[data-h=w] { left: 0; top: 50%; cursor: ew-resize; }
+.cc-lab { position: absolute; left: 50%; top: -1px; transform: translate(calc(-50% + var(--lab-dx, 0px)), 0); background: #fff; color: #000; border: 1px solid #000; font: bold 10px var(--font-ui); padding: 1px 6px; white-space: nowrap; pointer-events: none; }
+.clip-badge { position: absolute; left: 8px; top: 8px; background: #000; color: #fff; border: 1px solid #fff; font: bold 11px var(--font-lcd); padding: 1px 6px; pointer-events: none; z-index: 2; }
+.dlm-tag.gifclip { border-color: var(--line-green); }
+.clip-saved { max-height: 70px; }       /* 2.9.4: the saved-files list doesn't push the tabs away */

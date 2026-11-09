@@ -1,6 +1,25 @@
 # Changelog
 
-## 2.9.3 — unreleased
+## 2.9.4 — unreleased
+
+CLIP editor, part 1. Everything uses the FFmpeg already inside SlopAMP; the original file is never changed and every save is a new file.
+
+- **A new CLIP layout with tabs:** Trim · Shape · Sound · Speed · Shots (Captions and Join come later). A dot marks a tab that's in use; a tab that can't do anything for this file or format is greyed (no Shape for an MP3, no Sound for a GIF). SHOTS works as before, in its own tab.
+- **The line above Save says what will be saved:** the format, the picture size, whether it's copied (**FAST CUT** / **NO RE-ENCODE**) or **RE-ENCODE**d, and about how big it will be.
+- **Save as MP3 · MP4 · GIF.**
+- **Length presets:** 5 · 10 · 15 · 20 · 25 · 30 · 60 s under In / Out. Click: Out = In + that length. Shift-click: In = Out − that length. Keys 1–7 do the same while CLIP is the active window (Shift for In). A preset longer than the file is greyed. The one used last is underlined and remembered after a restart. Nothing is re-encoded.
+- **Shape:** Original, 16:9, 9:16 (Shorts / TikTok), 1:1, 4:5. A box on the picture shows what's kept: drag it to move it, drag a corner or an edge to zoom in (it keeps the shape), or use Center / Left / Right. One box for the whole clip. By default the clip keeps the filmed pixels (9:16 from 1080p = 608×1080); **upscaled** (1080×1920, 1080×1080, 1080×1350, 1920×1080) is an option. Shape re-encodes, so Fast cut switches off (with a note) and comes back when Shape is back on Original.
+- **Sound:** **Even out the volume** measures the clip first and brings it to −14 LUFS with peaks under −1 dB (FFmpeg loudnorm, two passes); it shows how loud the clip is now. A **Volume** control from −12 to +12 dB (after evening out). **Fade in / Fade out** moved here and now work for MP4 too. When only the sound changes in an MP4 with Fast cut, the picture is copied as it is and only the sound is re-encoded, so Fast cut keeps working. In an MP3, "Same quality as the file" switches off while Sound is used.
+- **Speed:** 0.5× · 1× · 1.5× · 2× for MP3 and MP4 (and GIFs); voices keep their normal pitch. In / Out and the presets pick the part of the original; LENGTH, the Save button and the name show the new length; the preview plays at that speed. 0.5× shows each frame twice (no smooth slow motion). Speed re-encodes, so Fast cut switches off. **Clip again** on a sped-up clip brings its speed back.
+- **GIF:** 480 px wide, 15 fps and looping by default (also 320 / 640 / Original, 10 / 24 fps, play once, Smaller colours). A quick 1-second test gives the size estimate; past 15 MB it warns (X's limit on the web), and past 5 MB it notes that phones take only 5 MB. Saved in Downloads\SlopAMP\gifs. The GIF settings are remembered.
+- **Library → CLIPS has a GIFs chip.** A GIF opens in the computer's picture viewer (double-click or Open); Clip again, Rename, Show in folder and Delete work as for other clips.
+- Anything drawn on the picture (the Shape box, its label, the speed badge) is white and black, so it reads the same in every skin.
+- The tools start fresh for each new file; the length preset and the GIF settings are remembered.
+- The CLIP window is bigger (860 × 770) so the tabs fit: a CLIP window saved smaller by an earlier version grows to that size once; a size you set afterwards stays. The saved-files list under it stays short (it scrolls).
+- Unchanged: Fast cut, MP3 and MP4 clip saving without the new tools, SHOTS, Fix for X.
+- Tests: `tests/clip-294.js`.
+
+## 2.9.3 — released Nov 8, 2026
 
 - **Closing a tab can move its items to another tab.** Closing a tab that has items (its right-click **Close tab**, or Ctrl+W) now asks, in the same style as the Load playlist box: **Move them to the end of** [another tab ▾], with **Cancel**, **Close, drop the list** and **Move to "…" & close**.
   - Move is selected, so pressing Enter never drops the list. The list offers your other playlist tabs with their counts (never YT / X History) and starts on the tab you last moved items to, else the one next to it.
