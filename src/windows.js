@@ -754,6 +754,14 @@ class WindowManager {
     if (this.layout.onTop || this.mini) dlg.setAlwaysOnTop(true, 'modal-panel');   // the mini player floats: stay above it
     else dlg.setAlwaysOnTop(false);
   }
+  // 2.9.6: the Library is already open (maybe behind another window): bring it to the front
+  dialogFront() {
+    const dlg = this.wins.get('dialog');
+    if (!dlg || dlg.isDestroyed() || !dlg.isVisible()) return;
+    this.dialogLevel();
+    if (dlg.isMinimized()) dlg.restore();
+    dlg.show(); dlg.focus();
+  }
   dialogUp() {
     const dlg = this.wins.get('dialog');
     if (!dlg || dlg.isDestroyed() || !dlg.isVisible() || this.layout.onTop || this.mini) return;

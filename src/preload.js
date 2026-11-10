@@ -4,13 +4,15 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('phosphor', {
   pathForFile: (file) => { try { return webUtils.getPathForFile(file); } catch (_) { return ''; } },
   describeFiles: (paths) => ipcRenderer.invoke('files:describe', paths),
+  filesExpand: (paths) => ipcRenderer.invoke('files:expand', paths),   // 2.9.6
   openDialog: (kind) => ipcRenderer.invoke('files:open-dialog', kind),
   savePlaylist: (items, name) => ipcRenderer.invoke('playlist:save', items, name),
   quickSaveAll: (tabs) => ipcRenderer.invoke('playlist:quicksave-all', tabs),
   quickSave: (items, name) => ipcRenderer.invoke('playlist:quicksave', items, name),
   histMirror: (items, kind) => ipcRenderer.invoke('hist:mirror', items, kind),   // a History tab's synced copy ('yt' / 'x')
   plList: () => ipcRenderer.invoke('pl:list'),
-  plOpen: (p) => ipcRenderer.invoke('pl:open', p),
+  plOpen: (p, o) => ipcRenderer.invoke('pl:open', p, o),
+  plLocs: (p) => ipcRenderer.invoke('pl:locs', p),             // 2.9.6
   // 2.4: #6 playlist files handed to SlopAMP, #5 Share playlist (.zip), "?" → Make SlopAMP open playlists…
   plOpenFile: (p) => ipcRenderer.invoke('pl:openFile', p),
   sharePlan: (items, name, o) => ipcRenderer.invoke('share:plan', items, name, o),
@@ -77,6 +79,7 @@ contextBridge.exposeInMainWorld('phosphor', {
   wmPopupDrag: (phase) => ipcRenderer.send('wm:popup-drag', phase),
   wmDialog: (o) => ipcRenderer.send('wm:dialog', o),
   wmDialogHide: () => ipcRenderer.send('wm:dialog-hide'),
+  wmDialogFront: () => ipcRenderer.send('wm:dialog-front'),     // 2.9.6
   wmDialogDrag: (phase) => ipcRenderer.send('wm:dialog-drag', phase),
   onWm: (cb) => { for (const ch of ['wm:snap', 'wm:layout', 'wm:closed', 'wm:popup-blur']) ipcRenderer.on(ch, (_e, v) => cb(ch, v)); },
   info: () => ipcRenderer.invoke('app:info'),

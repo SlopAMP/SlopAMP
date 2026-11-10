@@ -1183,3 +1183,9 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .dlqf button:disabled { opacity: .45; cursor: default; }
 #dlmDlg.clipmode .dlqf, #dlmDlg.skinmode .dlqf, #dlmDlg.noqf .dlqf { display: none; }
 .dlm-tag.conv { color: var(--ink-menu); border-color: var(--warn-36); }
+
+/* ---- 2.9.6: big adds and loads: "Adding 340 / 1,500…" under the playlist, with Cancel; LIBRARY while it opens ---- */
+.pl-add { flex: none; display: flex; align-items: center; gap: 8px; padding: 3px 8px; border-top: 1px solid var(--base-18); background: var(--menu-bg); color: var(--ink-menu); font: var(--fs-s) var(--font-ui); }
+.pl-add-t { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-variant-numeric: tabular-nums; }
+.pl-add button { background: var(--menu-bg); color: var(--ink-menu); border: 1px solid var(--vctl-line); font: var(--fs-s) var(--font-ui); padding: 0 8px; cursor: pointer; }
+#pDlm.wait { animation: blink 0.9s infinite; }

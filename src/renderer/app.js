@@ -189,14 +189,16 @@ function addUrls(urls, at) {
 async function addPaths(paths, at) {
   if (!paths.length) return [];
   showBusy(true);
-  const res = await P.describeFiles(paths);
+  // 2.9.6: more than 50 files show at once (names from the files) and are read in the background (infoFill)
+  let res = await P.filesExpand(paths).catch(() => null);
+  if (!res || res.filter(r => r.path).length <= 50) res = await P.describeFiles(paths);
   showBusy(false);
   return addDescribed(res, at);
 }
 // Adds files and links in their original order (playlist files can mix both).
-function addDescribed(res, at, autoplay = true) {
+function addDescribed(res, at, autoplay = true, label = 'Adding') {
   if (res.some(r => r.url && isTco(r.url))) {   // playlist files from elsewhere may hold t.co links
-    return expandShortLinks(res.map(r => r.url || '')).then(u => addDescribed(res.map((r, i) => (r.url ? { ...r, url: isTco(u[i]) ? 'about:blank' : u[i] } : r)), at, autoplay));
+    return expandShortLinks(res.map(r => r.url || '')).then(u => addDescribed(res.map((r, i) => (r.url ? { ...r, url: isTco(u[i]) ? 'about:blank' : u[i] } : r)), at, autoplay, label));
   }
   const items = [];
   const web = [];
@@ -208,14 +210,85 @@ function addDescribed(res, at, autoplay = true) {
       items.push(it); web.push(it);
       continue;
     }
-    items.push({ id: nid(), type: 'file', path: r.path, title: r.title, duration: r.duration || 0, hasVideo: !!r.hasVideo, missing: !!r.missing });
+    items.push(fillMark({ id: nid(), type: 'file', path: r.path, title: r.title, duration: r.duration || 0, hasVideo: !!r.hasVideo, missing: !!r.missing }, r));
   }
   if (bad) toast(SKIP_MSG(bad, false));
   if (!items.length) { if (!bad) toast('No playable media found.'); return []; }
   insertItems(items, at, autoplay);
   web.forEach(fillWebMeta);
+  infoFill(items, label);
   return items;
 }
+
+// ---- 2.9.6: big adds and loads. The rows show at once (titles from the playlist file or the file names); the
+// real titles and lengths are read in the background, 100 files at a time (main.js files:describe: MP3 tags are read
+// directly, ffprobe for the rest), and the list is drawn once per batch. "Adding 340 / 1,500…" with Cancel.
+// Opening the Library, playing and the buttons keep working meanwhile.
+const FILL = { q: [], total: 0, done: 0, busy: false, cancel: false, label: 'Adding', t: 0 };
+function fillMark(it, r) {          // r.probe: not read yet (named: its title came from the playlist file: keep it)
+  if (r && r.probe && !r.missing) { it._probe = true; it._t0 = it.title; if (r.named) it._named = true; }
+  return it;
+}
+function infoFill(items, label) {
+  const list = (items || []).filter(i => i && i.type === 'file' && i._probe);
+  if (!list.length) return;
+  if (!FILL.busy && !FILL.q.length) { FILL.total = 0; FILL.done = 0; FILL.label = label || 'Adding'; }
+  FILL.q.push(...list); FILL.total += list.length; FILL.cancel = false;
+  fillBar();
+  if (!FILL.busy) fillRun();
+}
+async function fillRun() {
+  FILL.busy = true;
+  try {
+    while (FILL.q.length && !FILL.cancel) {
+      const batch = FILL.q.splice(0, 100);
+      const res = await P.describeFiles(batch.map(i => i.path)).catch(() => []);
+      const by = new Map((res || []).filter(r => r && r.path).map(r => [r.path, r]));
+      for (const it of batch) {
+        const r = by.get(it.path);
+        if (r && it._probe) {
+          if (r.duration > 0) it.duration = r.duration;
+          it.hasVideo = !!r.hasVideo;
+          if (!it._named && r.title && it.title === it._t0) it.title = r.title;     // the tag's title, unless it was renamed meanwhile
+        }
+        delete it._probe; delete it._t0; delete it._named;
+      }
+      FILL.done += batch.length;
+      fillBar();
+      fillRows(batch);              // just those rows' title and length: the whole list isn't drawn again
+    }
+  } finally {
+    if (FILL.cancel) { for (const it of FILL.q) { delete it._probe; delete it._t0; delete it._named; } FILL.q = []; }
+    FILL.busy = false;
+    fillBar(); updatePlTime(); renderTabs(); saveSoon();                       // the rows are up to date already; saved once, at the end
+  }
+}
+// the rows of a batch that are on the playlist now: their title and length, in place
+function fillRows(batch) {
+  const on = new Set(batch), lis = list.children;
+  applyNames(batch);
+  let any = false;
+  for (let i = 0; i < S.items.length; i++) {
+    const it = S.items[i]; if (!on.has(it)) continue;
+    const li = lis[i]; if (!li || +li.dataset.i !== i) continue;
+    const t = li.querySelector('.t'), d = li.querySelector('.d');
+    if (t && t.textContent !== it.title) t.textContent = it.title;
+    if (d && !d.classList.contains('ago')) d.textContent = it.live ? '' : fmtShort(it.duration);
+    any = true;
+  }
+  if (any && Date.now() - FILL.t > 500) { FILL.t = Date.now(); updatePlTime(); }
+}
+const fmtN = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+function fillBar() {
+  const bar = $('#plAdd'); if (!bar) return;
+  const on = FILL.busy || FILL.q.length > 0, show = on && FILL.total >= 2;
+  if (bar.classList.contains('hidden') === show) bar.classList.toggle('hidden', !show);
+  if (!show) return;
+  // just the words, and only when they change
+  const t = `${FILL.label} ${fmtN(FILL.done)} / ${fmtN(FILL.total)}…`, el = $('#plAddT');
+  if (el.textContent !== t) el.textContent = t;
+}
+$('#plAddX').onclick = () => { FILL.cancel = true; FILL.q.length && fillBar(); };
 
 function insertItems(items, at, autoplay = true) {
   if (!items.length) return;
@@ -2262,7 +2335,7 @@ async function loadPlaylistResult(res) {
   else if (S.items.length) { mode = await askLoadMode(res.name, res.entries.length); if (!mode) return; }
   if (mode === 'newtab') { newTab(res.name.replace(/\.(m3u8?|pls)$/i, '').slice(0, 40)); mode = 'replace'; }
   if (mode === 'replace' && S.items.length) removeIds(S.items.map(i => i.id));
-  const added = addDescribed(res.entries, undefined, false);
+  const added = addDescribed(res.entries, undefined, false, 'Loading');
   if (!added.length) return;
   const missing = added.filter(i => i.missing).length;
   toast(`Loaded ${added.length} item${added.length === 1 ? '' : 's'} from ${res.name}${missing ? ` (${missing} file${missing === 1 ? '' : 's'} not found)` : ''}`, 3500);
@@ -3343,8 +3416,8 @@ async function roomProtect() {
   const pls = await P.plList().catch(() => []);
   for (const r of pls || []) {
     if (mirrors.has(lc(String(r.path).split(/[\\/]/).pop()))) continue;      // YT / X History's synced copy: not a playlist here
-    const res = await P.plOpen(r.path).catch(() => null);
-    for (const e of (res && res.entries) || []) {
+    const locs = await P.plLocs(r.path).catch(() => []);       // 2.9.6: paths and links only (pl:open read every file)
+    for (const e of locs || []) {
       if (e.path) add('f:' + lc(e.path), 'saved', r.title);
       else if (e.url) { const it = linkItem(e.url); if (it && it.vid) add('y:' + it.vid, 'saved', r.title); }
     }
@@ -3586,12 +3659,22 @@ function fmtDate(ms) {
 }
 async function openDownloadsManager(filter) {
   hideDlMenu(); hidePop();
+  const was = $('#dlmDlg').open;
   dlmSection(typeof filter === 'string' ? filter : DLM.filter);    // that section's own search (bug #4)
   DLM.sel.clear(); DLM.anchor = -1;
-  await dlmRefresh();
-  if (skinMode()) await sklRefresh();
-  dlmApplySize();
+  // 2.9.6: the Library opens at once (what it showed last, or "Opening the Library…") and fills in when its lists
+  // arrive; already open (maybe behind another window): it comes to the front. LIBRARY blinks until it's ready.
+  if (was) P.wmDialogFront();
+  const b = $('#pDlm'); if (b) b.classList.add('wait');
+  DLM.loading = true;
+  try {
+    if (!was && !skinMode()) { dlmApplySize(); dlmRender(); $('#dlmDlg').showModal(); }
+    await dlmRefresh();
+    if (skinMode()) await sklRefresh();
+    dlmApplySize();
+  } finally { DLM.loading = false; if (b) b.classList.remove('wait'); }
   if (!$('#dlmDlg').open) $('#dlmDlg').showModal();
+  if (!skinMode()) dlmRender();
 }
 async function dlmRefresh() {
   const [dl, pls, clips] = await Promise.all([P.dlmList(), P.plList(), P.clipList().catch(() => [])]);
@@ -3671,7 +3754,7 @@ function dlmRender() {
   });
   $('#dlmEmpty').classList.toggle('hidden', vis.length > 0);
   const q = dlmQ();
-  if (!vis.length) $('#dlmEmpty').innerHTML = dlmEmptyHtml(q, cm);
+  if (!vis.length) $('#dlmEmpty').innerHTML = DLM.loading && !DLM.rows.length ? '<div class="dlm-nomatch"><b>Opening the Library…</b></div>' : dlmEmptyHtml(q, cm);
   $('#dlmSearchX').classList.toggle('hidden', !q);
   const selCount = vis.filter(r => DLM.sel.has(dlmKey(r))).length;
   const all = $('#dlmAll');
@@ -5034,10 +5117,11 @@ function clipTargetTab() {
 // add files (clips) to a tab, as playlist items; returns the new items
 async function addFilesToTab(paths, ti, autoplay = false) {
   const tab = S.tabs[ti]; if (!tab || isHist(tab) || !paths.length) return [];
-  const res = await P.describeFiles(paths);
-  const items = res.filter(r => r.path).map(r => ({ id: nid(), type: 'file', path: r.path, title: r.title, duration: r.duration || 0, hasVideo: !!r.hasVideo, missing: !!r.missing }));
+  const res = paths.length > 50 ? await P.filesExpand(paths) : await P.describeFiles(paths);     // 2.9.6: many: at once, read in the background
+  const items = res.filter(r => r.path).map(r => fillMark({ id: nid(), type: 'file', path: r.path, title: r.title, duration: r.duration || 0, hasVideo: !!r.hasVideo, missing: !!r.missing }, r));
   if (ti === S.tab) insertItems(items, undefined, autoplay);
   else { tab.items.push(...items); renderTabs(); saveSoon(); }
+  infoFill(items, 'Adding');
   return items;
 }
 async function clipSave() {
@@ -5507,7 +5591,7 @@ for (const host of [$('#dlmBody'), $('#dlmGrid')]) host.addEventListener('contex
   const en = [];
   if (r.kind === 'playlist') {
     en.push([sel.length > 1 ? `Open ${sel.length} in new tabs` : 'Open in new tab', () => openPlaylistFiles(sel.filter(x => x.kind === 'playlist'))]);
-    en.push(['Share (.zip)…', async () => { const res = await P.plOpen(r.path); if (res && res.entries) shareOpenDlg(res.entries.map(x => (x.url ? { url: x.url, title: x.title, duration: x.duration } : { type: 'file', path: x.path, title: x.title, duration: x.duration })), r.title); }]);
+    en.push(['Share (.zip)…', async () => { const res = await P.plOpen(r.path, { full: true }); if (res && res.entries) shareOpenDlg(res.entries.map(x => (x.url ? { url: x.url, title: x.title, duration: x.duration } : { type: 'file', path: x.path, title: x.title, duration: x.duration })), r.title); }]);
   } else if (!r.missing && isGifRow(r)) {        // 2.9.4: a GIF opens in the computer's picture viewer
     en.push(['Open', () => P.clipOpenFile(r.path)], null, [r.kind === 'conv' ? (r.srcExists ? '⇄ Convert again…' : '⇄ Convert again…  (the original is gone)') : r.srcExists ? '✂ Clip again…  (same In/Out)' : '✂ Clip again…  (the original is gone)', () => clipAgain(r), !r.srcExists]);
     if (r.srcExists) en.push(['Show original', () => P.showInFolder(r.src)]);
@@ -6202,6 +6286,8 @@ setInterval(() => { blink = !blink; }, 500);
     if (!S.tabs.some(t => !isHist(t))) S.tabs.push({ id: 't' + nid(), name: 'Main', items: [], current: -1 });
   }
   renderToggles(); renderVolume(); renderList(); setStatus('stopped'); updateControlsEnabled();
+  // 2.9.6: files whose length was never read (SlopAMP closed during a big add, or Cancel): read in the background
+  { const left = []; for (const t of S.tabs) if (!isHist(t)) for (const it of t.items) if (it.type === 'file' && !it.missing && !(it.duration > 0)) { it._probe = true; it._t0 = it.title; it._named = true; left.push(it); } if (left.length) setTimeout(() => infoFill(left, 'Reading'), 1500); }
   buildEq(); renderEq();
   verifyLocalCopies().then(() => attachKnownCopies());
   showLayer('empty');

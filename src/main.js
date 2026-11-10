@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, net, screen, Menu, globalSho
 const path = require('path');
 const fs = require('fs');
 const { MediaServer, isMediaFile, encoderArgs } = require('./media');
+const mp3info = require('./mp3info');      // 2.9.6: MP3 tags and length without ffprobe
 const { Thumbs } = require('./thumbs');
 const { Clipper } = require('./clip');
 const share = require('./share');
@@ -629,7 +630,12 @@ function readPlaylistFile(p) {
 
 const VIDEO_EXT_RE = /\.(mp4|m4v|mkv|avi|mov|wmv|webm|flv|mpe?g|ts|m2ts|mts|vob|3gp|ogv|divx|asf|rmvb?|f4v)$/i;
 
-async function loadPlaylistEntries(p) {
+// 2.9.6: a big playlist (1,500 songs) used to wait for every file to be read (ffprobe, 4 at a time) before
+// anything showed. Now the list comes back at once from the file itself (its #EXTINF title and length, the kind
+// from the extension); files are marked `probe` and the window reads them in the background (files:describe).
+// full: read every file first, as before (Share .zip needs the real lengths).
+async function loadPlaylistEntries(p, o = {}) {
+  if (!o.full) return quickEntries(parsePlaylistFile(p));
   const entries = parsePlaylistFile(p);
   const out = [];
   const queue = entries.map((e, i) => ({ e, i }));
@@ -644,7 +650,7 @@ async function loadPlaylistEntries(p) {
       }
       if (!isMediaFile(e.loc)) continue;
       // eslint-disable-next-line no-await-in-loop
-      const info = await server.probe(e.loc);
+      const info = (/\.mp3$/i.test(e.loc) && mp3info.read(e.loc)) || await server.probe(e.loc);   // 2.9.6
       results[i] = {
         path: e.loc,
         title: e.title || (info && info.title) || path.basename(e.loc).replace(/\.[^.]+$/, ''),
@@ -656,6 +662,21 @@ async function loadPlaylistEntries(p) {
   for (const r of results) if (r) out.push(r);
   return out;
 }
+
+// entries from a playlist (or plain paths) without reading the files: { path, title, duration, hasVideo, probe, named }
+function quickEntries(entries) {
+  const out = [];
+  for (const e0 of entries) {
+    const e = typeof e0 === 'string' ? { loc: e0, title: '', duration: 0 } : e0;
+    if (/^https?:/i.test(e.loc)) { out.push({ url: e.loc, title: e.title }); continue; }
+    const name = path.basename(e.loc).replace(/\.[^.]+$/, '');
+    if (!fs.existsSync(e.loc)) { out.push({ path: e.loc, title: e.title || name, duration: e.duration, hasVideo: VIDEO_EXT_RE.test(e.loc), missing: true }); continue; }
+    if (!isMediaFile(e.loc)) continue;
+    out.push({ path: e.loc, title: e.title || name, duration: e.duration > 0 ? e.duration : 0, hasVideo: VIDEO_EXT_RE.test(e.loc), probe: true, ...(e.title ? { named: true } : {}) });
+  }
+  return out;
+}
+const QUICK_MIN = 50;       // 2.9.6: adding more files than this shows them at once and reads them in the background
 
 function buildM3U(items) {
   const lines = ['#EXTM3U', '#PLAYLIST:SlopAMP playlist'];
@@ -677,8 +698,9 @@ async function describeFiles(paths) {
     while (queue.length) {
       const f = queue.shift();
       if (/^https?:/i.test(f)) { out.push({ url: f }); continue; }
+      // 2.9.6: an MP3's tags and length are read from the file itself (mp3info.js); ffprobe only when that can't
       // eslint-disable-next-line no-await-in-loop
-      const info = await server.probe(f);
+      const info = (/\.mp3$/i.test(f) && mp3info.read(f)) || await server.probe(f);
       out.push({
         path: f,
         title: (info && info.title) || path.basename(f).replace(/\.[^.]+$/, ''),
@@ -697,6 +719,8 @@ async function describeFiles(paths) {
 // ---------- IPC ----------
 function registerIpc() {
   ipcMain.handle('files:describe', (_e, paths) => describeFiles((paths || []).filter(p => typeof p === 'string')));
+  // 2.9.6: the files (and links) a drop / Add folder… would add, without reading them (fast, for big adds)
+  ipcMain.handle('files:expand', (_e, paths) => quickEntries(expandPaths((paths || []).filter(p => typeof p === 'string'))));
   ipcMain.handle('files:open-dialog', async (_e, kind) => {
     const res = await dialog.showOpenDialog(win, kind === 'folder'
       ? { properties: ['openDirectory', 'multiSelections'] }
@@ -708,7 +732,8 @@ function registerIpc() {
         ]
       });
     if (res.canceled) return [];
-    return describeFiles(res.filePaths);
+    const files = expandPaths(res.filePaths);
+    return files.length > QUICK_MIN ? quickEntries(files) : describeFiles(res.filePaths);     // 2.9.6: many files: at once
   });
   ipcMain.handle('playlist:save', async (_e, items, name) => {
     if (!Array.isArray(items)) return { saved: false };      // 2.9.3: an empty tab saves too (an empty playlist SlopAMP can reopen)
@@ -810,7 +835,7 @@ function registerIpc() {
       if (u.error) return u;
       log(`shared zip unpacked: ${path.basename(zip)} -> ${u.dir} (${u.media.length} files, ${u.playlists.length} playlist(s), ${u.skipped.length} skipped)`);
       const pl = u.playlists[0];
-      const entries = pl ? await loadPlaylistEntries(pl) : await describeFiles(u.media);
+      const entries = pl ? await loadPlaylistEntries(pl, { full: true }) : await describeFiles(u.media);
       return { name: path.basename(zip, path.extname(zip)), dir: u.dir, entries, skipped: u.skipped.length, playlist: pl || null };
     } catch (err) { return { error: String(err.message || err) }; }
   });
@@ -999,9 +1024,16 @@ function registerIpc() {
     }
     return out;
   });
-  ipcMain.handle('pl:open', async (_e, p) => {
+  ipcMain.handle('pl:open', async (_e, p, o) => {
     if (!inPlaylistsDir(p) || !fs.existsSync(p)) return { error: 'missing' };
-    return { name: path.basename(p), entries: await loadPlaylistEntries(p) };
+    return { name: path.basename(p), entries: await loadPlaylistEntries(p, { full: !!(o && o.full) }) };
+  });
+  // 2.9.6: what a saved playlist holds (paths and links only, no file is read): the Library's "▶ in <playlist>"
+  // and the downloads-folder limit used pl:open, which read every file of every saved playlist (a 1,500-song
+  // playlist kept the Library from opening for a minute or more)
+  ipcMain.handle('pl:locs', (_e, p) => {
+    if (!inPlaylistsDir(p) || !fs.existsSync(p)) return [];
+    return parsePlaylistFile(p).map(e => (/^https?:/i.test(e.loc) ? { url: e.loc } : { path: e.loc }));
   });
   ipcMain.handle('pl:delete', async (_e, paths) => {
     const out = [];
@@ -1117,6 +1149,7 @@ function registerIpc() {
   ipcMain.on('wm:popup-hide', safe(() => wm.hidePopup()));
   ipcMain.on('wm:popup-drag', safe((_e, phase) => wm.popupDrag(String(phase))));
   ipcMain.on('wm:dialog', safe((_e, o) => { if (o && typeof o === 'object') wm.showDialog(o); }));
+  ipcMain.on('wm:dialog-front', safe(() => wm.dialogFront()));     // 2.9.6
   ipcMain.on('wm:dialog-hide', safe(() => wm.hideDialog()));
   ipcMain.on('wm:dialog-drag', safe((_e, phase) => wm.dialogDrag(String(phase))));
   // ---- auto-updates (see updater.js)

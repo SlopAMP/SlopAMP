@@ -1,6 +1,17 @@
 # Changelog
 
-## 2.9.5 — unreleased
+## 2.9.6 — unreleased
+
+Hotfix: big playlists no longer freeze SlopAMP.
+
+- **Adding many files shows them at once.** Adding a folder (or a drop, or Add files…) with more than 50 files used to show nothing until SlopAMP had read every file (one ffprobe per file), which took minutes for 1,500 songs. Now the rows appear right away with their file names, and the titles and lengths fill in as they're read, 100 files at a time. A line under the playlist says **Adding 340 / 1,500…** with **Cancel** (the rows stay; they keep their file names). Adds of 50 files or fewer work as before.
+- **MP3s are read much faster.** An MP3's title and length now come straight from the file's tags and first frame, without starting ffprobe (same results); other files still use ffprobe.
+- **Loading a big playlist** (LOAD, the Library's Open in new tab, double-clicking a playlist file) shows it at once with the titles and lengths saved in the playlist, and reads the files in the background (**Loading … / …**).
+- **The Library opens at once, even with big saved playlists.** To show "▶ in <playlist>", the Library read every file of every saved playlist before it opened (1,500 ffprobes for a 1,500-song playlist) — the LIBRARY button and Library → CLIPS seemed to do nothing for a minute or more. It now reads only the playlists' file lists. It also opens straight away and fills in, LIBRARY blinks while it does, and LIBRARY on an open Library brings it to the front. The download-size check that uses the same list is quick again too.
+- The list is drawn once per batch and the settings are saved once at the end. Files whose length was never read (SlopAMP closed during an add, or Cancel) are read in the background after the next start.
+- Test: `tests/big-playlist-296.js`.
+
+## 2.9.5 — released Nov 10, 2026
 
 CLIP editor, part 2. Still only the FFmpeg inside SlopAMP; the original is never changed and every convert is a new file.
 
