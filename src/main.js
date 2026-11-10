@@ -455,6 +455,7 @@ function downloadDirs() {
   return { video: s.dlVideoDir || path.join(base, 'Video'), audio: s.dlAudioDir || path.join(base, 'Audio'), playlists: path.join(base, 'Playlists'),
     mp3clips: path.join(base, 'mp3clips'), mp4clips: path.join(base, 'mp4clips'), shots: path.join(base, 'Shots'),   // CLIP (2.3)
     gifs: path.join(base, 'gifs'),         // CLIP GIFs (2.9.4)
+    converted: path.join(base, 'Converted'),   // CLIP → Convert (2.9.5)
     shared: path.join(base, 'Shared') };   // Share playlist (2.4): .zips made here, and shared .zips unpacked here
 }
 function playlistsDir() {
@@ -868,7 +869,7 @@ function registerIpc() {
     ipcMain.handle(ch, (_e, o) => (o && typeof o === 'object' && typeof o.file === 'string' ? clipper[fn](o).catch((e) => { log(`${ch} failed`, e); return { error: 'That didn’t work.' }; }) : { error: 'No file.' }));
   }
   ipcMain.on('clip:shot-folder', (_e, o) => { const d = clipper.shotDir(o || {}); try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} shell.openPath(d); });
-  ipcMain.on('clip:folder', (_e, kind) => { const d = downloadDirs()[kind === 'mp4' ? 'mp4clips' : kind === 'gif' ? 'gifs' : 'mp3clips']; try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} shell.openPath(d); });
+  ipcMain.on('clip:folder', (_e, kind) => { const d = downloadDirs()[kind === 'mp4' ? 'mp4clips' : kind === 'gif' ? 'gifs' : kind === 'conv' ? 'converted' : 'mp3clips']; try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} shell.openPath(d); });
   // ---- the YOUTUBE window (2.3): ytweb.js
   ipcMain.on('ytweb:rect', (_e, r) => ytweb && ytweb.setRect(r));
   ipcMain.handle('ytweb:nav', (_e, cmd, arg) => (ytweb ? ytweb.nav(String(cmd), arg) : null));
@@ -1179,7 +1180,7 @@ app.whenReady().then(async () => {
   server = new MediaServer({ uiDir: path.join(__dirname, 'renderer'), ffmpegDir, log });
   clipper = new Clipper({
     ffmpeg: ffmpegExe, server, encoderArgs, log, fileSafe,
-    dirs: () => { const d = downloadDirs(); return { mp3: d.mp3clips, mp4: d.mp4clips, gif: d.gifs, shots: d.shots }; },
+    dirs: () => { const d = downloadDirs(); return { mp3: d.mp3clips, mp4: d.mp4clips, gif: d.gifs, conv: d.converted, shots: d.shots }; },
     urlOf: (f) => fileUrl(f),
     getIndex: () => { const c = (currentState || loadState()).clips; return c && typeof c === 'object' ? c : {}; },
     setIndex: (idx) => setMainState({ clips: idx }),

@@ -238,7 +238,7 @@
             <span class="clip-zoom"><span class="dim" id="clipZoomInfo"></span><span class="dim">zoom</span><button type="button" class="sb dim" id="clipZoomOut" title="Show more of the file">&minus;</button><button type="button" class="sb dim" id="clipZoomIn" title="Zoom in around the clip">+</button><button type="button" class="sb dim" id="clipFit" title="Show the whole file">Fit</button></span>
           </div>
         </div>
-        <div class="clip-tabs" id="clipTabs"><button type="button" data-t="trim">&#9986; Trim</button><button type="button" data-t="shape">&#9635; Shape</button><button type="button" data-t="sound">&#128266; Sound</button><button type="button" data-t="speed">&#9193; Speed</button><button type="button" data-t="captions" class="hidden">CC Captions</button><button type="button" data-t="join" class="hidden">&#9636; Join</button><button type="button" data-t="shots">&#128247; Shots</button></div>
+        <div class="clip-tabs" id="clipTabs"><button type="button" data-t="trim">&#9986; Trim</button><button type="button" data-t="shape">&#9635; Shape</button><button type="button" data-t="sound">&#128266; Sound</button><button type="button" data-t="speed">&#9193; Speed</button><button type="button" data-t="convert">&#8644; Convert</button><button type="button" data-t="captions" class="hidden">CC Captions</button><button type="button" data-t="join" class="hidden">&#9636; Join</button><button type="button" data-t="shots">&#128247; Shots</button></div>
         <div class="ed-sec clip-pane" id="clipPaneTrim">
           <div class="ed-row dim clip-hint">drag the green edges or the clip itself &middot; drag on the wave for a new range &middot; &larr; &rarr; move the edge you touched last by 0.1 s, Shift = 1 s &middot; Space plays the clip &middot; a <span class="clip-dot"></span> marks a tab that&#8217;s in use</div>
           <div class="ed-row clip-opts" id="clipOptsMp3">
@@ -279,6 +279,20 @@
           <div class="ed-row clip-warn hidden" id="clipSpeedWarn"></div>
           <div class="ed-row dim clip-hint">0.5&times; shows each frame twice (no smoothing) &middot; the preview plays at the new speed</div>
         </div>
+        <div class="ed-sec clip-pane hidden" id="clipPaneConvert">
+          <div class="ed-row"><label class="clip-tg-l"><input type="checkbox" id="clipWhole" class="clip-tg"> <b>Convert the whole file</b></label><span class="dim" id="clipWholeNote">&middot; no trimming: In / Out are ignored &middot; a new file in Downloads\SlopAMP\Converted</span></div>
+          <div id="clipCvMp4">
+            <div class="clip-cards" id="clipCvPreset"><button type="button" data-p="forx"><b>&#120143; For X</b><span>H.264 + AAC, up to 1080p, checked against X&#8217;s limits</span></button><button type="button" data-p="small"><b>Small</b><span>720p, a smaller file for chat apps</span></button><button type="button" data-p="phone"><b>Phone-friendly</b><span>up to 1080p, 30 fps, plays everywhere</span></button><button type="button" data-p="best"><b>Best quality</b><span>keeps size and frame rate, high bitrate</span></button></div>
+            <div class="ed-row"><span class="clip-l2">Size</span><div class="clip-seg" id="clipCvSize"><button type="button" data-v="keep">Keep</button><button type="button" data-v="x">Fit X</button><button type="button" data-v="1080">1080p</button><button type="button" data-v="720">720p</button><button type="button" data-v="480">480p</button></div>
+              <span class="clip-l2">Frame rate</span><div class="clip-seg" id="clipCvFps"><button type="button" data-v="0">Keep</button><button type="button" data-v="60">60</button><button type="button" data-v="30">30</button></div>
+              <span class="clip-l2">Quality</span><div class="clip-seg" id="clipCvQ"><button type="button" data-v="0.6">Smaller</button><button type="button" data-v="1">Normal</button><button type="button" data-v="2">Best</button></div></div>
+          </div>
+          <div class="ed-row" id="clipCvMp3"><span class="clip-l2">MP3</span><div class="clip-seg" id="clipCvMp3k"><button type="button" data-v="320">320 kb/s</button><button type="button" data-v="192">192 kb/s</button><button type="button" data-v="128">128 kb/s (smaller)</button></div></div>
+          <div class="ed-row" id="clipFitRow"><span class="clip-l2">Fit under</span><div class="clip-seg" id="clipFitSel"><button type="button" data-v="off">Off</button><button type="button" data-v="10">10 MB</button><button type="button" data-v="25">25 MB</button><button type="button" data-v="50">50 MB</button><button type="button" data-v="x">X limit</button></div><span class="dim" id="clipFitNote"></span></div>
+          <div class="clip-gif-slot" id="clipCvGifSlot"></div>
+          <div class="ed-row" id="clipXAcctRow"><span class="clip-l2">X account</span><b id="clipXAcct"></b><button type="button" class="ed-link" id="clipXAcctChange">change</button></div>
+          <div class="ed-row dim clip-hint" id="clipCvHint">Shape, Sound and Speed apply to the converted file too (a dot marks a tab in use). The original is never changed.</div>
+        </div>
         <div class="clip-pane hidden" id="clipPaneShots">
         <div class="ed-sec clip-shots hidden" id="clipShots">
           <div class="ed-h">SHOTS<span class="clip-opt">optional &middot; full-size frames for references</span><span class="r"><span class="dim" id="clipShotCount"></span><button type="button" class="sb dim" id="clipShotAdd" title="Save the frame the preview shows, full size (G, while CLIP is the active window)">+ Shot <kbd>G</kbd></button><button type="button" class="sb dim" id="clipBurst" title="5 frames across the clip; keep the good ones">Burst &times;5</button><button type="button" class="sb dim" id="clipShotToggle" title="Show / hide the shots">&#9662;</button></span></div>
@@ -295,6 +309,7 @@
         </div>
         </div>
       </div>
+      <div class="clip-xbar hidden" id="clipXBar"><span class="xb-ico">&#9888;</span><span class="xb-t" id="clipXBarT"></span><span class="xb-b" id="clipXBarB"></span></div>
       <div class="clip-out" id="clipOutLine"><span id="clipFmtInfo"></span></div>
       <div class="ed-row clip-name-row"><span>Name</span><input type="text" id="clipName" maxlength="150" spellcheck="false"><span class="dim" id="clipExt">.mp3</span></div>
       <div class="ed-leave clip-saved hidden" id="clipSaved"></div>
@@ -366,6 +381,7 @@
       <div class="set-sec" data-s="web"><h3>YouTube &amp; X</h3>
         <h4>X posts</h4>
         <div class="set-row"><div class="set-l"><span class="set-lbl">X posts that aren&#8217;t downloaded</span><small>Play right away: in SlopAMP&#8217;s own player, nothing is saved</small></div><div class="set-c"><select id="xPlaySel"><option value="stream">Play right away</option><option value="ask">Ask me</option></select></div></div>
+        <div class="set-row" data-k="x account free premium limits clip convert"><div class="set-l"><span class="set-lbl">My X account</span><small id="setXAcctNote">CLIP&#8217;s For X checks videos against it</small></div><div class="set-c"><select id="setXAcct"><option value="">Not set (ask me the first time)</option><option value="free">Free</option><option value="premium">Premium</option></select></div></div>
         <div class="set-row"><div class="set-l"><span class="set-lbl">Streaming quality</span><small>For X posts played without downloading</small></div><div class="set-c"><select id="setXq"><option value="720">Up to 720p</option><option value="480">Up to 480p (faster)</option><option value="1080">Up to 1080p</option></select></div></div>
         <h4>YOUTUBE window</h4>
         <div class="set-row"><div class="set-l"><span class="set-lbl">+ Add puts videos in</span><small>Same as the &#9662; next to + Add</small></div><div class="set-c"><select id="setYwTab"></select></div></div>
@@ -535,13 +551,14 @@
       <button type="button" class="dlm-favbtn" id="dlmFav" title="Show only your ★ favorites (kept when SlopAMP makes room)">&#9733; Favorites</button>
       <div class="dlm-view" id="dlmView"><button type="button" data-v="classic" title="Classic view: the list">&#9776; Classic</button><button type="button" data-v="preview" title="Preview view: a picture of each item">&#9638; Preview</button></div>
       <div class="dlm-tip hidden" id="dlmTip"><b>New: Preview view</b> &#8212; a picture of every file. Try it here. <button type="button" id="dlmTipX" title="Got it">&#x2715;</button></div></div>
-    <div class="clsub" id="clsub"><button type="button" data-c="all">All clips</button><button type="button" data-c="mp3clip">MP3 clips</button><button type="button" data-c="mp4clip">MP4 clips</button><button type="button" data-c="gifclip">GIFs</button></div>
+    <div class="clsub" id="clsub"><button type="button" data-c="all">All clips</button><button type="button" data-c="mp3clip">MP3 clips</button><button type="button" data-c="mp4clip">MP4 clips</button><button type="button" data-c="gifclip">GIFs</button><button type="button" data-c="conv">Converted</button></div>
+    <div class="dlqf" id="dlqf"><button type="button" data-q="all">All</button><button type="button" data-q="video">Video</button><button type="button" data-q="audio">Audio</button><button type="button" data-q="gif">GIFs</button><button type="button" data-q="clips">Clips</button><button type="button" data-q="conv">Converted</button></div>
     <div class="dlm-scroll"><table class="dlm-table">
       <thead><tr><th class="c"><span class="dlm-cb" id="dlmAll" title="Select all"></span></th><th data-sort="title">Title</th><th data-sort="kind">Type</th><th data-sort="size" class="r">Size</th><th data-sort="mtime" class="r">Date</th><th></th></tr></thead>
       <tbody id="dlmBody"></tbody>
     </table><div class="lp-grid hidden" id="dlmGrid"></div><div class="dlm-empty hidden" id="dlmEmpty"></div></div>
     <div class="dlm-bar cl-bar"><button type="button" id="clAdd" disabled>&#9654; Add to playlist</button><button type="button" class="dim" id="clAgain" disabled>&#9986; Clip again&#8230;</button><button type="button" class="red" id="clDel" disabled>&#x1F5D1; Delete selected</button><span class="spacer"></span><button type="button" class="dim" id="clDir3">&#x1F4C1; mp3clips</button><button type="button" class="dim" id="clDir4">&#x1F4C1; mp4clips</button></div>
-    <div class="dlm-note cl-note">Clips are files in Downloads\SlopAMP\mp3clips, mp4clips and gifs (files you put there show up too). Double-click plays a clip; &#8220;Clip again&#8221; reopens CLIP on the original with the same In/Out. Deleted clips go to the Recycle Bin.</div>
+    <div class="dlm-note cl-note">Clips are files in Downloads\SlopAMP\mp3clips, mp4clips, gifs and Converted (files you put there show up too). Double-click plays a clip; &#8220;Clip again&#8221; reopens CLIP on the original with the same In/Out. Deleted clips go to the Recycle Bin.</div>
     <div class="dlm-skins" id="dlmSkins"><div class="skl-list" id="sklList"></div></div>
     <div class="dlm-bar skl-bar"><button type="button" class="dim" id="sklNew">+ New skin</button><button type="button" class="dim" id="sklImport">Import&#8230;</button><button type="button" class="dim" id="sklOpenDir">&#x1F4C1; Open skins folder</button><span class="spacer"></span><button type="button" class="red" id="sklDel" disabled>&#x1F5D1; Delete selected</button></div>
     <div class="dlm-note skl-note">Your skins are .css files in Downloads\SlopAMP\skins; deleted ones go to the Recycle Bin. Built-in skins can&#8217;t be changed or deleted: Edit a copy starts a skin of your own from one. Double-click (or Enter) puts a skin on; Del deletes the selected ones of yours; &#8943; or right-click for Rename, Export and Show in Explorer.</div>

@@ -40,7 +40,7 @@ const lufs = (f) => { const e = require('child_process').spawnSync(FF, ['-hide_b
   // ================= 1. the layout (GA, GC)
   await ev((f) => clipOpen(f, { kind: 'mp4' }), V); await sleep(1500);
   const tabsShown = await ev(() => [...WM.$('#clipTabs').children].filter(b => !b.classList.contains('hidden')).map(b => b.dataset.t));
-  ok(JSON.stringify(tabsShown) === '["trim","shape","sound","speed","shots"]', `tabs Trim, Shape, Sound, Speed, Shots; Captions and Join hidden ${JSON.stringify(tabsShown)}`);
+  ok(JSON.stringify(tabsShown) === '["trim","shape","sound","speed","convert","shots"]', `tabs Trim, Shape, Sound, Speed, (2.9.5: Convert,) Shots; Captions and Join hidden ${JSON.stringify(tabsShown)}`);
   const kinds = await ev(() => [...WM.$('#clipKind').children].filter(b => !b.classList.contains('hidden')).map(b => b.textContent));
   ok(JSON.stringify(kinds) === '["MP3","MP4","GIF"]', `Save as: MP3 · MP4 · GIF (More formats… hidden) ${JSON.stringify(kinds)}`);
   ok(/^MP4 · 1280×720 · H\.264 \+ AAC · RE-ENCODE exact cut · ≈ \d/.test(await outLine()), `the output line: what, re-encode, about how big: "${await outLine()}"`);
@@ -181,10 +181,11 @@ const lufs = (f) => { const e = require('child_process').spawnSync(FF, ['-hide_b
   } else ok(false, 'gif save ' + JSON.stringify(r));
   await btn('#clipGifW', 'v', 320); await btn('#clipGifFps', 'v', 10); await sleep(100);
   ok(await ev(() => JSON.stringify(S.clipGif)) === '{"w":320,"fps":10,"loop":true,"colors":256}', 'GIF settings remembered (S.clipGif)');
-  await ev(() => { CL.gifEst = { key: clipGifKey(), bytes: 20 * 1048576 }; clipRenderGif(); });
-  ok(/over the 15 MB X takes on the web \(and phones take only 5 MB\)/.test((await q('#clipGifWarn')).text), `past 15 MB: a warning (${(await q('#clipGifWarn')).text})`);
-  await ev(() => { CL.gifEst = { key: clipGifKey(), bytes: 7 * 1048576 }; clipRenderGif(); });
-  ok(/phones only take 5 MB/.test((await q('#clipGifWarn')).text), 'past 5 MB: the phone note');
+  await ev(() => { CL.gifEst = { key: clipGifKey(), bytes: 20 * 1048576 }; clipRenderGif(); clipXBar(); });
+  // 2.9.5: the GIF warnings moved to the For X bar (tests/clip-295.js has the details)
+  ok(/over the 15 MB X takes for a GIF \(phones take 5 MB\)/.test((await q('#clipXBarT')).text), `past 15 MB: a warning (${(await q('#clipXBarT')).text})`);
+  await ev(() => { CL.gifEst = { key: clipGifKey(), bytes: 7 * 1048576 }; clipRenderGif(); clipXBar(); });
+  ok(/over the 5 MB its phone apps take/.test((await q('#clipXBarT')).text), 'past 5 MB: the phone note');
   await ev(() => { CL.gifEst = null; clipRender(); });
 
   // ================= 8. SHOTS still work (in their tab)

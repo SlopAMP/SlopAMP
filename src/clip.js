@@ -14,15 +14,20 @@
 //   Sound  even out the volume (loudnorm to -14 LUFS, measured first: two passes), volume -12..+12 dB, fades
 //   Speed  0.5x / 1.5x / 2x (setpts + atempo: voices keep their pitch)
 // Shape and Speed re-encode the picture. A sound-only change to a Fast-cut MP4 copies the picture as it is.
+// 2.9.5 (CLIP part 2): Convert = the whole file, no trimming (Downloads\SlopAMP\Converted), with presets
+//   (For X / Small / Phone-friendly / Best quality: size, frame rate, quality) and "fit under" a file size
+//   (OpenH264 at the bitrate that lands under it; one more try lower if it still comes out too big).
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 const X = require('./xready');   // 2.5 (#22): X-ready MP4s
+const XL = require('./renderer/xlimits');   // 2.9.5: X's limits, in one place
 
 const AUDIO_EXT = /\.(mp3|m4a|aac|wav|flac|ogg|opus)$/i;
 const VIDEO_EXT = /\.(mp4|m4v|mov|mkv|webm|avi)$/i;
 const GIF_EXT = /\.gif$/i;
+const ANY_EXT = /\.(mp3|m4a|aac|wav|flac|ogg|opus|mp4|m4v|mov|mkv|webm|avi|gif)$/i;   // Converted (2.9.5)
 const SHOT_KINDS = ['person', 'look', 'prop', 'place'];   // slop.cc's reference kinds (SLOP's LOOK)
 const fmtCut = (t) => { t = Math.max(0, Math.round(t)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return `${h ? `${h}h` : ''}${h ? String(m).padStart(2, '0') : m}m${String(s).padStart(2, '0')}s`; };
 const num = (v) => (Number.isFinite(+v) ? +v : NaN);
@@ -148,17 +153,57 @@ class Clipper {
     return { w: GIF.w.includes(+g.w) ? +g.w : 480, fps: GIF.fps.includes(+g.fps) ? +g.fps : 15, loop: g.loop !== false, colors: GIF.colors.includes(+g.colors) ? +g.colors : 256 };
   }
   // the picture: crop (+ upscale), speed; `keep` = the old exact cut's "round down to even numbers" when there's no shape
-  static vFilters(t, info) {
+  // x (2.9.5 Convert): { dims: { w, h } a new size, fps: a frame-rate cap }
+  static vFilters(t, info, x) {
     const f = [], s = t.shape;
     if (s) { f.push(`crop=${s.w}:${s.h}:${s.x}:${s.y}`); if (s.up) f.push(`scale=${s.ow}:${s.oh}:flags=lanczos`, 'setsar=1'); }
-    else f.push('scale=trunc(iw/2)*2:trunc(ih/2)*2');
+    else if (!(x && x.dims)) f.push('scale=trunc(iw/2)*2:trunc(ih/2)*2');
+    if (x && x.dims) f.push(`scale=${x.dims.w}:${x.dims.h}:flags=bicubic`, 'setsar=1');
     if (t.speed !== 1) {
       const fps = (info.video && info.video.fps) || 30;
       f.push(`setpts=PTS/${t.speed}`);
       if (t.speed < 1) f.push(`fps=${Math.min(60, Math.round(fps * 1000) / 1000)}`);      // 0.5x shows each frame twice (no smoothing)
       else if (fps * t.speed > 60.5) f.push('fps=60');                                    // 2x of 60 fps would be 120: X takes 60
     }
+    if (x && x.fps) { const src = (info.video && info.video.fps) || 30, eff = t.speed > 1 ? Math.min(60, src * t.speed) : src; if (eff > x.fps + 0.5) f.push(`fps=${x.fps}`); }   // the frame rate it would have, capped
     return f;
+  }
+  // Convert's settings, checked: { preset, size: 'keep' | 'x' | 1080 | 720 | 480, fps: 0 | 30 | 60, q: quality factor, mp3k }
+  static conv(c) {
+    if (!c || typeof c !== 'object') return null;
+    const P = { forx: { size: 'x', fps: 60, q: 1 }, small: { size: 720, fps: 0, q: 0.6 }, phone: { size: 1080, fps: 30, q: 1 }, best: { size: 'keep', fps: 0, q: 2 } }[c.preset] || {};
+    const size = ['keep', 'x', 1080, 720, 480].includes(c.size) ? c.size : P.size || 'keep';
+    const fps = [0, 30, 60].includes(+c.fps) ? +c.fps : P.fps || 0;
+    const q = [0.6, 1, 2].includes(+c.q) ? +c.q : P.q || 1;
+    return { preset: ['forx', 'small', 'phone', 'best'].includes(c.preset) ? c.preset : 'custom', size, fps, q, mp3k: [320, 192, 128].includes(+c.mp3k) ? +c.mp3k : 320 };
+  }
+  // the frame rate a clip comes out at (the source's, sped up, capped by Convert)
+  static outFps(info, t, cv) {
+    const src = (info.video && info.video.fps) || 30, eff = t.speed > 1 ? Math.min(60, src * t.speed) : src;
+    return cv && cv.fps && eff > cv.fps ? cv.fps : eff;
+  }
+  // Fitting under a size: enough bits for each pixel (about 0.045 bits per pixel per frame for OpenH264), else
+  // 30 fps, then the next size down (1080 / 720 / 540 / 360 on the short side). down: extra steps (the retry).
+  static fitPicture(w, h, fps, kbps, down) {
+    const BPP = 0.045, short = Math.min(w, h), out = {};
+    const ok = (W, H, F) => kbps * 1000 / (W * H * F) >= BPP;
+    let F = fps;
+    if (!ok(w, h, F) && F > 30.5) { F = 30; out.fps = 30; }
+    const ladder = [short, ...[1080, 720, 540, 360].filter(x => x < short)];
+    let i = 0;
+    while (i < ladder.length - 1 && !ok(even(w * ladder[i] / short), even(h * ladder[i] / short), F)) i++;
+    i = Math.min(ladder.length - 1, i + (down || 0));
+    if (i > 0) out.dims = { w: even(w * ladder[i] / short), h: even(h * ladder[i] / short) };
+    return out;
+  }
+  // The picture size a Convert makes from w × h: as it is, fitted to X's box, or the short side capped (even numbers)
+  static convDims(w, h, c) {
+    if (!c || !w || !h || c.size === 'keep') return null;
+    if (c.size === 'x') { const f = X.fitSize(w, h); return f.w === (w & ~1) && f.h === (h & ~1) ? null : { w: f.w, h: f.h }; }
+    const H = +c.size, short = Math.min(w, h);
+    if (short <= H) return null;
+    const k = H / short;
+    return { w: even(w * k), h: even(h * k) };
   }
   // the sound: speed, evened out (measured: pass 2 of loudnorm), volume, fades (on the saved clip's length)
   static aFilters(t, lenOut, loud, sr) {
@@ -224,7 +269,7 @@ class Clipper {
     const copy = o.quality === 'copy' && !af.length && info.audio && info.audio.codec === 'mp3' && !info.hasVideo;
     const cover = !info.hasVideo && info.hasCover;     // keep an MP3's cover picture
     return ['-ss', tin.toFixed(3), '-i', o.file, '-t', lenOut.toFixed(3), '-map', '0:a:0', ...(cover ? ['-map', '0:v:0?', '-c:v', 'copy', '-disposition:v:0', 'attached_pic'] : []),
-      ...(copy ? ['-c:a', 'copy'] : ['-c:a', 'libmp3lame', '-b:a', '320k', ...(af.length ? ['-af', af.join(',')] : [])]),
+      ...(copy ? ['-c:a', 'copy'] : ['-c:a', 'libmp3lame', '-b:a', `${(o.conv && Clipper.conv(o.conv).mp3k) || 320}k`, ...(af.length ? ['-af', af.join(',')] : [])]),
       '-map_metadata', '0', '-metadata', `title=${title}`, '-id3v2_version', '3', '-f', 'mp3', tmp];
   }
   // kf: for a Fast cut with sound changes, the keyframe the picture starts on (the sound starts there too, in sync)
@@ -232,7 +277,8 @@ class Clipper {
     t = t || Clipper.tools(o, info);
     const head = ['-ss', tin.toFixed(3), '-i', o.file, '-t', (len / t.speed).toFixed(3), '-map', '0:v:0', '-map', '0:a:0?'];
     const tail = ['-map_metadata', '-1', '-metadata', `title=${title}`, '-movflags', '+faststart', '-f', 'mp4', tmp];
-    const pic = !!t.shape || t.speed !== 1, snd = !!info.audio && Clipper.usesSound(t);
+    const cv = Clipper.conv(o.conv), fit = num(o.fit) > 0 ? +o.fit : 0;
+    const pic = !!t.shape || t.speed !== 1 || !!cv || !!fit, snd = !!info.audio && Clipper.usesSound(t);
     if (o.cut === 'fast' && !pic) {
       if (!snd) return [...head, '-c', 'copy', '-avoid_negative_ts', 'make_zero', ...tail];
       // sound only: the picture is copied (from the keyframe, like any Fast cut), the sound re-encoded from the same moment
@@ -244,13 +290,32 @@ class Clipper {
     // hardware encoders (NVENC / AMF / QSV) keep their quality settings; Media Foundation's fixed quality is
     // fine for live playback but unpredictable for a saved clip, so OpenH264 (in the bundled FFmpeg) is used
     if (!enc || enc === 'h264_mf' || enc === 'libvpx') enc = 'libopenh264';
+    const v = info.video || {};
+    let ow = t.shape ? t.shape.ow : v.width || 1280, oh = t.shape ? t.shape.oh : v.height || 720;
+    const dims = cv ? Clipper.convDims(ow, oh, cv) : null;
+    if (dims) { ow = dims.w; oh = dims.h; }
+    const mbps = Math.max(1.5, Math.min(cv && cv.q > 1 ? 20 : 12, ow * oh / 1e6 * 4 * (cv ? cv.q : 1)));
+    // fit under a size (2.9.5): OpenH264 at the bitrate that lands under it (hardware encoders aim at a quality, not a size)
+    let kbps = 0, fdims = null, ffps = 0;
+    if (fit) {
+      const k = Math.floor(XL.kbpsForBytes(fit, len / t.speed, info.audio ? 192 : 0) * (num(o.fitScale) > 0 ? +o.fitScale : 1));
+      if (k < mbps * 1000 || o.fitScale) {
+        kbps = Math.max(150, k); enc = 'libopenh264';
+        // too few bits for this many pixels: a lower frame rate, then a smaller picture (one more step down on the retry)
+        const f = Clipper.fitPicture(ow, oh, Clipper.outFps(info, t, cv), kbps, o.fitScale ? 1 : 0);
+        if (f.dims) { fdims = f.dims; ow = f.dims.w; oh = f.dims.h; }
+        if (f.fps) ffps = f.fps;
+      }
+    }
     let va = this.encoderArgs(enc || 'libopenh264');
-    const v = info.video || {}, ow = t.shape ? t.shape.ow : v.width || 1280, oh = t.shape ? t.shape.oh : v.height || 720;
-    const mbps = Math.max(1.5, Math.min(12, ow * oh / 1e6 * 4));
-    if (/libopenh264/.test(enc)) va = va.map(x => (x === '5M' ? `${mbps.toFixed(1)}M` : x));
+    if (/libopenh264/.test(enc)) va = va.map(x => (x === '5M' ? (kbps ? `${kbps}k` : `${mbps.toFixed(1)}M`) : x));
+    if (kbps) va.push('-rc_mode', 'bitrate');      // OpenH264's default (quality) only loosely follows -b:v
+    const hw = !/libopenh264/.test(enc);
+    if (hw && cv && cv.preset === 'forx') va.push('-maxrate', `${XL.LIMITS.video.mbps}M`, '-bufsize', `${XL.LIMITS.video.mbps * 2}M`);
     // keep the size; odd sizes can't be encoded, so round down to even numbers (a shape box is even already)
     const af = snd ? Clipper.aFilters(t, len / t.speed, loud, Clipper.rateOf(info)) : [];
-    return [...head, ...va, '-vf', Clipper.vFilters(t, info).join(','), '-c:a', 'aac', '-b:a', '192k', ...(af.length ? ['-af', af.join(',')] : []), ...tail];
+    const vf = Clipper.vFilters(t, info, cv || fdims || ffps ? { dims: fdims || dims, fps: ffps || (cv && cv.fps) } : null);
+    return [...head, ...va, '-vf', vf.join(','), '-c:a', 'aac', '-b:a', '192k', ...(af.length ? ['-af', af.join(',')] : []), ...tail];
   }
   // GIF: one palette made for the clip (palettegen / paletteuse), no sound, loops unless told not to
   gifArgs(o, info, tin, len, tmp, t) {
@@ -299,9 +364,13 @@ class Clipper {
     const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.server.probe(o.file) : null;
     if (!info) return { ok: false, error: 'The file isn’t there any more.' };
     const dur = info.duration || 0;
+    const whole = !!o.whole;                 // 2.9.5 Convert: the whole file, no trimming
+    if (whole) { o.in = 0; o.out = dur; o.cut = 'exact'; o.conv = o.conv || {}; }
+    else delete o.conv;
     const tin = Math.max(0, num(o.in)), tout = Math.min(dur || Infinity, num(o.out));
     if (!(tout - tin >= 0.1)) return { ok: false, error: 'The clip is too short.' };
     const kind = o.kind === 'mp4' || o.kind === 'gif' ? o.kind : 'mp3';
+    if (num(o.fit) > 0 && kind === 'mp4') o.cut = 'exact';         // fitting under a size re-encodes
     if (kind !== 'mp3' && !info.hasVideo) return { ok: false, error: `There’s no video in this file. Save it as MP3.` };
     if (kind === 'mp3' && !info.audio) return { ok: false, error: 'There’s no sound in this file.' };
     if (kind === 'mp4' && o.cut === 'fast' && !(info.video && info.video.codec === 'h264' && /mp4|mov/.test(info.format))) o.cut = 'exact';
@@ -310,8 +379,8 @@ class Clipper {
     const len = tout - tin, lenOut = len / t.speed;
     const dirs = this.dirs();
     const base = ((String(o.name || '').trim() && this.fileSafe(String(o.name)).slice(0, 150)) || Clipper.cutName(path.basename(o.file).replace(/\.[^.]+$/, ''), tin, tout)).replace(/\.(mp3|mp4|gif)$/i, '');
-    const steps = [{ kind, dir: kind === 'mp4' ? dirs.mp4 : kind === 'gif' ? dirs.gif : dirs.mp3, ext: `.${kind}` }];
-    if (kind === 'mp4' && o.alsoMp3 && info.audio) steps.push({ kind: 'mp3', dir: dirs.mp3, ext: '.mp3' });
+    const steps = [{ kind, dir: whole ? dirs.conv : kind === 'mp4' ? dirs.mp4 : kind === 'gif' ? dirs.gif : dirs.mp3, ext: `.${kind}` }];
+    if (kind === 'mp4' && o.alsoMp3 && info.audio) steps.push({ kind: 'mp3', dir: whole ? dirs.conv : dirs.mp3, ext: '.mp3' });
     const files = [];
     if (this.preCanceled && this.preCanceled.delete(job)) return { ok: false, canceled: true, files };
     this.jobs.set(job, { canceled: false });
@@ -338,23 +407,34 @@ class Clipper {
         fs.mkdirSync(st.dir, { recursive: true });
         const final = this.uniquePath(st.dir, base, st.ext), tmp = `${final}.part`;
         const title = path.basename(final, st.ext);
-        const fo = { ...o, file: o.file };
-        const args = st.kind === 'mp3' ? this.mp3Args(fo, info, tin, len, tmp, title, t, loud)
-          : st.kind === 'gif' ? this.gifArgs(fo, info, tin, len, tmp, t) : await this.mp4Args(fo, info, tin, len, tmp, title, t, loud, kf);
+        const fo = { ...o, file: o.file, ...(st.kind === 'mp4' ? {} : { fit: 0 }) };
         const span = [w0 + (1 - w0) * i / steps.length, w0 + (1 - w0) * (i + 1) / steps.length];
-        const r = await this.runJob(job, ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-progress', 'pipe:1', '-nostats', ...args], lenOut, (p) => this.send({ type: 'progress', job, pct: Math.round((span[0] + (span[1] - span[0]) * p) * 100) }));
-        if (this.jobs.get(job).canceled) { this.rm(tmp); return { ok: false, canceled: true, files }; }
+        const fit = st.kind === 'mp4' && num(o.fit) > 0 ? +o.fit : 0;
+        let r, tries = 0;
+        for (;;) {
+          const args = st.kind === 'mp3' ? this.mp3Args(fo, info, tin, len, tmp, title, t, loud)
+            : st.kind === 'gif' ? this.gifArgs(fo, info, tin, len, tmp, t) : await this.mp4Args(fo, info, tin, len, tmp, title, t, loud, kf);
+          r = await this.runJob(job, ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-progress', 'pipe:1', '-nostats', ...args], lenOut, (p) => this.send({ type: 'progress', job, pct: Math.round((span[0] + (span[1] - span[0]) * p) * 100), ...(tries ? { again: true } : {}) }));
+          if (this.jobs.get(job).canceled) { this.rm(tmp); return { ok: false, canceled: true, files }; }
+          if (r.code !== 0 || !fs.existsSync(tmp)) break;
+          // still over the size it should fit under: once more, at a bitrate lowered by how much it missed
+          const got = fs.statSync(tmp).size;
+          if (!fit || got <= fit || tries) break;
+          tries++;
+          fo.fitScale = (num(fo.fitScale) > 0 ? +fo.fitScale : 1) * (fit / got) * 0.95;
+          this.log(`clip fit: ${got} > ${fit}, trying again at ${(fo.fitScale * 100).toFixed(0)}%`);
+        }
         if (r.code !== 0 || !fs.existsSync(tmp)) {
           this.rm(tmp);
           this.log(`clip ${st.kind} failed`, r.stderr.slice(-400));
-          return { ok: false, error: `Couldn’t save the ${{ mp4: 'video', gif: 'GIF', mp3: 'MP3' }[st.kind]} clip.`, files };
+          return { ok: false, error: `Couldn’t save the ${{ mp4: 'video', gif: 'GIF', mp3: 'MP3' }[st.kind]}${whole ? '' : ' clip'}.`, files };
         }
         fs.renameSync(tmp, final);
         const size = fs.statSync(final).size;
-        files.push({ path: final, kind: st.kind, duration: lenOut, size });
+        files.push({ path: final, kind: st.kind, duration: lenOut, size, ...(whole ? { converted: true } : {}), ...(fit ? { fit, fits: size <= fit, tries: tries + 1 } : {}) });
         const idx = this.getIndex();
         idx[final] = { src: o.file, srcTitle: String(o.srcTitle || '').slice(0, 300), in: +tin.toFixed(3), out: +tout.toFixed(3), kind: st.kind, dur: +lenOut.toFixed(3), at: Date.now(),
-          ...(t.speed !== 1 ? { speed: t.speed } : {}),
+          ...(t.speed !== 1 ? { speed: t.speed } : {}), ...(whole ? { conv: Clipper.conv(o.conv).preset } : {}),
           ...(o.item && typeof o.item === 'object' && /^(youtube|x)$/.test(o.item.type) ? { item: { type: o.item.type, vid: String(o.item.vid || '').slice(0, 40), url: String(o.item.url || '').slice(0, 300) } } : {}) };
         this.setIndex(idx);
       }
@@ -602,11 +682,12 @@ class Clipper {
   }
 
   // ---------- Library -> CLIPS ----------
-  // Every audio file in mp3clips, every video in mp4clips and every GIF in gifs (also ones put there by hand).
+  // Every audio file in mp3clips, every video in mp4clips, every GIF in gifs and everything in Converted (2.9.5),
+// also ones put there by hand.
   list() {
     const dirs = this.dirs(), idx = this.getIndex(), rows = [];
     let pruned = false;
-    for (const [k, dir, re] of [['mp3clip', dirs.mp3, AUDIO_EXT], ['mp4clip', dirs.mp4, VIDEO_EXT], ['gifclip', dirs.gif, GIF_EXT]]) {
+    for (const [k, dir, re] of [['mp3clip', dirs.mp3, AUDIO_EXT], ['mp4clip', dirs.mp4, VIDEO_EXT], ['gifclip', dirs.gif, GIF_EXT], ['conv', dirs.conv, ANY_EXT]]) {
       if (!dir) continue;
       let names = []; try { names = fs.readdirSync(dir); } catch (_) {}
       for (const n of names) {
@@ -615,7 +696,7 @@ class Clipper {
         let st; try { st = fs.statSync(full); } catch (_) { continue; }
         if (!st.isFile()) continue;
         const e = idx[full] || {};
-        rows.push({ kind: k, path: full, title: n.replace(/\.[^.]+$/, ''), size: st.size, mtime: st.mtimeMs, dur: e.dur || 0, from: e.srcTitle || (e.src ? path.basename(e.src).replace(/\.[^.]+$/, '') : ''),
+        rows.push({ kind: k, ...(k === 'conv' ? { media: GIF_EXT.test(n) ? 'gif' : AUDIO_EXT.test(n) ? 'audio' : 'video' } : {}), path: full, title: n.replace(/\.[^.]+$/, ''), size: st.size, mtime: st.mtimeMs, dur: e.dur || 0, from: e.srcTitle || (e.src ? path.basename(e.src).replace(/\.[^.]+$/, '') : ''),
           src: e.src || '', srcExists: !!(e.src && fs.existsSync(e.src)), in: e.in, out: e.out, item: e.item || null, ...(e.speed ? { speed: e.speed } : {}) });
       }
     }
@@ -626,7 +707,7 @@ class Clipper {
   inClipDir(p) {
     if (typeof p !== 'string') return false;
     const d = this.dirs(), dir = path.dirname(path.resolve(p));
-    return dir === path.resolve(d.mp3) || dir === path.resolve(d.mp4) || (!!d.gif && dir === path.resolve(d.gif) && GIF_EXT.test(p));
+    return dir === path.resolve(d.mp3) || dir === path.resolve(d.mp4) || (!!d.gif && dir === path.resolve(d.gif) && GIF_EXT.test(p)) || (!!d.conv && dir === path.resolve(d.conv) && ANY_EXT.test(p));
   }
   async remove(paths) {
     const out = [], idx = this.getIndex();

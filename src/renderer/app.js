@@ -38,6 +38,8 @@ const S = {
   skipSecs: 10,        // 2.9.2 Settings → Playback → Skip countdown (0 = off)
   clipPreset: 0,       // 2.9.4 CLIP: the length preset used last (s), underlined
   clipGif: null,       // 2.9.4 CLIP: GIF width / fps / loop / colours (null: 480, 15, loops, 256)
+  xAccount: null,      // 2.9.5: 'free' | 'premium' (null: not asked yet; counts as Free)
+  convPreset: 'forx',  // 2.9.5 CLIP → Convert: the preset used last
   mp3q: 'best',        // 2.9.2 Settings → Downloads → MP3 quality: best | 320 | 192 | 128
   dlWarn: 90,          // 2.9.2 Settings → Downloads → Warn me at (% of the limit; 0 = never)
   xq: 720,             // 2.9.2 Settings → YouTube & X → Streaming quality (480 | 720 | 1080)
@@ -3550,7 +3552,7 @@ $('#dlLimitGb').onchange = (e) => { const n = parseFloat(e.target.value); if (n 
 $('#dlRoomBtn').onclick = () => roomMakeRoom();
 
 // ------------------------------------------------------------------ Downloads manager
-const DLM = { rows: [], sel: new Set(), filter: 'all', sort: 'mtime', dir: -1, anchor: -1, q: {}, favOnly: false, prot: new Map() };   // 2.9.1: favOnly = the ★ Favorites button; prot = files in a playlist
+const DLM = { rows: [], sel: new Set(), filter: 'all', sort: 'mtime', dir: -1, anchor: -1, q: {}, favOnly: false, prot: new Map(), qf: 'all', qfN: null, qfRows: null };   // 2.9.1: favOnly = the ★ Favorites button; prot = files in a playlist
 // Bug #4 (2.6): every section (ALL, VIDEO, MP3, PLAYLISTS, CLIPS, SKINS) has its own search, kept until SlopAMP closes
 const dlmQ = (f = DLM.filter) => String(DLM.q[f] || '').trim();
 function dlmSection(f) { DLM.filter = f; DLM.anchor = -1; const s = $('#dlmSearch'); s.value = DLM.q[f] || ''; }
@@ -3609,7 +3611,8 @@ function dlmVisible() {
   const f = DLM.filter;
   const q = dlmQ().toLowerCase();
   const kindOk = (r) => f === 'all' || r.kind === f || (f === 'clips' && isClipRow(r) && (CLS.sub === 'all' || r.kind === CLS.sub));
-  const v = DLM.rows.filter(r => kindOk(r) && dlmHit(r, q) && (!DLM.favOnly || isFavRow(r)));
+  const qf = f === 'all' && QF[DLM.qf] && DLM.qf !== 'all' ? QF[DLM.qf] : null;     // 2.9.5 quick filters (ALL)
+  const v = DLM.rows.filter(r => kindOk(r) && (!qf || qf(r)) && dlmHit(r, q) && (!DLM.favOnly || isFavRow(r)));
   const k = DLM.sort, dir = DLM.dir;
   v.sort((a, b) => {
     let x = a[k], y = b[k];
@@ -3636,9 +3639,10 @@ function dlmRender() {
   const miss = DLM.rows.filter(r => r.missing).length;
   $('#dlmCount').textContent = `${present.length} FILE${present.length === 1 ? '' : 'S'} · ${total ? fmtSize(total).toUpperCase() : '0 MB'} · ${pls} PLAYLIST${pls === 1 ? '' : 'S'}`;
   if (cm) { const c = DLM.rows.filter(isClipRow), cs = c.reduce((a, r) => a + r.size, 0); $('#dlmCount').textContent = `${c.length} CLIP${c.length === 1 ? '' : 'S'} · ${cs ? fmtSize(cs).toUpperCase() : '0 MB'}`;
-    for (const b of $('#clsub').children) { const n = b.dataset.c === 'all' ? c.length : c.filter(r => r.kind === b.dataset.c).length; b.classList.toggle('on', b.dataset.c === CLS.sub); b.textContent = `${{ all: 'All clips', mp3clip: 'MP3 clips', mp4clip: 'MP4 clips', gifclip: 'GIFs' }[b.dataset.c]} (${n})`; } }
+    for (const b of $('#clsub').children) { const n = b.dataset.c === 'all' ? c.length : c.filter(r => r.kind === b.dataset.c).length; b.classList.toggle('on', b.dataset.c === CLS.sub); b.textContent = `${{ all: 'All clips', mp3clip: 'MP3 clips', mp4clip: 'MP4 clips', gifclip: 'GIFs', conv: 'Converted' }[b.dataset.c]} (${n})`; } }
   if (DLM.favOnly && !cm) { const fv = vis.filter(r => !r.missing), fs = fv.reduce((a, r) => a + r.size, 0); $('#dlmCount').textContent = `${fv.length} FAVORITE${fv.length === 1 ? '' : 'S'} · ${fs ? fmtSize(fs).toUpperCase() : '0 MB'}`; }
   $('#dlmFav').classList.toggle('on', DLM.favOnly);
+  dlqfPaint();
   dlmUsePaint();
   $('#dlmMiss').textContent = miss ? `${miss} missing` : '';
   $('#dlmClean').disabled = !miss;
@@ -3654,7 +3658,7 @@ function dlmRender() {
     const on = DLM.sel.has(dlmKey(r));
     tr.className = (on ? 'sel' : '') + (r.missing ? ' miss' : '');
     tr.dataset.i = i;
-    const tag = r.missing ? 'MISSING' : { audio: 'MP3', playlist: 'PLAYLIST', mp3clip: 'MP3 CLIP', mp4clip: 'MP4 CLIP', gifclip: 'GIF' }[r.kind] || 'VIDEO';
+    const tag = r.missing ? 'MISSING' : { audio: 'MP3', playlist: 'PLAYLIST', mp3clip: 'MP3 CLIP', mp4clip: 'MP4 CLIP', gifclip: 'GIF', conv: 'CONVERTED' }[r.kind] || 'VIDEO';
     tr.innerHTML = cm ? `<td class="c"><span class="dlm-cb${on ? ' on' : ''}"></span></td><td class="t"></td><td><span class="dlm-tag ${r.kind}">${tag}</span></td><td class="r">${r.dur ? fmtShort(r.dur) || '0:00' : '—'}</td><td class="from"></td><td class="r">${fmtSize(r.size)}</td><td class="r">${fmtDate(r.mtime)}</td><td class="c"><button class="dlm-show" title="Show in folder">📁</button></td>`
       : `<td class="c"><span class="dlm-cb${on ? ' on' : ''}"></span></td><td class="t"></td><td><span class="dlm-tag ${r.missing ? 'missing' : r.kind}">${tag}</span></td><td class="r">${r.missing ? '—' : fmtSize(r.size)}</td><td class="r">${fmtDate(r.mtime)}</td><td class="c">${r.missing ? '' : '<button class="dlm-show" title="Show in folder">📁</button>'}</td>`;
     if (cm) { const fr = tr.querySelector('.from'); fr.textContent = r.from || '—'; fr.title = r.src ? `${r.from || ''}\n${r.src}${r.srcExists ? '' : ' (not there any more)'}` : 'Not made with CLIP (or its original isn\u2019t known)'; }
@@ -3662,7 +3666,7 @@ function dlmRender() {
     if (r.kind !== 'playlist' && !r.missing) { const st = document.createElement('span'); const f = isFavRow(r); st.className = `fav-star${f ? ' on' : ''}`; st.textContent = f ? '\u2605' : '\u2606'; st.title = f ? 'Favorite: kept when SlopAMP makes room (click to un-star)' : 'Add to Favorites (F)'; tr.querySelector('.t').prepend(st); } else if (!cm) { const sp = document.createElement('span'); sp.className = 'fav-sp'; sp.textContent = '\u2606'; tr.querySelector('.t').prepend(sp); }   // 2.9.1 (a spacer keeps titles in line)
     if ((r.kind === 'video' || r.kind === 'audio') && !r.missing) { const pa = protectedAll(r, DLM.prot); if (pa.length) { const m = document.createElement('span'); m.className = 'dlm-inpl'; m.textContent = `\u25b6 in ${pa[0].name}${pa.length > 1 ? ` +${pa.length - 1}` : ''}`; m.title = `Kept when SlopAMP makes room. In: ${pa.map(plLabel).join(', ')}`; tr.querySelector('.t').appendChild(m); } }
     if (r.kind === 'playlist') { const c = document.createElement('span'); c.className = 'dlm-count'; c.textContent = ` \u00b7 ${r.count} item${r.count === 1 ? '' : 's'}`; tr.querySelector('.t').appendChild(c); }
-    if ((r.kind === 'video' || r.kind === 'mp4clip') && !r.missing) { const x = xOf(r.path); if (x) tr.querySelector('.t').appendChild(xTag(x, 'dlm-tag')); }   // 2.5 (#22)
+    if (rowMedia(r) === 'video' && !r.missing) { const x = xOf(r.path); if (x) tr.querySelector('.t').appendChild(xTag(x, 'dlm-tag')); }   // 2.5 (#22)
     body.appendChild(tr);
   });
   $('#dlmEmpty').classList.toggle('hidden', vis.length > 0);
@@ -3685,7 +3689,7 @@ function dlmEmptyHtml(q, cm) {
   const f = DLM.filter, ql = q.toLowerCase();
   if (DLM.favOnly) return `<div class="dlm-nomatch"><b>No ★ favorites${q ? ` match “${htmlEsc(q)}”` : ' here yet'}.</b><div class="nm-btns"><button type="button" data-a="favoff">Show everything</button></div><small>Click ☆ before a title (or select and press F) to make one. Favorites are kept when SlopAMP makes room.</small></div>`;
   if (cm) {
-    const sub = CLS.sub, noun = { all: 'clips', mp3clip: 'MP3 clips', mp4clip: 'MP4 clips', gifclip: 'GIFs' }[sub] || 'clips';
+    const sub = CLS.sub, noun = { all: 'clips', mp3clip: 'MP3 clips', mp4clip: 'MP4 clips', gifclip: 'GIFs', conv: 'converted files' }[sub] || 'clips';
     const clips = DLM.rows.filter(isClipRow), inSub = clips.filter(r => sub === 'all' || r.kind === sub);
     const allBtn = '<button type="button" data-a="allclips">All clips</button>';
     if (q) return dlmNoMatch(noun, q, inSub.length ? plural(inSub.length, noun.replace(/s$/, ''), noun) : '', sub !== 'all' && clips.some(r => dlmHit(r, ql)) ? allBtn : '');
@@ -3727,8 +3731,8 @@ const lpKey = (r) => `${dlmKey(r)}|${r.size || 0}|${Math.round(r.mtime || 0)}`;
 function lpTile(r, doc) {
   const t = doc.createElement('div');
   t.className = 'lt' + (r.missing ? ' miss' : '');
-  const tag = r.missing ? 'MISSING' : { audio: 'MP3', playlist: 'PLAYLIST', mp3clip: 'MP3 CLIP', mp4clip: 'MP4 CLIP', gifclip: 'GIF' }[r.kind] || 'VIDEO';
-  const ph = r.missing ? '?' : r.kind === 'playlist' ? '☰' : /audio|mp3clip/.test(r.kind) ? '♫' : '▶';
+  const tag = r.missing ? 'MISSING' : { audio: 'MP3', playlist: 'PLAYLIST', mp3clip: 'MP3 CLIP', mp4clip: 'MP4 CLIP', gifclip: 'GIF', conv: 'CONVERTED' }[r.kind] || 'VIDEO';
+  const ph = r.missing ? '?' : r.kind === 'playlist' ? '☰' : rowMedia(r) === 'audio' ? '♫' : '▶';
   const showKind = DLM.filter === 'all' || (DLM.filter === 'clips' && CLS.sub === 'all') || r.missing;
   t.innerHTML = `<div class="lt-im"><span class="lt-ph">${ph}</span><span class="lt-spr"></span><span class="lt-scrub"><i></i></span>${showKind ? `<span class="lt-kd">${tag}</span>` : ''}<span class="dlm-cb"></span><span class="lt-du hidden"></span>${isClipRow(r) ? '<span class="lt-io hidden"><i></i></span>' : ''}${r.kind !== 'playlist' && !r.missing ? '<span class="lt-fav off" title="Add to Favorites (F)">\u2606</span>' : ''}</div><div class="lt-n"></div><div class="lt-s"></div>`;
   t.querySelector('.lt-n').textContent = r.title;
@@ -3736,7 +3740,7 @@ function lpTile(r, doc) {
   const s = t.querySelector('.lt-s');
   s.textContent = r.kind === 'playlist' ? `${r.count} item${r.count === 1 ? '' : 's'}` : r.missing ? 'The file isn’t there any more'
     : isClipRow(r) && r.from ? `from ${r.from}` : `${fmtSize(r.size)} · ${fmtDate(r.mtime)}`;
-  if ((r.kind === 'video' || r.kind === 'mp4clip') && !r.missing) { const x = xOf(r.path); if (x) s.appendChild(xTag(x, 'dlm-tag')); }
+  if (rowMedia(r) === 'video' && !r.missing) { const x = xOf(r.path); if (x) s.appendChild(xTag(x, 'dlm-tag')); }
   t._row = r;
   return t;
 }
@@ -3901,7 +3905,7 @@ for (const host of [$('#dlmBody'), $('#dlmGrid')]) host.addEventListener('moused
   const r = dlmVisible()[+tr.dataset.i]; if (!r || r.missing) return;
   e.preventDefault();
   DLM.sel = new Set([dlmKey(r)]); DLM.anchor = +tr.dataset.i; dlmRender();
-  if (r.kind === 'playlist') openPlaylistFiles([r]); else if (r.kind === 'gifclip') P.clipOpenFile(r.path); else if (isClipRow(r)) libAdd([r], true); else P.showInFolder(r.path);
+  if (r.kind === 'playlist') openPlaylistFiles([r]); else if (isGifRow(r)) P.clipOpenFile(r.path); else if (isClipRow(r)) libAdd([r], true); else P.showInFolder(r.path);
 });
 // the header is rebuilt for Library → CLIPS (2.3), so its clicks are handled here
 $('#dlmDlg thead').addEventListener('click', (e) => {
@@ -3916,7 +3920,7 @@ $('#dlmDlg thead').addEventListener('click', (e) => {
 });
 for (const b of $('#dlmSeg').children) b.onclick = async () => { dlmSection(b.dataset.f); if (skinMode()) await sklRefresh(); dlmApplySize(); dlmRender(); };
 $('#dlmX').onclick = () => $('#dlmDlg').close();
-$('#dlmOpen').onclick = () => clipMode() ? P.clipFolder(CLS.sub === 'mp4clip' ? 'mp4' : CLS.sub === 'gifclip' ? 'gif' : 'mp3') : P.dlOpenDir(DLM.filter === 'audio' ? 'audio' : DLM.filter === 'playlist' ? 'playlists' : 'video');
+$('#dlmOpen').onclick = () => clipMode() ? P.clipFolder(CLS.sub === 'mp4clip' ? 'mp4' : CLS.sub === 'gifclip' ? 'gif' : CLS.sub === 'conv' ? 'conv' : 'mp3') : P.dlOpenDir(DLM.filter === 'audio' ? 'audio' : DLM.filter === 'playlist' ? 'playlists' : 'video');
 $('#dlmSearch').addEventListener('input', (e) => { DLM.q[DLM.filter] = e.target.value; DLM.anchor = -1; dlmRender(); });
 $('#dlmSearch').addEventListener('keydown', (e) => { if (e.key === 'Escape' && e.target.value) { e.preventDefault(); e.stopPropagation(); dlmClearQ(); } });
 $('#dlmSearchX').onclick = () => dlmClearQ();
@@ -4126,7 +4130,12 @@ const CL = { file: null, info: null, item: null, srcTitle: '', kind: 'mp3', in: 
   range: null, raf: 0, nameTouched: false, saved: [], job: null, pending: null, framesKey: '', framesT: 0, quality: '320', cut: 'exact',
   shots: null, shotSel: null, shotsOpen: false, shotBusy: false, burstPick: null,
   // 2.9.4 tools: reset for each new file (the length preset and the GIF settings are remembered in S)
-  tab: 'trim', shape: null, even: false, vol: 0, speed: 1, loud: null, loudT: 0, gifEst: null, gifT: 0 };
+  tab: 'trim', shape: null, even: false, vol: 0, speed: 1, loud: null, loudT: 0, gifEst: null, gifT: 0,
+  // 2.9.5 (CLIP part 2): Convert the whole file (no trimming), its settings, and "fit under" a size ('off' | 'x' | MB)
+  whole: false, cv: null, fitSel: 'off' };
+const CV_PRESETS = { forx: { size: 'x', fps: 60, q: 1 }, small: { size: '720', fps: 0, q: 0.6 }, phone: { size: '1080', fps: 30, q: 1 }, best: { size: 'keep', fps: 0, q: 2 } };
+const CV_NAMES = { forx: 'For X', small: 'small', phone: 'phone', best: 'best', custom: 'converted' };
+const XL = window.XLIMITS;      // X's limits (xlimits.js): the one place they're kept
 const CLIP_RATIOS = { '16:9': 16 / 9, '9:16': 9 / 16, '1:1': 1, '4:5': 4 / 5 };
 const CLIP_PRESETS = [5, 10, 15, 20, 25, 30, 60];
 const clipMedia = $('#clipVideo');
@@ -4227,8 +4236,10 @@ async function xFixOpen(files) {
   $('#xfOut').innerHTML = one ? `Saved as: <b>${esc(one.out.split(/[\\/]/).pop())}</b> next to the original (kept)` : 'Each saved as "&lt;name&gt; (X).mp4" next to its original (kept)';
   const warn = [];
   const long = todo.filter(p => p.x.long), big = todo.filter(p => p.x.big);
-  if (one && (one.x.long || one.x.big)) warn.push(`⚠ ${one.x.long ? `${mmss(one.x.duration)} long: over 2:20` : ''}${one.x.long && one.x.big ? ' and ' : ''}${one.x.big ? `${fmtSize(one.x.size)}: over 512 MB` : ''}. Free X accounts can't post it (X Premium: up to 4 h on web / iOS, 16 GB). Trim it in CLIP first?`);
-  else if (long.length || big.length) warn.push(`⚠ ${[...new Set([...long, ...big])].length} of them are over 2:20 or 512 MB: free X accounts can't post those (X Premium can).`);
+  // 2.9.5: the numbers come from xlimits.js
+  const XF = XL.LIMITS.free, XP = XL.LIMITS.premium;
+  if (one && (one.x.long || one.x.big)) warn.push(`⚠ ${one.x.long ? `${mmss(one.x.duration)} long: over ${XL.mmss(XF.sec)}` : ''}${one.x.long && one.x.big ? ' and ' : ''}${one.x.big ? `${fmtSize(one.x.size)}: over ${XL.size(XF.bytes)}` : ''}. Free X accounts can't post it (X Premium: up to ${Math.round(XP.sec / 3600)} h on web / iOS, ${XL.size(XP.bytes)}). Trim it in CLIP first?`);
+  else if (long.length || big.length) warn.push(`⚠ ${[...new Set([...long, ...big])].length} of them are over ${XL.mmss(XF.sec)} or ${XL.size(XF.bytes)}: free X accounts can't post those (X Premium can).`);
   if (ready.length) warn.push(`${ready.length} already X-ready (left as they are).`);
   if (bad.length) warn.push(`${bad.length} can't be fixed: ${bad[0].error}`);
   $('#xfWarn').textContent = warn.join(' '); $('#xfWarn').classList.toggle('hidden', !warn.length);
@@ -4318,7 +4329,9 @@ async function clipOpen(file, o = {}) {
   if (!same) { CL.saved = []; CL.shots = null; CL.shotSel = null; CL.shotsOpen = false; CL.burstPick = null; }
   CL.quality = info.canCopyMp3 ? 'copy' : '320'; CL.cut = 'exact';
   // 2.9.4: the tools start fresh with each file (GE); "Clip again" of a sped-up clip brings its speed back
-  if (!same) { CL.tab = 'trim'; CL.shape = null; CL.even = false; CL.vol = 0; }
+  if (!same) { CL.tab = 'trim'; CL.shape = null; CL.even = false; CL.vol = 0; CL.whole = false; CL.fitSel = 'off'; CL.cv = null; }
+  if (!CL.cv) CL.cv = { preset: CV_PRESETS[S.convPreset] ? S.convPreset : 'forx', ...CV_PRESETS[CV_PRESETS[S.convPreset] ? S.convPreset : 'forx'], mp3k: 320 };
+  if (o.convert) { CL.whole = true; CL.tab = 'convert'; }          // Library → Convert again
   CL.speed = [0.5, 1.5, 2].includes(o.speed) ? o.speed : same ? CL.speed : 1;
   CL.loud = null; CL.gifEst = null;
   $('#clipFadeIn').checked = false; $('#clipFadeOut').checked = false; $('#clipAlsoMp3').checked = false; $('#clipAddTo').checked = true;
@@ -4341,17 +4354,16 @@ function clipRenderX() {
   const i = CL.info || {}, V = CL.kind === 'mp4' && i.hasVideo;
   if (V) {
     const [ow, oh] = clipOutSize(), fast = clipCutEff() === 'fast';
-    const fits = (ow >= oh ? ow <= 1920 && oh <= 1200 : ow <= 1200 && oh <= 1900);
+    const B = XL.LIMITS.video, fits = (ow >= oh ? ow <= B.landscape[0] && oh <= B.landscape[1] : ow <= B.portrait[0] && oh <= B.portrait[1]);
     const src = xOf(CL.file), ok = fast ? !!(src && src.ready) : fits;
     const tag = document.createElement('span'); tag.className = 'clip-x'; tag.textContent = ok ? 'X ✓' : 'not for X';
     tag.title = ok ? 'This clip posts to X as it is (H.264 + AAC)' : fast ? 'A fast cut copies the file as it is; this one isn’t X-ready. Use Exact cut, or Fix for X after saving.' : 'Bigger than X takes (1920×1200): right-click the saved clip → Fix for X';
     $('#clipFmtInfo').appendChild(tag);
-    const len = clipLenOut();
-    if (len > 140) { const w = document.createElement('span'); w.className = 'clip-xwarn'; w.textContent = ` ⚠ ${Math.floor(len / 60)}:${String(Math.round(len % 60)).padStart(2, '0')}: over X's 2:20 for free accounts`; $('#clipFmtInfo').appendChild(w); }
   }
 }
 // ---- 2.9.4: what the tools add up to
-const clipLen = () => (CL.out || 0) - (CL.in || 0);
+const clipRange = () => (CL.whole ? [0, clipDur()] : [CL.in || 0, CL.out || 0]);        // 2.9.5: Convert = the whole file
+const clipLen = () => { const [a, b] = clipRange(); return b - a; };
 const clipLenOut = () => clipLen() / (CL.speed || 1);
 const clipHasPic = () => !!(CL.info && CL.info.hasVideo) && CL.kind !== 'mp3';
 // the shape box that will be used (null: Original, or a box that's the whole picture and isn't upscaled), with its output size
@@ -4365,13 +4377,30 @@ function clipShapeEff() {
 }
 const clipSoundOn = () => !!(CL.info && CL.info.hasAudio) && CL.kind !== 'gif' && (CL.even || CL.vol !== 0 || $('#clipFadeIn').checked || $('#clipFadeOut').checked);
 const clipPicTool = () => !!clipShapeEff() || CL.speed !== 1;          // these change the picture: re-encode
-function clipCutEff() { return CL.kind === 'mp4' && CL.cut === 'fast' && CL.info && CL.info.canFast && !clipPicTool() ? 'fast' : 'exact'; }
-function clipQualityEff() { return CL.quality === 'copy' && CL.info && CL.info.canCopyMp3 && !clipSoundOn() && CL.speed === 1 ? 'copy' : '320'; }
+function clipCutEff() { return CL.kind === 'mp4' && CL.cut === 'fast' && CL.info && CL.info.canFast && !clipPicTool() && !CL.whole && !clipFitBytes() ? 'fast' : 'exact'; }
+function clipQualityEff() { return CL.quality === 'copy' && CL.info && CL.info.canCopyMp3 && !clipSoundOn() && CL.speed === 1 && !CL.whole ? 'copy' : '320'; }
+// ---- 2.9.5: the X account (asked once, Settings → YouTube & X), fitting under a size, Convert's picture size
+const xAcct = () => (S.xAccount === 'premium' ? 'premium' : 'free');
+function clipFitBytes() {
+  if (CL.kind !== 'mp4') return 0;
+  return CL.fitSel === 'x' ? XL.LIMITS[xAcct()].bytes : +CL.fitSel > 0 ? +CL.fitSel * 1048576 : 0;
+}
+function clipCvDims(w, h) {           // like clip.js Clipper.convDims
+  const c = CL.cv; if (!CL.whole || !c || !w || !h || c.size === 'keep') return null;
+  if (c.size === 'x') {
+    const [bw, bh] = w >= h ? XL.LIMITS.video.landscape : XL.LIMITS.video.portrait;
+    if (w <= bw && h <= bh) return null;
+    const k = Math.min(bw / w, bh / h); return [Math.max(2, Math.floor(w * k / 2) * 2), Math.max(2, Math.floor(h * k / 2) * 2)];
+  }
+  const H = +c.size, sh = Math.min(w, h); if (sh <= H) return null;
+  return [Math.max(2, Math.floor(w * H / sh / 2) * 2), Math.max(2, Math.floor(h * H / sh / 2) * 2)];
+}
 function clipOutSize() {
   const i = CL.info || {}, s = clipShapeEff();
   let w = s ? s.ow : i.width || 0, h = s ? s.oh : i.height || 0;
   if (CL.kind === 'gif') { const g = clipGifSet(), sw = s ? s.w : i.width || 0, sh = s ? s.h : i.height || 0; w = g.w && g.w < sw ? g.w : sw; h = sw ? Math.round(sh * w / sw / 2) * 2 : 0; }
   else if (!s) { w &= ~1; h &= ~1; }
+  if (CL.kind === 'mp4') { const d = clipCvDims(w, h); if (d) [w, h] = d; }
   return [w, h];
 }
 function clipGifSet() {
@@ -4382,13 +4411,14 @@ function clipGifSet() {
 function clipSizeEst() {
   const i = CL.info || {}, len = clipLen(), lo = clipLenOut();
   if (CL.kind === 'gif') return CL.gifEst && CL.gifEst.key === clipGifKey() ? CL.gifEst.bytes : null;
-  if (CL.kind === 'mp3') return clipQualityEff() === 'copy' ? (i.abr || 192000) * len / 8 : 320000 * lo / 8;
+  if (CL.kind === 'mp3') return clipQualityEff() === 'copy' ? (i.abr || 192000) * len / 8 : (CL.whole ? CL.cv.mp3k : 320) * 1000 * lo / 8;
   if (clipCutEff() === 'fast') {
     const copy = i.size && i.duration ? i.size * len / i.duration : 0;
     return clipSoundOn() ? Math.max(0, copy - (i.abr || 128000) * len / 8) + 192000 * len / 8 : copy;
   }
-  const [w, h] = clipOutSize(), mbps = Math.max(1.5, Math.min(12, (w || 1280) * (h || 720) / 1e6 * 4));
-  return (mbps * 1e6 + (i.hasAudio ? 192000 : 0)) * lo / 8;
+  const q = CL.whole ? CL.cv.q : 1, [w, h] = clipOutSize(), mbps = Math.max(1.5, Math.min(q > 1 ? 20 : 12, (w || 1280) * (h || 720) / 1e6 * 4 * q));
+  const est = (mbps * 1e6 + (i.hasAudio ? 192000 : 0)) * lo / 8, fit = clipFitBytes();
+  return fit && est > fit ? fit * 0.97 : est;          // fitting: it aims just under
 }
 const clipMB = (b) => (b >= 10485760 ? `${Math.round(b / 1048576)} MB` : b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 // the line above Save (GB): what will be saved, whether it re-encodes, about how big
@@ -4398,19 +4428,21 @@ function clipOutLine() {
   const sp = CL.speed !== 1 ? ` &middot; ${CL.speed}&times;` : '';
   const re = (t) => ` <span class="re">RE-ENCODE</span>${t ? ` ${t}` : ''}`, ok = (t) => ` <span class="fast">${t}</span>`;
   const snd = [CL.even && 'evened out', CL.vol && `${CL.vol > 0 ? '+' : ''}${CL.vol} dB`, ($('#clipFadeIn').checked || $('#clipFadeOut').checked) && 'fades'].filter(Boolean);
+  const cvt = CL.whole ? `<span class="k">CONVERT</span> whole file &middot; ` : '';
+  const fitT = clipFitBytes() ? ` &middot; fit under ${clipMB(clipFitBytes())}${CL.fitSel === 'x' ? ' (X)' : ''}` : '';
   if (CL.kind === 'gif') {
     const g = clipGifSet();
-    return `<span class="k">GIF</span> &middot; ${w}&times;${h}${sh ? ` (${sh.ratio})` : ''} &middot; ${g.fps} fps &middot; ${clipFmt(clipLenOut())}${sp} &middot; ${g.loop ? 'loops' : 'plays once'} &middot;${re('(always)')}${est}`;
+    return `${cvt}<span class="k">GIF</span> &middot; ${w}&times;${h}${sh ? ` (${sh.ratio})` : ''} &middot; ${g.fps} fps &middot; ${clipFmt(clipLenOut())}${sp} &middot; ${g.loop ? 'loops' : 'plays once'} &middot;${re('(always)')}${est}`;
   }
   if (CL.kind === 'mp3') {
     const q = clipQualityEff();
-    return `<span class="k">MP3</span> &middot; ${clipFmt(clipLenOut())} &middot; ${q === 'copy' ? 'same quality as the file' : '320 kbps'}${snd.length ? ` &middot; ${esc(snd.join(', '))}` : ''}${sp} &middot;${q === 'copy' ? ok('NO RE-ENCODE') : re()}${est}`;
+    return `${cvt}<span class="k">MP3</span> &middot; ${clipFmt(clipLenOut())} &middot; ${q === 'copy' ? 'same quality as the file' : `${CL.whole ? CL.cv.mp3k : 320} kbps`}${snd.length ? ` &middot; ${esc(snd.join(', '))}` : ''}${sp} &middot;${q === 'copy' ? ok('NO RE-ENCODE') : re()}${est}`;
   }
   const fast = clipCutEff() === 'fast', lost = CL.cut === 'fast' && i.canFast && !fast;
-  const dims = `${w}&times;${h}${sh ? ` (${sh.ratio}${sh.up ? ', upscaled' : ''})` : ''}`;
+  const dims = `${w}&times;${h}${sh ? ` (${sh.ratio}${sh.up ? ', upscaled' : ''})` : ''}${CL.whole ? ` &middot; ${htmlEsc(CV_NAMES[CL.cv.preset])}` : ''}`;
   if (fast && clipSoundOn()) return `<span class="k">MP4</span> &middot; ${dims} &middot; picture copied, <b>sound re-encoded</b> (AAC 192k${snd.length ? `: ${esc(snd.join(', '))}` : ''}) &middot;${ok('FAST CUT OK')}${est}`;
   if (fast) return `<span class="k">MP4</span> &middot; ${dims} &middot; copied as it is &middot;${ok('FAST CUT')} no re-encode${est}`;
-  return `<span class="k">MP4</span> &middot; ${dims} &middot; H.264 + AAC${snd.length ? ` &middot; ${esc(snd.join(', '))}` : ''}${sp} &middot;${re(lost ? '<span class="w">(Fast cut is off: Shape and Speed change the picture)</span>' : 'exact cut')}${CL.speed !== 1 ? ` &middot; length ${clipFmt(clipLenOut())}` : ''}${est}`;
+  return `${cvt}<span class="k">MP4</span> &middot; ${dims} &middot; H.264 + AAC${snd.length ? ` &middot; ${esc(snd.join(', '))}` : ''}${sp} &middot;${re(CL.whole ? '' : lost ? `<span class="w">(Fast cut is off: ${clipFitBytes() && !clipPicTool() ? 'fitting under a size re-encodes' : 'Shape and Speed change the picture'})</span>` : 'exact cut')}${CL.speed !== 1 || CL.whole ? ` &middot; length ${clipFmt(clipLenOut())}` : ''}${fitT}${est}`;
 }
 function clipRender() {
   const has = !!CL.info;
@@ -4440,9 +4472,9 @@ function clipRender() {
   for (const id of ['#clipPlay', '#clipEdgeIn', '#clipEdgeOut', '#clipLoop', '#clipSetIn', '#clipSetOut']) $(id).disabled = !i.previewUrl;
   $('#clipExt').textContent = `.${CL.kind}`;
   // ---- tabs (GA): greyed when they can't do anything here; a dot when in use
-  const off = { shape: !clipHasPic(), sound: G || !i.hasAudio, speed: false, shots: !i.hasVideo, trim: false };
+  const off = { shape: !clipHasPic(), sound: G || !i.hasAudio, speed: false, shots: !i.hasVideo, trim: false, convert: false };
   if (off[CL.tab]) CL.tab = 'trim';
-  const dot = { shape: !!clipShapeEff(), sound: clipSoundOn(), speed: CL.speed !== 1 };
+  const dot = { shape: !!clipShapeEff(), sound: clipSoundOn(), speed: CL.speed !== 1, convert: CL.whole };
   for (const b of $('#clipTabs').children) {
     const t = b.dataset.t;
     if (t === 'captions' || t === 'join') continue;          // 2.9.6
@@ -4451,7 +4483,9 @@ function clipRender() {
     b.title = off[t] ? { shape: CL.kind === 'mp3' ? 'An MP3 has no picture' : 'This file has no video', sound: G ? 'GIFs have no sound' : 'This file has no sound', shots: 'This file has no video' }[t] || '' : '';
     let d = b.querySelector('.dot'); if (dot[t] && !d) { d = document.createElement('span'); d.className = 'dot'; b.appendChild(d); } else if (!dot[t] && d) d.remove();
   }
-  for (const [t, id] of [['trim', '#clipPaneTrim'], ['shape', '#clipPaneShape'], ['sound', '#clipPaneSound'], ['speed', '#clipPaneSpeed'], ['shots', '#clipPaneShots']]) $(id).classList.toggle('hidden', CL.tab !== t);
+  for (const [t, id] of [['trim', '#clipPaneTrim'], ['shape', '#clipPaneShape'], ['sound', '#clipPaneSound'], ['speed', '#clipPaneSpeed'], ['convert', '#clipPaneConvert'], ['shots', '#clipPaneShots']]) $(id).classList.toggle('hidden', CL.tab !== t);
+  // the GIF settings show in Trim, or in Convert while that's the tab
+  { const g = $('#clipOptsGif'), host = CL.tab === 'convert' ? $('#clipCvGifSlot') : $('#clipPaneTrim'); if (g.parentElement !== host) host.insertBefore(g, CL.tab === 'convert' ? null : $('#clipAddRow')); }
   // ---- Trim
   $('#clipOptsMp3').classList.toggle('hidden', V || G);
   $('#clipOptsMp4').classList.toggle('hidden', !V);
@@ -4463,18 +4497,18 @@ function clipRender() {
   $('#clipQCopy').checked = q === 'copy'; $('#clipQ320').checked = q !== 'copy';
   if (!i.canFast) CL.cut = 'exact';
   const cut = clipCutEff(), fLock = !i.canFast || clipPicTool();
-  $('#clipCutFast').disabled = fLock;
-  $('#clipFastNote').textContent = !i.canFast ? '· for H.264 .mp4 videos only (this one is re-encoded)' : clipPicTool() ? '· off while Shape or Speed is used (they change the picture)' : clipSoundOn() ? '· the picture is copied, only the sound is re-encoded' : '· no re-encode, may start up to a few seconds early (keyframes)';
+  $('#clipCutFast').disabled = fLock || !!clipFitBytes() || CL.whole;
+  $('#clipFastNote').textContent = !i.canFast ? '· for H.264 .mp4 videos only (this one is re-encoded)' : CL.whole ? '· Convert re-encodes the whole file' : clipFitBytes() ? '· off while fitting under a size' : clipPicTool() ? '· off while Shape or Speed is used (they change the picture)' : clipSoundOn() ? '· the picture is copied, only the sound is re-encoded' : '· no re-encode, may start up to a few seconds early (keyframes)';
   $('#clipCutExact').checked = cut === 'exact'; $('#clipCutFast').checked = cut === 'fast';
   $('#clipAlsoMp3').disabled = !i.hasAudio;
   if (G) clipRenderGif();
-  // ---- Shape / Sound / Speed
-  clipRenderShape(); clipRenderSound(); clipRenderSpeed();
+  // ---- Shape / Sound / Speed / Convert
+  clipRenderShape(); clipRenderSound(); clipRenderSpeed(); clipRenderConvert();
   $('#clipFmtInfo').innerHTML = clipOutLine();
-  clipRenderX();
+  clipRenderX(); clipXBar();
   const t = clipTargetTab();
   $('#clipAddToLabel').textContent = `Add to "${t >= 0 ? S.tabs[t].name : 'Main'}" when it’s saved`;
-  $('#clipFolderBtn').innerHTML = `&#x1F4C1; Open ${{ mp4: 'mp4clips', gif: 'gifs', mp3: 'mp3clips' }[CL.kind]} folder`;
+  $('#clipFolderBtn').innerHTML = `&#x1F4C1; Open ${CL.whole ? 'Converted' : { mp4: 'mp4clips', gif: 'gifs', mp3: 'mp3clips' }[CL.kind]} folder`;
   $('#clipReset').textContent = `Reset to the whole ${i.hasVideo ? 'video' : 'song'}`;
   clipRenderTimes();
   clipRenderSaved();
@@ -4488,11 +4522,12 @@ function clipRenderTimes() {
   const len = clipLen(), lo = clipLenOut();
   $('#clipLen').textContent = `LENGTH ${clipFmt(len)}${CL.speed !== 1 ? ` ▸ ${clipFmt(lo)}` : ''}`;
   $('#clipLen').title = CL.speed !== 1 ? `${clipFmt(len)} of the original, ${clipFmt(lo)} at ${CL.speed}×` : '';
-  $('#clipSave').innerHTML = CL.job ? $('#clipSave').innerHTML : `&#9986; Save ${CL.kind === 'gif' ? 'GIF' : 'clip'} ${clipFmt(lo)} &#9656;`;
-  if (!CL.nameTouched) $('#clipName').value = `${CL.srcTitle} (${clipCut(CL.in)}-${clipCut(CL.out)})${CL.speed !== 1 ? ` ${CL.speed}x` : ''}`;
+  $('#clipSave').innerHTML = CL.job ? $('#clipSave').innerHTML : CL.whole ? `&#8644; Convert ${clipFmt(lo)} &#9656;` : `&#9986; Save ${CL.kind === 'gif' ? 'GIF' : 'clip'} ${clipFmt(lo)} &#9656;`;
+  if (!CL.nameTouched) $('#clipName').value = CL.whole ? `${CL.srcTitle} (${CL.kind === 'mp4' ? CV_NAMES[CL.cv.preset] : 'converted'})${CL.speed !== 1 ? ` ${CL.speed}x` : ''}`
+    : `${CL.srcTitle} (${clipCut(CL.in)}-${clipCut(CL.out)})${CL.speed !== 1 ? ` ${CL.speed}x` : ''}`;
   const z = CL.v1 - CL.v0 < clipDur() - 0.05;
   $('#clipZoomInfo').textContent = z ? `showing ${clipFmt(CL.v0, false)} – ${clipFmt(CL.v1, false)} of ${clipFmt(clipDur(), false)} ·` : '';
-  for (const el of $$('#clipFilm > *')) { const t = +el.dataset.t; el.classList.toggle('in', t >= CL.in && t <= CL.out); }
+  { const [a, b] = clipRange(); for (const el of $$('#clipFilm > *')) { const t = +el.dataset.t; el.classList.toggle('in', t >= a && t <= b); } }
   // length presets (1A–1C): greyed when longer than the file, the one that fits is lit, the last one used underlined
   for (const b of $('#clipPresets').children) {
     const L = +b.dataset.l;
@@ -4504,7 +4539,7 @@ function clipRenderTimes() {
   // the parts that depend on the length
   clipRenderSpeed();
   $('#clipFmtInfo').innerHTML = clipOutLine();
-  clipRenderX();
+  clipRenderX(); clipXBar();
   clipLoudSoon(); clipGifSoon();
 }
 function clipRenderSaved() {
@@ -4512,7 +4547,7 @@ function clipRenderSaved() {
   box.classList.toggle('hidden', !CL.saved.length);
   if (!CL.saved.length) return;
   const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const dirs = [...new Set(CL.saved.map(f => ({ mp4: 'mp4clips', gif: 'gifs' }[f.kind] || 'mp3clips')))].map(d => `Downloads\\SlopAMP\\${d}`).join(' · ');
+  const dirs = [...new Set(CL.saved.map(f => (f.converted ? 'Converted' : { mp4: 'mp4clips', gif: 'gifs' }[f.kind] || 'mp3clips')))].map(d => `Downloads\\SlopAMP\\${d}`).join(' · ');
   box.innerHTML = `<div class="ed-lh">SAVED FROM THIS ${CL.info && CL.info.hasVideo ? 'VIDEO' : 'FILE'} · ${esc(dirs)}</div><div class="ed-files">${CL.saved.map((f, i) => `<span class="ed-file clip-file" data-i="${i}" title="${esc(f.path)}\nClick: show in folder">${{ mp4: '&#x1F39E;', gif: '&#x1F5BC;' }[f.kind] || '&#9835;'} ${esc(f.path.split(/[\\/]/).pop())} ${clipFmt(f.duration, false)}</span>`).join('')}</div>`;
 }
 $('#clipSaved').addEventListener('click', (e) => { const el = e.target.closest('.clip-file'); if (el) { const f = CL.saved[+el.dataset.i]; if (f) P.showInFolder(f.path); } });
@@ -4547,7 +4582,8 @@ function clipDraw() {
   const x = c.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, w, h);
   const v0 = CL.v0, v1 = CL.v1, px = (t) => (t - v0) / (v1 - v0) * w;
   const green = WM.token('--green'), line = WM.token('--line-green'), amber = WM.token('--amber');
-  x.globalAlpha = 0.16; x.fillStyle = green; x.fillRect(px(CL.in), 0, px(CL.out) - px(CL.in), h); x.globalAlpha = 1;
+  const [ra, rb] = clipRange();       // 2.9.5: Convert lights the whole file
+  x.globalAlpha = 0.16; x.fillStyle = green; x.fillRect(px(ra), 0, px(rb) - px(ra), h); x.globalAlpha = 1;
   const pk = CL.peaks;
   if (pk && pk.peaks && pk.peaks.length) {
     const step = 2, rate = pk.rate, arr = pk.peaks;
@@ -4555,7 +4591,7 @@ function clipDraw() {
       const t0 = v0 + X / w * (v1 - v0), t1 = v0 + (X + step) / w * (v1 - v0);
       const i0 = Math.max(0, Math.floor(t0 * rate)), i1 = Math.min(arr.length, Math.max(i0 + 1, Math.ceil(t1 * rate)));
       let m = 0; for (let i = i0; i < i1; i++) if (arr[i] > m) m = arr[i];
-      const v = m / 100 * (h / 2 - 3), tm = (t0 + t1) / 2, on = tm >= CL.in && tm <= CL.out;
+      const v = m / 100 * (h / 2 - 3), tm = (t0 + t1) / 2, on = tm >= ra && tm <= rb;
       x.fillStyle = on ? green : line; x.globalAlpha = on ? 1 : 0.5;
       x.fillRect(X, h / 2 - v, step - 0.6, Math.max(1, v * 2));
     }
@@ -4587,8 +4623,11 @@ function clipFrames() {
 WM.wins.clip && new ResizeObserver(() => { if (clipVisible && CL.info) { clipDraw(); clipFrames(); } }).observe($('#clipWave'));
 
 // ---- In / Out
+// 2.9.5: setting In / Out (or a preset, or dragging on the wave) means clipping again, not converting the whole file
+function clipWholeOff() { if (!CL.whole) return false; CL.whole = false; clipRender(); return true; }
 function clipSet(edge, t, opts = {}) {
   const d = clipDur(); if (!d || !Number.isFinite(t)) return;
+  clipWholeOff();
   if (edge === 'in') CL.in = Math.max(0, Math.min(t, CL.out - 0.1));
   else CL.out = Math.min(d, Math.max(t, CL.in + 0.1));
   CL.last = edge;
@@ -4624,7 +4663,7 @@ function clipPreset(L, back) {
   const d = clipDur(); if (!d || L > d + 0.05) return;
   if (back) { CL.in = Math.max(0, CL.out - L); if (CL.out - CL.in < L - 0.05) CL.out = Math.min(d, CL.in + L); CL.last = 'in'; }
   else { CL.out = Math.min(d, CL.in + L); if (CL.out - CL.in < L - 0.05) CL.in = Math.max(0, CL.out - L); CL.last = 'out'; }
-  S.clipPreset = L; saveSoon();
+  S.clipPreset = L; saveSoon(); clipWholeOff();
   if (CL.in < CL.v0 || CL.out > CL.v1) clipZoomTo(CL.in, CL.out);
   clipDraw(); clipRuler(); clipRenderTimes(); clipFrames();
 }
@@ -4788,11 +4827,8 @@ function clipRenderGif() {
   $('#clipGifLoop').checked = g.loop;
   const sz = clipSizeEst();
   $('#clipGifEst').textContent = sz == null ? (CL.gifEst && CL.gifEst.error ? '≈ ?' : '≈ …') : `≈ ${clipMB(sz)}`;
-  $('#clipGifEstNote').textContent = CL.gifEst && CL.gifEst.error && CL.gifEst.key === clipGifKey() ? CL.gifEst.error : 'estimated from a quick 1 s test · X takes up to 15 MB on the web, 5 MB on phones';
-  const w = $('#clipGifWarn'), MB = 1048576;
-  w.textContent = sz == null ? '' : sz > 15 * MB ? `⚠ About ${clipMB(sz)}: over the 15 MB X takes on the web (and phones take only 5 MB). Make it shorter, smaller (width) or use fewer colours.`
-    : sz > 5 * MB ? `⚠ About ${clipMB(sz)}: fine for X on the web (15 MB), but phones only take 5 MB.` : '';
-  w.classList.toggle('hidden', !w.textContent);
+  $('#clipGifEstNote').textContent = CL.gifEst && CL.gifEst.error && CL.gifEst.key === clipGifKey() ? CL.gifEst.error : `estimated from a quick 1 s test · X takes up to ${XL.size(XL.LIMITS.gif.web)} on the web, ${XL.size(XL.LIMITS.gif.phone)} on phones`;
+  $('#clipGifWarn').classList.add('hidden');      // 2.9.5: the For X bar says it now (with the fixes)
 }
 function clipGifKey() { const s = clipShapeEff(); return JSON.stringify([CL.file, +CL.in.toFixed(2), +CL.out.toFixed(2), s && [s.x, s.y, s.w, s.h], CL.speed, clipGifSet()]); }
 function clipGifSoon() {
@@ -4804,12 +4840,103 @@ function clipGifSoon() {
     const r = await P.clipGifEstimate({ file: CL.file, in: CL.in, out: CL.out, speed: CL.speed, shape: s, gif: clipGifSet() });
     if (clipGifKey() !== key) return;
     CL.gifEst = { key, ...(r && r.ok ? { bytes: r.bytes } : { error: (r && r.error) || 'Couldn’t estimate the size.' }) };
-    if (CL.kind === 'gif') { clipRenderGif(); $('#clipFmtInfo').innerHTML = clipOutLine(); }
+    if (CL.kind === 'gif') { clipRenderGif(); $('#clipFmtInfo').innerHTML = clipOutLine(); clipXBar(); }
   }, 500);
 }
 const clipGifPut = (k, v) => { S.clipGif = { ...clipGifSet(), [k]: v }; saveSoon(); clipRender(); };
 for (const [id, k] of [['#clipGifW', 'w'], ['#clipGifFps', 'fps'], ['#clipGifCol', 'colors']]) for (const b of $(id).children) b.onclick = () => clipGifPut(k, +b.dataset.v);
 $('#clipGifLoop').addEventListener('change', (e) => clipGifPut('loop', e.target.checked));
+
+// ---- Convert (2.9.5): the whole file, no trimming, as MP3 / MP4 / GIF → Downloads\SlopAMP\Converted
+function clipRenderConvert() {
+  const i = CL.info; if (!i || !CL.cv) return;
+  const c = CL.cv, V = CL.kind === 'mp4', A = CL.kind === 'mp3', G = CL.kind === 'gif';
+  $('#clipWhole').checked = CL.whole;
+  $('#clipPaneConvert').classList.toggle('off-whole', !CL.whole);
+  $('#clipWholeNote').innerHTML = CL.whole ? `&middot; ${clipFmt(clipDur(), false)}, no trimming: In / Out are ignored &middot; a new file in Downloads\\SlopAMP\\Converted` : '&middot; off: Save makes a clip from In to Out (turn this on to convert the whole file)';
+  $('#clipCvMp4').classList.toggle('hidden', !V);
+  $('#clipCvMp3').classList.toggle('hidden', !A);
+  $('#clipFitRow').classList.toggle('hidden', !V);
+  for (const b of $('#clipCvPreset').children) b.classList.toggle('on', b.dataset.p === c.preset);
+  for (const [id, v] of [['#clipCvSize', String(c.size)], ['#clipCvFps', String(c.fps)], ['#clipCvQ', String(c.q)], ['#clipCvMp3k', String(c.mp3k)], ['#clipFitSel', String(CL.fitSel)]]) for (const b of $(id).children) b.classList.toggle('on', b.dataset.v === v);
+  const xb = [...$('#clipFitSel').children].find(b => b.dataset.v === 'x');
+  xb.textContent = `X limit (${clipMB(XL.LIMITS[xAcct()].bytes)})`;
+  $('#clipFitNote').textContent = clipFitBytes() ? 'aims just under it; if it comes out too big, SlopAMP tries once more lower (a lower frame rate or the next size down if it must)' : '';
+  $('#clipXAcctRow').classList.toggle('hidden', !(V && (c.preset === 'forx' || CL.fitSel === 'x')));
+  const L = XL.LIMITS[xAcct()];
+  $('#clipXAcct').textContent = `${S.xAccount ? L.name : 'Free (not set yet)'} · up to ${XL.mmss(L.sec)} and ${XL.size(L.bytes)}${L.androidSec ? ` (Android app: ${XL.mmss(L.androidSec)})` : ''}`;
+  $('#clipCvHint').classList.toggle('hidden', G);
+}
+$('#clipWhole').addEventListener('change', (e) => { CL.whole = e.target.checked; clipRender(); clipDraw(); });
+for (const b of $('#clipCvPreset').children) b.onclick = async () => {
+  const p = b.dataset.p;
+  CL.cv = { ...CL.cv, preset: p, ...CV_PRESETS[p] }; CL.whole = true; S.convPreset = p; saveSoon();
+  clipRender(); clipDraw();
+  if (p === 'forx' && !S.xAccount) await xAccountAsk();       // asked once, the first time For X is used
+};
+const clipCvSet = (k, v) => { CL.cv = { ...CL.cv, [k]: v, preset: 'custom' }; CL.whole = true; clipRender(); clipDraw(); };
+for (const [id, k] of [['#clipCvSize', 'size'], ['#clipCvFps', 'fps'], ['#clipCvQ', 'q']]) for (const b of $(id).children) b.onclick = () => clipCvSet(k, k === 'size' ? b.dataset.v : +b.dataset.v);
+for (const b of $('#clipCvMp3k').children) b.onclick = () => { CL.cv = { ...CL.cv, mp3k: +b.dataset.v }; CL.whole = true; clipRender(); clipDraw(); };
+for (const b of $('#clipFitSel').children) b.onclick = async () => { CL.fitSel = b.dataset.v === 'off' || b.dataset.v === 'x' ? b.dataset.v : +b.dataset.v; clipRender(); if (CL.fitSel === 'x' && !S.xAccount) await xAccountAsk(); };
+$('#clipXAcctChange').onclick = () => xAccountAsk(true);
+
+// ---- the X account: asked once (the first time For X is used), kept, changed in Settings → YouTube & X
+async function xAccountAsk() {
+  const F = XL.LIMITS.free, Pm = XL.LIMITS.premium;
+  const v = await choiceBox('Which X account do you post with?',
+    `SlopAMP checks your videos against X’s limits for it, and remembers the answer.\n\nFree: up to ${XL.mmss(F.sec)} and ${XL.size(F.bytes)} a video.\nPremium: up to ${Math.round(Pm.sec / 3600)} hours and ${XL.size(Pm.bytes)} on the web and iPhone (${Math.round(Pm.androidSec / 60)} minutes in X’s Android app).\n\nYou can change it any time in Settings → YouTube & X.`, 'Free', 'Premium');
+  if (v === 'ok' || v === 'alt') { S.xAccount = v === 'ok' ? 'free' : 'premium'; saveSoon(); setXAcctSel(); }
+  if (CL.info) clipRender();
+  return S.xAccount || null;
+}
+function setXAcctSel() {
+  const s = $('#setXAcct'); if (s) s.value = S.xAccount || '';
+  const n = $('#setXAcctNote'), F = XL.LIMITS.free, Pm = XL.LIMITS.premium;      // the numbers from xlimits.js
+  if (n) n.textContent = `CLIP’s For X checks videos against it: Free ${XL.mmss(F.sec)} and ${XL.size(F.bytes)}; Premium ${Math.round(Pm.sec / 3600)} h and ${XL.size(Pm.bytes)} (${Math.round(Pm.androidSec / 60)} min in X’s Android app)`;
+}
+$('#setXAcct').onchange = (e) => { S.xAccount = ['free', 'premium'].includes(e.target.value) ? e.target.value : null; saveSoon(); if (CL.info) clipRender(); };
+
+// ---- the For X bar: over X's limits → the exact overage and a one-click fix. Never blocks saving.
+// Shown for MP4 clips (as 2.9.4's 2:20 note was), Convert's For X (or fitting under the X limit), and GIFs.
+function clipXIssues() {
+  if (!CL.info) return [];
+  if (CL.kind === 'gif') { const b = clipSizeEst(); return b == null ? [] : XL.checkGif(b); }
+  if (CL.kind !== 'mp4') return [];
+  if (CL.whole && CL.cv.preset !== 'forx' && CL.fitSel !== 'x') return [];        // Small / Phone / Best aren't for X
+  return XL.checkVideo(xAcct(), clipLenOut(), clipSizeEst() || 0);
+}
+function clipXBar() {
+  const bar = $('#clipXBar'), iss = clipXIssues();
+  bar.classList.toggle('hidden', !iss.length);
+  if (!iss.length) return;
+  const L = XL.LIMITS[xAcct()], G = CL.kind === 'gif';
+  const acct = G ? '' : ` <small>(X account: ${S.xAccount ? L.name : 'Free, not set yet'})</small>`;
+  $('#clipXBarT').innerHTML = iss.map(x => htmlEsc(x.text.charAt(0).toUpperCase() + x.text.slice(1))).join('. ') + '.' + acct;
+  const btns = [];
+  const trimTo = (sec) => btns.push([`Trim to ${XL.mmss(Math.floor(sec))}`, () => clipTrimTo(sec)]);
+  for (const x of iss) {
+    if (x.what === 'length' || x.what === 'android') trimTo(x.limit);
+    if (x.what === 'size' && CL.fitSel !== 'x') btns.push(['Lower the quality to fit', () => { CL.fitSel = 'x'; clipRender(); }]);
+    if (x.what === 'gif-web' || x.what === 'gif-phone') {
+      const per = clipSizeEst() / Math.max(0.1, clipLenOut()), sec = XL.secForBytes(x.limit, per);
+      if (sec >= 0.5) btns.push([`Trim to fit ${XL.size(x.limit)} (${XL.mmss(Math.floor(sec))})`, () => clipTrimTo(sec)]);
+      const g = clipGifSet();
+      if (g.w !== 320 || g.fps !== 10 || g.colors !== 64) btns.push(['Make it smaller (320 px · 10 fps · 64 colours)', () => { S.clipGif = { ...g, w: 320, fps: 10, colors: 64 }; saveSoon(); clipRender(); }]);
+    }
+  }
+  if (!G) btns.push(['Change account', () => xAccountAsk(), 'alt']);
+  const bb = $('#clipXBarB'); bb.innerHTML = '';
+  for (const [t, fn, cls] of btns.filter((b, k, a) => a.findIndex(x => x[0] === b[0]) === k)) { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; if (cls) b.className = cls; b.onclick = fn; bb.appendChild(b); }
+}
+// Trim the saved clip to `sec` (its own time, after Speed): from In (0:00 for a whole-file Convert)
+function clipTrimTo(sec) {
+  const a = CL.whole ? 0 : CL.in, d = clipDur();
+  CL.whole = false;
+  CL.in = a; CL.out = Math.min(d, a + Math.max(0.1, sec - 0.05) * CL.speed); CL.last = 'out';
+  if (CL.tab === 'convert') CL.tab = 'trim';
+  if (CL.in < CL.v0 || CL.out > CL.v1) clipZoomTo(CL.in, CL.out);
+  clipRender(); clipDraw(); clipRuler(); clipFrames();
+}
 
 // ---- the wave: click = move the preview there; drag an edge / the clip; drag elsewhere = a new range
 $('#clipWaveC').addEventListener('pointerdown', (e) => {
@@ -4828,6 +4955,7 @@ $('#clipWaveC').addEventListener('pointerdown', (e) => {
   try { c.setPointerCapture(e.pointerId); } catch (_) {}
   const move = (ev) => {
     if (!moved && Math.abs(ev.clientX - x0) < 3) return;
+    if (!moved) clipWholeOff();
     moved = true;
     const t = tAt(ev.clientX), d = clipDur();
     if (mode === 'in' || mode === 'out') clipSet(mode, t, { quiet: true });
@@ -4927,7 +5055,9 @@ async function clipSave() {
       fadeIn: !G && $('#clipFadeIn').checked ? 0.5 : 0, fadeOut: !G && $('#clipFadeOut').checked ? 2 : 0, quality: clipQualityEff(), cut: clipCutEff(),
       alsoMp3: CL.kind === 'mp4' && $('#clipAlsoMp3').checked, srcTitle: CL.srcTitle, item: CL.item,
       // 2.9.4 tools
-      even: !G && CL.even, vol: G ? 0 : CL.vol, speed: CL.speed, shape: clipShapeEff(), gif: G ? clipGifSet() : undefined });
+      even: !G && CL.even, vol: G ? 0 : CL.vol, speed: CL.speed, shape: clipShapeEff(), gif: G ? clipGifSet() : undefined,
+      // 2.9.5: Convert (the whole file) and fitting under a size
+      whole: CL.whole, conv: CL.whole ? { ...CL.cv, size: CL.cv.size === 'x' || CL.cv.size === 'keep' ? CL.cv.size : +CL.cv.size } : undefined, fit: clipFitBytes() || undefined });
   } finally {
     CL.job = null; btn.classList.remove('busy'); btn.disabled = false;
     $('#clipCancel').classList.add('hidden');
@@ -4939,14 +5069,15 @@ async function clipSave() {
   const playable = res.files.filter(f => f.kind !== 'gif');        // a GIF isn't a song or a video: it stays in the gifs folder
   if (playable.length && $('#clipAddTo').checked) { const t = clipTargetTab(); if (t >= 0) await addFilesToTab(playable.map(f => f.path), t); }
   const names = res.files.map(f => f.path.split(/[\\/]/).pop());
-  toast(`✓ Saved ${names.join(' and ')}`, 3500);
+  const miss = res.files.find(f => f.fit && !f.fits);
+  toast(miss ? `✓ Saved ${names.join(' and ')}, but it came out at ${clipMB(miss.size)}: still over ${clipMB(miss.fit)}. Trim it to fit.` : `✓ Saved ${names.join(' and ')}`, miss ? 7000 : 3500);
   if ($('#dlmDlg').open) dlmRefresh();
   return res;
 }
 $('#clipSave').onclick = clipSave;
 $('#clipCancel').onclick = () => { if (CL.job) P.clipCancel(CL.job); };
 P.onClip((ev) => { if (ev && ev.type === 'progress' && ev.job === CL.job) $('#clipSave').textContent = `Saving ${Math.max(0, Math.min(100, ev.pct))}%…`; });
-$('#clipFolderBtn').onclick = () => P.clipFolder(CL.kind);    // mp3 / mp4 / gif
+$('#clipFolderBtn').onclick = () => P.clipFolder(CL.whole ? 'conv' : CL.kind);    // mp3 / mp4 / gif / Converted
 $('#clipLibBtn').onclick = () => openDownloadsManager('clips');
 $('#clipEmptyLib').onclick = () => openDownloadsManager('clips');
 $('#clipEmptyPick').onclick = async () => { const f = await P.clipPick(); if (f) clipOpen(f); };
@@ -5105,12 +5236,31 @@ $('#bEdit').addEventListener('contextmenu', (e) => { e.preventDefault(); editMen
 // are part of DLM.rows (kind 'mp3clip' / 'mp4clip' / 'gifclip'), so ALL lists them too. A GIF opens in the picture viewer.
 const CLS = { sub: 'all' };
 const clipMode = () => DLM.filter === 'clips';
-const isClipRow = (r) => r && (r.kind === 'mp3clip' || r.kind === 'mp4clip' || r.kind === 'gifclip');
+const isClipRow = (r) => r && (r.kind === 'mp3clip' || r.kind === 'mp4clip' || r.kind === 'gifclip' || r.kind === 'conv');   // conv: Converted (2.9.5)
+const isGifRow = (r) => !!r && (r.kind === 'gifclip' || (r.kind === 'conv' && r.media === 'gif'));
+// 2.9.5: what's in a row, for the Library's quick filters (Video / Audio / GIFs / Clips / Converted)
+const rowMedia = (r) => (r.kind === 'conv' ? r.media : r.kind === 'video' || r.kind === 'mp4clip' ? 'video' : r.kind === 'audio' || r.kind === 'mp3clip' ? 'audio' : r.kind === 'gifclip' ? 'gif' : r.kind);
+const QF = { all: () => true, video: (r) => rowMedia(r) === 'video', audio: (r) => rowMedia(r) === 'audio', gif: (r) => rowMedia(r) === 'gif',
+  clips: (r) => r.kind === 'mp3clip' || r.kind === 'mp4clip' || r.kind === 'gifclip', conv: (r) => r.kind === 'conv' };
+// the quick-filter row (ALL only): counts are made in one pass and kept until the Library's rows change
+function dlqfPaint() {
+  const show = DLM.filter === 'all';
+  $('#dlmDlg').classList.toggle('noqf', !show);
+  if (!show) return;
+  if (DLM.qfRows !== DLM.rows || DLM.qfLen !== DLM.rows.length) {
+    const n = { all: 0, video: 0, audio: 0, gif: 0, clips: 0, conv: 0 };
+    for (const r of DLM.rows) { if (r.kind === 'playlist') continue; n.all++; const m = rowMedia(r); if (n[m] !== undefined) n[m]++; if (r.kind === 'conv') n.conv++; else if (isClipRow(r)) n.clips++; }
+    DLM.qfN = n; DLM.qfRows = DLM.rows; DLM.qfLen = DLM.rows.length;
+  }
+  const L = { all: 'All', video: 'Video', audio: 'Audio', gif: 'GIFs', clips: 'Clips', conv: 'Converted' };
+  for (const b of $('#dlqf').children) { const q = b.dataset.q; b.classList.toggle('on', q === DLM.qf); b.textContent = q === 'all' ? 'All' : `${L[q]} (${DLM.qfN[q]})`; b.disabled = q !== 'all' && !DLM.qfN[q] && DLM.qf !== q; }
+}
+for (const b of $('#dlqf').children) b.onclick = () => { DLM.qf = b.dataset.q; DLM.anchor = -1; DLM.sel = new Set(); S.lib.qf = DLM.qf; saveSoon(); dlmRender(); };
 for (const b of $('#clsub').children) b.onclick = () => { CLS.sub = b.dataset.c; DLM.anchor = -1; dlmRender(); };
 function clipLibSel() { return dlmVisible().filter(r => isClipRow(r) && DLM.sel.has(dlmKey(r))); }
 function clipLibButtons() {
   const sel = clipLibSel();
-  $('#clAdd').disabled = !sel.some(r => r.kind !== 'gifclip');
+  $('#clAdd').disabled = !sel.some(r => !isGifRow(r));
   $('#clAgain').disabled = !(sel.length === 1 && sel[0].srcExists);
   $('#clAgain').title = sel.length === 1 && !sel[0].srcExists ? 'The file it was cut from isn’t there any more' : 'Open CLIP on the original with the same In / Out';
   $('#clDel').disabled = !sel.length;
@@ -5120,11 +5270,11 @@ function clipAgain(r) {
   if (!r || !r.srcExists) { toast('The file this clip was cut from isn’t there any more.'); return; }
   if ($('#dlmDlg').open) $('#dlmDlg').close();
   const it = r.item && allItems().find(i => isWeb(i) && i.vid === r.item.vid);
-  clipOpen(r.src, { kind: { mp4clip: 'mp4', gifclip: 'gif' }[r.kind] || 'mp3', item: it || (r.item ? { ...r.item } : null), title: r.from || undefined, in: r.in, out: r.out, speed: r.speed });
+  clipOpen(r.src, { kind: r.kind === 'conv' ? { video: 'mp4', gif: 'gif' }[r.media] || 'mp3' : { mp4clip: 'mp4', gifclip: 'gif' }[r.kind] || 'mp3', convert: r.kind === 'conv', item: it || (r.item ? { ...r.item } : null), title: r.from || undefined, in: r.in, out: r.out, speed: r.speed });
 }
 // Library rows -> play / add (files, or the clip / download as a file item)
 async function libAdd(rows, play) {
-  rows = rows.filter(r => r && !r.missing && r.kind !== 'playlist' && r.kind !== 'gifclip');     // GIFs aren't songs or videos
+  rows = rows.filter(r => r && !r.missing && r.kind !== 'playlist' && !isGifRow(r));     // GIFs aren't songs or videos
   if (!rows.length) return;
   const t = clipTargetTab(); if (t < 0) return;
   const tab = S.tabs[t];
@@ -5358,17 +5508,17 @@ for (const host of [$('#dlmBody'), $('#dlmGrid')]) host.addEventListener('contex
   if (r.kind === 'playlist') {
     en.push([sel.length > 1 ? `Open ${sel.length} in new tabs` : 'Open in new tab', () => openPlaylistFiles(sel.filter(x => x.kind === 'playlist'))]);
     en.push(['Share (.zip)…', async () => { const res = await P.plOpen(r.path); if (res && res.entries) shareOpenDlg(res.entries.map(x => (x.url ? { url: x.url, title: x.title, duration: x.duration } : { type: 'file', path: x.path, title: x.title, duration: x.duration })), r.title); }]);
-  } else if (!r.missing && r.kind === 'gifclip') {        // 2.9.4: a GIF opens in the computer's picture viewer
-    en.push(['Open', () => P.clipOpenFile(r.path)], null, [r.srcExists ? '✂ Clip again…  (same In/Out)' : '✂ Clip again…  (the original is gone)', () => clipAgain(r), !r.srcExists]);
+  } else if (!r.missing && isGifRow(r)) {        // 2.9.4: a GIF opens in the computer's picture viewer
+    en.push(['Open', () => P.clipOpenFile(r.path)], null, [r.kind === 'conv' ? (r.srcExists ? '⇄ Convert again…' : '⇄ Convert again…  (the original is gone)') : r.srcExists ? '✂ Clip again…  (same In/Out)' : '✂ Clip again…  (the original is gone)', () => clipAgain(r), !r.srcExists]);
     if (r.srcExists) en.push(['Show original', () => P.showInFolder(r.src)]);
     en.push(null, ['Rename…\tF2', () => libRename(r)]);
   } else if (!r.missing) {
     en.push(['Play', () => libAdd([r], true)], [`Add to "${tname}"${sel.length > 1 ? ` (${sel.length})` : ''}`, () => libAdd(sel, false)],
-      ['Add to new tab', async () => { const n = newTab(); renderList(); await addFilesToTab(sel.filter(x => !x.missing && x.kind !== 'playlist' && x.kind !== 'gifclip').map(x => x.path), n); }]);
+      ['Add to new tab', async () => { const n = newTab(); renderList(); await addFilesToTab(sel.filter(x => !x.missing && x.kind !== 'playlist' && !isGifRow(x)).map(x => x.path), n); }]);
     if (isClipRow(r)) {
-      en.push(null, [r.srcExists ? '✂ Clip again…  (same In/Out)' : '✂ Clip again…  (the original is gone)', () => clipAgain(r), !r.srcExists]);
+      en.push(null, [r.kind === 'conv' ? (r.srcExists ? '⇄ Convert again…' : '⇄ Convert again…  (the original is gone)') : r.srcExists ? '✂ Clip again…  (same In/Out)' : '✂ Clip again…  (the original is gone)', () => clipAgain(r), !r.srcExists]);
       if (r.srcExists) en.push(['Show original', () => P.showInFolder(r.src)]);
-      if (r.kind === 'mp4clip') en.push(['𝕏 Fix for X…', () => { $('#dlmDlg').close(); xFixOpen([r.path]); }]);
+      if (r.kind === 'mp4clip' || (r.kind === 'conv' && r.media === 'video')) en.push(['𝕏 Fix for X…', () => { $('#dlmDlg').close(); xFixOpen([r.path]); }]);
       en.push(null, ['Rename…\tF2', () => libRename(r)]);
     } else {
       const fake = { type: 'file', path: r.path, hasVideo: r.kind === 'video' };
@@ -5481,7 +5631,7 @@ async function setPaint() {
   clearTimeout(setPaintT);
   const opt = (sel, list, val) => { sel.innerHTML = list.map(([v, l, off]) => `<option value="${htmlEsc(String(v))}"${off ? ' disabled' : ''}>${htmlEsc(l)}</option>`).join(''); sel.value = String(val); };
   // General
-  $('#setStart').value = S.startMode; $('#setAskClose').checked = S.askCloseDl;
+  $('#setStart').value = S.startMode; $('#setAskClose').checked = S.askCloseDl; setXAcctSel();
   // Playback
   $('#setRemaining').checked = !!S.remaining; $('#setSkip').value = String(S.skipSecs); $('#setEq').checked = !!S.eq.on;
   // Downloads
@@ -5936,7 +6086,7 @@ function stateSnapshot() {
     tabs: S.tabs.map(t => ({ id: t.id, name: t.name, current: t.current >= 0 || !bootLast || t !== PT() ? t.current : t.items.indexOf(bootLast), src: t.src || undefined, items: t.items.map(({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at }) => ({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at })) })),
     tab: S.tab, playTab: S.playTab, vis: S.vis, volume: S.volume, muted: S.muted, shuffle: S.shuffle, repeat: S.repeat,
     showVideo: S.showVideo, showPlaylist: S.showPlaylist, plShade: S.plShade, vidShade: S.vidShade, remaining: S.remaining, plHeight: S.plHeight, visMode, eq: S.eq,
-    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, xPlay: S.xPlay, dlLimit: S.dlLimit, favs: S.favs, startMode: S.startMode, askCloseDl: S.askCloseDl, skipSecs: S.skipSecs, clipPreset: S.clipPreset, clipGif: S.clipGif, mp3q: S.mp3q, dlWarn: S.dlWarn, xq: S.xq, hist: S.hist, xhist: S.xhist
+    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, xPlay: S.xPlay, dlLimit: S.dlLimit, favs: S.favs, startMode: S.startMode, askCloseDl: S.askCloseDl, skipSecs: S.skipSecs, clipPreset: S.clipPreset, clipGif: S.clipGif, xAccount: S.xAccount, convPreset: S.convPreset, mp3q: S.mp3q, dlWarn: S.dlWarn, xq: S.xq, hist: S.hist, xhist: S.xhist
   };
 }
 function saveSoon() {
@@ -6013,6 +6163,8 @@ setInterval(() => { blink = !blink; }, 500);
     S.startMode = ['spot', 'top', 'none'].includes(st.startMode) ? st.startMode : 'spot';      // 2.9.2
     S.askCloseDl = st.askCloseDl !== false;
     S.clipPreset = [5, 10, 15, 20, 25, 30, 60].includes(st.clipPreset) ? st.clipPreset : 0;          // 2.9.4 CLIP: remembered
+    S.xAccount = ['free', 'premium'].includes(st.xAccount) ? st.xAccount : null;                     // 2.9.5: asked once
+    S.convPreset = ['forx', 'small', 'phone', 'best'].includes(st.convPreset) ? st.convPreset : 'forx';
     if (st.clipGif && typeof st.clipGif === 'object') S.clipGif = { w: +st.clipGif.w, fps: +st.clipGif.fps, loop: st.clipGif.loop !== false, colors: +st.clipGif.colors };
     S.skipSecs = [0, 5, 10, 15, 30].includes(st.skipSecs) ? st.skipSecs : 10;
     S.mp3q = ['best', '320', '192', '128'].includes(st.mp3q) ? st.mp3q : 'best';
@@ -6023,7 +6175,8 @@ setInterval(() => { blink = !blink; }, 500);
     if (st.lib && typeof st.lib === 'object') {
       const modes = {};      // 2.7: Classic / Preview per Library section
       if (st.lib.modes && typeof st.lib.modes === 'object') for (const [k, v] of Object.entries(st.lib.modes)) if (['all', 'video', 'audio', 'playlist', 'clips', 'skins'].includes(k) && (v === 'preview' || v === 'classic')) modes[k] = v;
-      S.lib = { w: Number(st.lib.w) || 0, h: Number(st.lib.h) || 0, view: st.lib.view === 'list' ? 'list' : 'grid', modes, tip: st.lib.tip ? 1 : 0 };
+      S.lib = { w: Number(st.lib.w) || 0, h: Number(st.lib.h) || 0, view: st.lib.view === 'list' ? 'list' : 'grid', modes, tip: st.lib.tip ? 1 : 0, qf: ['video', 'audio', 'gif', 'clips', 'conv'].includes(st.lib.qf) ? st.lib.qf : 'all' };
+      DLM.qf = S.lib.qf;
     }
     for (const k of HIST_KINDS) {
       const h = st[HK[k].state]; if (!h || typeof h !== 'object') continue;

@@ -7,11 +7,13 @@
 // (X Help Center + spec pages, Oct 2026.)
 const path = require('path');
 
-const BOX = { land: [1920, 1200], port: [1200, 1900] };
-const FREE_LEN = 140;                     // s (2:20)
-const FREE_SIZE = 512 * 1024 * 1024;      // bytes
-const MAX_FPS = 60;
-const MAX_MBPS = 24;                      // under X's ~25 Mb/s
+// 2.9.5: the numbers live in renderer/xlimits.js (one place for X's limits, shared with the windows)
+const { LIMITS } = require('./renderer/xlimits');
+const BOX = { land: LIMITS.video.landscape, port: LIMITS.video.portrait };
+const FREE_LEN = LIMITS.free.sec;         // s (2:20)
+const FREE_SIZE = LIMITS.free.bytes;      // bytes
+const MAX_FPS = LIMITS.video.fps;
+const MAX_MBPS = LIMITS.video.mbps;       // under X's ~25 Mb/s
 
 const even = (n) => Math.max(2, Math.floor(n / 2) * 2);
 const upper = (c) => String(c || '?').replace(/^h264$/, 'H.264').replace(/^hevc$/, 'HEVC').replace(/^av1$/, 'AV1').replace(/^vp9$/, 'VP9').replace(/^vp8$/, 'VP8').replace(/^aac$/, 'AAC').replace(/^opus$/, 'Opus').replace(/^mp3$/, 'MP3');

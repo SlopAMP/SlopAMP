@@ -1,6 +1,22 @@
 # Changelog
 
-## 2.9.4 — unreleased
+## 2.9.5 — unreleased
+
+CLIP editor, part 2. Still only the FFmpeg inside SlopAMP; the original is never changed and every convert is a new file.
+
+- **Convert tab in CLIP: convert a whole file, no trimming.** Turn on **Convert the whole file** (or pick a preset) and Save becomes **⇄ Convert**: the whole video or song as MP3, MP4 or GIF, in Downloads\SlopAMP\Converted, with the same line above Save (what you'll get, RE-ENCODE, about how big). Setting In / Out, a length preset or dragging on the wave switches back to clipping.
+  - MP4 presets: **For X** (H.264 + AAC, fitted to X's 1920×1200 / 1200×1900, up to 60 fps), **Small** (720p, smaller), **Phone-friendly** (up to 1080p, 30 fps), **Best quality** (keeps size and frame rate, high bitrate). Size (Keep / Fit X / 1080p / 720p / 480p), Frame rate (Keep / 60 / 30) and Quality can be changed; it never upscales. The preset used last is remembered.
+  - MP3: 320, 192 or 128 kb/s. GIF: the same settings as GIF clips.
+  - **Fit under** 10 / 25 / 50 MB or the X limit: SlopAMP aims just under it (if it must, at a lower frame rate or a smaller picture) and tries once more lower if the file still comes out too big; if it's still over, the note says so.
+  - Shape, Sound and Speed apply to a converted file too.
+  - Library → right-click a converted file → **Convert again…**
+- **For X knows your X account.** The first time you use For X, SlopAMP asks once whether your X account is **Free** or **Premium** and remembers it (Settings → YouTube & X → My X account to change it). Free: up to 2:20 and 512 MB. Premium: up to 4 hours and 16 GB on the web and iPhone, 10 minutes in X's Android app.
+- **The For X bar.** When a video is over the limit, an amber bar above Save says exactly by how much ("2:30 is 0:10 over the 2:20 X allows on Free") with a one-click fix: **Trim to 2:20** (or 10:00 for Android) or **Lower the quality to fit**. It shows for For X converts and for MP4 clips (it replaces 2.9.4's 2:20 note). GIFs get their own: over 15 MB (X on the web) or 5 MB (X's phone apps), with **Trim to fit** and **Make it smaller**. It never stops you saving.
+- **X's limits live in one place** (src/renderer/xlimits.js): CLIP, Convert, Fix for X and the X tags all read them, so a change by X is one edit.
+- **Library quick filters.** ALL has All · Video · Audio · GIFs · Clips · Converted, with counts (counted once per refresh, so big libraries stay quick). Video and Audio include clips and converted files of that kind. The one you pick is remembered. CLIPS gets a **Converted** chip next to GIFs.
+- Tests: `tests/xlimits-295.js` (the limit math, no Electron), `tests/clip-295.js`.
+
+## 2.9.4 — released Nov 9, 2026
 
 CLIP editor, part 1. Everything uses the FFmpeg already inside SlopAMP; the original file is never changed and every save is a new file.
 

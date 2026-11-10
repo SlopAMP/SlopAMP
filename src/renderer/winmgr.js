@@ -381,7 +381,7 @@
     const ver = WM.$('#verLabel');
     if (ver && WM.info.version) { ver.textContent = `v${WM.info.version}`; ver.title = `SlopAMP ${WM.info.version}`; }
     // skins.js (put the saved skin on before anything shows), then the player itself
-    for (const src of ['skins.js', 'app.js']) {
+    for (const src of ['skins.js', 'xlimits.js', 'app.js']) {      // xlimits.js: X's limits (2.9.5)
       await new Promise((res) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = res; document.body.appendChild(s); });
     }
   })();
