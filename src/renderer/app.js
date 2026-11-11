@@ -4853,14 +4853,19 @@ function clipPreset(L, back) {
 // (2.9.8: the clicks are handled once for the whole row, with your own lengths: see clipOwnRender)
 
 // ---- Shape (2A–2C): one box for the whole clip, in the video's own pixels; drawn on the picture in white / black
-function clipShapeBox(ratio, pos, keep) {
+// keep: the box to keep (only when it's the same shape and a whole box); up: "upscaled" for a fresh box.
+// 2.9.8 fix: switching straight from one shape to another (9:16 → 1:1) passed { ratio: <the new shape>, up } as `keep`,
+// so the new box took that object's missing size and place (NaN) until Original reset it. Now a new shape always
+// starts from a fresh, centred box, the same as Original and then that shape.
+function clipShapeBox(ratio, pos, keep, up) {
   const i = CL.info, W = i.width & ~1, H = i.height & ~1, r = CLIP_RATIOS[ratio];
+  if (keep && !(keep.ratio === ratio && [keep.x, keep.y, keep.w, keep.h].every(Number.isFinite))) { up = up != null ? up : !!keep.up; keep = null; }
   let w, h;
   if (keep && keep.ratio === ratio) { w = keep.w; h = keep.h; }
   else if (W / H > r) { h = H; w = Math.min(W, Math.round(H * r / 2) * 2); } else { w = W; h = Math.min(H, Math.round(W / r / 2) * 2); }
   const x = pos === 'l' ? 0 : pos === 'r' ? W - w : keep && keep.ratio === ratio && pos == null ? keep.x : Math.round((W - w) / 4) * 2;
   const y = keep && keep.ratio === ratio ? keep.y : Math.round((H - h) / 4) * 2;
-  return { ratio, x: Math.max(0, Math.min(x, W - w)), y: Math.max(0, Math.min(y, H - h)), w, h, up: keep ? !!keep.up : false };
+  return { ratio, x: Math.max(0, Math.min(x, W - w)), y: Math.max(0, Math.min(y, H - h)), w, h, up: keep ? !!keep.up : !!up };
 }
 function clipRenderShape() {
   const i = CL.info; if (!i) return;
@@ -4925,7 +4930,8 @@ WM.wins.clip && new ResizeObserver(() => { if (clipVisible && CL.shape) clipCrop
 clipMedia.addEventListener('loadedmetadata', () => clipCropDraw());
 for (const b of $('#clipRatio').children) b.onclick = () => {
   const r = b.dataset.r;
-  CL.shape = r === 'orig' ? null : clipShapeBox(r, 'c', CL.shape && CL.shape.ratio === r ? CL.shape : (CL.shape ? { ratio: r, up: CL.shape.up } : null));
+  // a different shape: exactly what Original then that shape gives (a fresh, centred box, as filmed); the same shape keeps its box
+  CL.shape = r === 'orig' ? null : clipShapeBox(r, 'c', CL.shape && CL.shape.ratio === r ? CL.shape : null, false);
   clipRender();
 };
 for (const b of $('#clipBoxPos').children) b.onclick = () => { if (!CL.shape) return; const s = CL.shape, W = CL.info.width & ~1; s.x = b.dataset.p === 'l' ? 0 : b.dataset.p === 'r' ? W - s.w : Math.round((W - s.w) / 4) * 2; clipRender(); };

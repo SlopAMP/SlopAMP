@@ -119,6 +119,40 @@ const vsize = (f) => { const r = execFileSync(FP, ['-v', 'error', '-select_strea
   ok(await ev(() => clipCutEff() === 'exact'), 'Fast cut is off while the picture is fitted');
   await ev(() => { WM.$('#clipShapeFit [data-v=crop]').click(); [...WM.$('#clipRatio').children].find(b => b.dataset.r === 'orig').click(); });
   ok(await ev(() => !clipShapeEff()), 'Original: no shape');
+  // 2.9.8 smoke-test fix: straight from one shape to another works exactly like Original → that shape, in every
+  // direction, with each Fit choice (it used to keep a box with no size or place: "undefined×undefined")
+  {
+    const R = ['16:9', '9:16', '1:1', '4:5'], bad = [];
+    const pick = (r) => ev((r) => { [...WM.$('#clipRatio').children].find(b => b.dataset.r === r).click(); return JSON.stringify({ s: CL.shape, e: clipShapeEff(), o: WM.$('#clipFmtInfo').textContent.replace(/\s+/g, ' ').replace(/ ≈ .*$/, ''), crop: WM.$('#clipCrop').classList.contains('hidden'), box: WM.$('#clipCropBox').style.width }); }, r);
+    for (const fit of ['crop', 'bars', 'blur']) {
+      await click(`#clipShapeFit [data-v=${fit}]`);
+      let n = 0;
+      for (const a2 of R) for (const b2 of R) {
+        if (a2 === b2) continue;
+        await pick('orig'); await pick(a2);
+        const direct = await pick(b2);
+        await pick('orig'); const fresh = await pick(b2);
+        n++;
+        if (direct !== fresh || /NaN|undefined|"[xywh]":null/.test(direct)) bad.push({ fit, from: a2, to: b2, direct, fresh });
+      }
+      ok(!bad.filter(x => x.fit === fit).length, `Fit ${fit}: straight from any shape to any other (${n} pairs, both directions) = Original then that shape ${JSON.stringify(bad.filter(x => x.fit === fit)[0] || '')}`);
+    }
+    // a moved / upscaled box doesn't leak into the next shape either
+    await click('#clipShapeFit [data-v=crop]'); await pick('orig'); await pick('9:16');
+    await ev(() => { WM.$('#clipBoxPos [data-p=l]').click(); WM.$('#clipShapeOut [data-u="1"]').click(); });
+    const moved = await pick('1:1'); await pick('orig'); const fresh = await pick('1:1');
+    ok(moved === fresh, 'a 9:16 box moved Left and upscaled, then 1:1: the same fresh centred box as from Original');
+    await pick('9:16'); await ev(() => { CL.shape.w = 120; CL.shape.h = 214; CL.shape.x = 0; clipRender(); });     // a smaller box, moved left
+    const keep = await ev(() => { [...WM.$('#clipRatio').children].find(b => b.dataset.r === '9:16').click(); return [CL.shape.w, CL.shape.h, CL.shape.x]; });
+    ok(JSON.stringify(keep) === '[120,214,260]', `clicking the shape that's already on keeps its box size and centres it, as in 2.9.4 (${JSON.stringify(keep)})`);
+    // the captain's case, saved: 9:16 Shorts / TikTok, then straight to 1:1
+    await pick('orig'); await pick('9:16'); await pick('1:1');
+    ok(/^MP4 · 360×360 \(1:1\) · H\.264 \+ AAC · RE-ENCODE/.test(await outLine()), `9:16 → 1:1: "${await outLine()}"`);
+    r = await save(); f = r && r.ok && r.files[0];
+    ok(f && vOf(f.path).width === 360 && vOf(f.path).height === 360, `…saves a 360×360 clip (${f && `${vOf(f.path).width}×${vOf(f.path).height}`})`);
+    await (await cw()).screenshot({ path: `${O}/2-direct-switch.png` });
+    await pick('orig');
+  }
   // Join's Fit: Blurred fill (a square still in a 16:9 join)
   await tab('join');
   await ev(async () => { CL.in = 1; CL.out = 3; await joinAddSection(); });
