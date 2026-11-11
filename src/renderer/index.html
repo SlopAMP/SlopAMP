@@ -220,6 +220,7 @@
         <div class="ed-sec clip-top">
           <div class="clip-prev hidden" id="clipPrev"><video id="clipVideo" playsinline preload="auto"></video>
             <div class="clip-crop hidden" id="clipCrop"><div class="cc-box" id="clipCropBox"><span class="cc-lab" id="clipCropLab"></span><i class="cc-g1"></i><i class="cc-g2"></i><b data-h="nw"></b><b data-h="n"></b><b data-h="ne"></b><b data-h="e"></b><b data-h="se"></b><b data-h="s"></b><b data-h="sw"></b><b data-h="w"></b></div></div>
+            <div class="clip-cap-ov hidden" id="clipCapOv"><span id="clipCapOvT"></span></div><img class="clip-join-ov hidden" id="clipJoinOv" alt="" draggable="false">
             <span class="clip-badge hidden" id="clipSpeedBadge"></span><span class="clip-prev-t" id="clipPrevT"></span><span class="clip-prev-msg hidden" id="clipPrevMsg"></span></div>
           <div class="clip-film hidden" id="clipFilm"></div>
           <div class="ed-wave clip-wave" id="clipWave" title="Click to move the preview there · drag the green edges (or the clip) · drag on the wave for a new clip"><canvas id="clipWaveC"></canvas><div class="ed-wave-msg" id="clipWaveMsg"></div></div>
@@ -239,7 +240,7 @@
             <span class="clip-zoom"><span class="dim" id="clipZoomInfo"></span><span class="dim">zoom</span><button type="button" class="sb dim" id="clipZoomOut" title="Show more of the file">&minus;</button><button type="button" class="sb dim" id="clipZoomIn" title="Zoom in around the clip">+</button><button type="button" class="sb dim" id="clipFit" title="Show the whole file">Fit</button></span>
           </div>
         </div>
-        <div class="clip-tabs" id="clipTabs"><button type="button" data-t="trim">&#9986; Trim</button><button type="button" data-t="shape">&#9635; Shape</button><button type="button" data-t="sound">&#128266; Sound</button><button type="button" data-t="speed">&#9193; Speed</button><button type="button" data-t="convert">&#8644; Convert</button><button type="button" data-t="captions" class="hidden">CC Captions</button><button type="button" data-t="join" class="hidden">&#9636; Join</button><button type="button" data-t="shots">&#128247; Shots</button></div>
+        <div class="clip-tabs" id="clipTabs"><button type="button" data-t="trim">&#9986; Trim</button><button type="button" data-t="shape">&#9635; Shape</button><button type="button" data-t="sound">&#128266; Sound</button><button type="button" data-t="speed">&#9193; Speed</button><button type="button" data-t="convert">&#8644; Convert</button><button type="button" data-t="captions"><span class="cc-ico">CC</span> Captions</button><button type="button" data-t="join">&#9636; Join</button><button type="button" data-t="shots">&#128247; Shots</button></div>
         <div class="ed-sec clip-pane" id="clipPaneTrim">
           <div class="ed-row dim clip-hint">drag the green edges or the clip itself &middot; drag on the wave for a new range &middot; &larr; &rarr; move the edge you touched last by 0.1 s, Shift = 1 s &middot; Space plays the clip &middot; a <span class="clip-dot"></span> marks a tab that&#8217;s in use</div>
           <div class="ed-row clip-opts" id="clipOptsMp3">
@@ -294,6 +295,33 @@
           <div class="ed-row" id="clipXAcctRow"><span class="clip-l2">X account</span><b id="clipXAcct"></b><button type="button" class="ed-link" id="clipXAcctChange">change</button></div>
           <div class="ed-row dim clip-hint" id="clipCvHint">Shape, Sound and Speed apply to the converted file too (a dot marks a tab in use). The original is never changed.</div>
         </div>
+        <!-- 2.9.7 (CLIP part 3): Captions (7A–7E) -->
+        <div class="ed-sec clip-pane hidden" id="clipPaneCaptions">
+          <div class="ed-row"><label class="clip-tg-l"><input type="checkbox" id="clipCapOn" class="clip-tg"> <b>Burn in</b></label>
+            <select id="clipCapSrc" class="clip-sel" title="Where the lines come from"></select>
+            <span class="clip-l2">Position</span><div class="clip-seg" id="clipCapPos"><button type="button" data-v="bottom">Bottom</button><button type="button" data-v="middle">Middle</button></div>
+            <span class="clip-l2">Size</span><div class="clip-seg" id="clipCapSize"><button type="button" data-v="s">S</button><button type="button" data-v="m">M</button><button type="button" data-v="l">L</button></div></div>
+          <div class="ed-row clip-cap-msg" id="clipCapMsg"></div>
+          <div class="ed-row clip-cap-tools"><button type="button" class="sb dim" id="clipCapAdd">+ Add a line</button><button type="button" class="sb dim" id="clipCapPaste">Paste lines&#8230;</button><button type="button" class="sb dim" id="clipCapLoad">Load .srt / .vtt&#8230;</button>
+            <label class="ed-ck"><input type="checkbox" id="clipCapSrt"> Also save the captions as .srt next to the clip</label></div>
+          <div class="clip-cap-paste hidden" id="clipCapPasteBox"><textarea id="clipCapPasteT" rows="4" spellcheck="false" placeholder="One caption per line (or paste a whole .srt / .vtt). Lines without times start at the preview spot, 3 s each."></textarea>
+            <div class="ed-row"><button type="button" class="sb" id="clipCapPasteGo">Add the lines</button><button type="button" class="sb dim" id="clipCapPasteX">Cancel</button></div></div>
+          <div class="clip-cap-list" id="clipCapList"></div>
+          <div class="ed-row dim clip-hint" id="clipCapHint">Only the lines between In and Out &middot; click a time to jump there &middot; times follow Speed &middot; bold white with a black outline &middot; nothing is made up: SlopAMP doesn&#8217;t transcribe speech</div>
+        </div>
+        <!-- 2.9.7 (CLIP part 3): Join v1 (6A–6I) -->
+        <div class="ed-sec clip-pane hidden" id="clipPaneJoin">
+          <div class="ed-row"><label class="clip-tg-l"><input type="checkbox" id="clipJoinOn" class="clip-tg"> <b>Save the join list</b></label><span class="dim" id="clipJoinCount"></span>
+            <span class="ed-sp"></span><button type="button" class="sb dim" id="clipJoinPlay" title="Preview the whole list in order">&#9654; Play all</button><button type="button" class="sb dim" id="clipJoinClear">Clear</button></div>
+          <div class="clip-jcards" id="clipJoinCards"></div>
+          <div class="clip-jstills hidden" id="clipJoinStills"></div>
+          <div class="ed-row clip-jsel hidden" id="clipJoinSel"><span id="clipJoinSelT"></span><span class="clip-l2">Length</span><div class="clip-seg" id="clipJoinDur"></div><button type="button" class="sb dim hidden" id="clipJoinEdit">Edit card&#8230;</button></div>
+          <div class="ed-row"><span class="clip-l2">Size</span><select id="clipJoinSize" class="clip-sel"><option value="first"></option><option value="1080">1920&times;1080 (1080p)</option><option value="720">1280&times;720 (720p)</option><option value="916">1080&times;1920 (9:16)</option></select>
+            <span class="clip-l2">Fit</span><div class="clip-seg" id="clipJoinFit"><button type="button" data-v="letterbox">Letterbox</button><button type="button" data-v="crop">Crop to fill</button></div></div>
+          <div class="ed-row"><span>Under stills &amp; cards</span><div class="clip-seg" id="clipJoinUnder"><button type="button" data-v="silence">Silence</button><button type="button" data-v="keep">Keep the song going</button></div>
+            <span class="clip-l2">Save</span><div class="clip-seg" id="clipJoinMode"><button type="button" data-v="join">Join in order</button><button type="button" data-v="each">Save each</button></div></div>
+          <div class="ed-row dim clip-hint">Mark In / Out, then <b>+ Section</b> (or <kbd>J</kbd>) &middot; drag the cards to change the order &middot; &times; removes &middot; a still or title card is a picture on screen for a few seconds &middot; Shape, Sound, Speed and Captions apply to the whole joined video &middot; joining always re-encodes (one size, one frame rate); &#8220;Save each&#8221; saves the sections as separate clips (Fast cut OK)</div>
+        </div>
         <div class="clip-pane hidden" id="clipPaneShots">
         <div class="ed-sec clip-shots hidden" id="clipShots">
           <div class="ed-h">SHOTS<span class="clip-opt">optional &middot; full-size frames for references</span><span class="r"><span class="dim" id="clipShotCount"></span><button type="button" class="sb dim" id="clipShotAdd" title="Save the frame the preview shows, full size (G, while CLIP is the active window)">+ Shot <kbd>G</kbd></button><button type="button" class="sb dim" id="clipBurst" title="5 frames across the clip; keep the good ones">Burst &times;5</button><button type="button" class="sb dim" id="clipShotToggle" title="Show / hide the shots">&#9662;</button></span></div>
@@ -309,6 +337,18 @@
           </div>
         </div>
         </div>
+      </div>
+      <!-- 2.9.7: the title card editor (6D): SlopAMP draws the card itself and saves it as a picture -->
+      <div class="clip-tcard hidden" id="clipTCard">
+        <div class="ed-h">TITLE CARD</div>
+        <div class="ed-row"><span class="clip-l2">Text</span><input type="text" id="tcText" maxlength="60" spellcheck="false" placeholder="ROAD TRIP 2026"></div>
+        <div class="ed-row"><span class="clip-l2">2nd line</span><input type="text" id="tcLine2" maxlength="80" spellcheck="false" placeholder="optional, smaller"></div>
+        <div class="ed-row"><span class="clip-l2">Font</span><select id="tcFont" class="clip-sel"></select><div class="clip-seg" id="tcSize"><button type="button" data-v="s">S</button><button type="button" data-v="m">M</button><button type="button" data-v="l">L</button></div><label class="ed-ck"><input type="checkbox" id="tcBold"> Bold</label></div>
+        <div class="ed-row"><span class="clip-l2">Colour</span><div class="tc-cols" id="tcCols"></div></div>
+        <div class="ed-row"><span class="clip-l2">Length</span><div class="clip-seg" id="tcDur"><button type="button" data-v="2">2 s</button><button type="button" data-v="3">3 s</button><button type="button" data-v="5">5 s</button></div><label class="ed-ck"><input type="checkbox" id="tcFade"> Fade in / out</label></div>
+        <canvas id="tcCanvas" width="320" height="180"></canvas>
+        <div class="dim clip-hint">Drawn by SlopAMP and saved as a picture, then used like a still (no font problems in FFmpeg).</div>
+        <div class="ed-row tc-btns"><span class="ed-sp"></span><button type="button" class="sb dim" id="tcCancel">Cancel</button><button type="button" class="sb go" id="tcOk">Add</button></div>
       </div>
       <div class="clip-xbar hidden" id="clipXBar"><span class="xb-ico">&#9888;</span><span class="xb-t" id="clipXBarT"></span><span class="xb-b" id="clipXBarB"></span></div>
       <div class="clip-out" id="clipOutLine"><span id="clipFmtInfo"></span></div>

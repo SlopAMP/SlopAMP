@@ -1,6 +1,6 @@
 'use strict';
 // X's limits (2.9.5): the ONE place SlopAMP keeps them. X changes these now and then: edit the numbers here and
-// everything follows (CLIP's For X bar, Convert's For X preset, the Library's X tags, Fix for X's warnings).
+// everything follows (CLIP's For X bar, Convert's For X preset, the playlist's and Library's X tags, Fix for X's warnings).
 // Loaded as a plain script in the windows (window.XLIMITS) and with require() in the main process (xready.js).
 // Sources: X Help Center "How to share videos / GIFs" + X Premium pages (as commonly cited, Nov 2026).
 (function (root) {
@@ -34,6 +34,9 @@
     if (L.androidSec && sec > L.androidSec + 0.05 && sec <= L.sec + 0.05) out.push({ what: 'android', limit: L.androidSec, value: sec, over: sec - L.androidSec, text: `${mmss(sec)} is ${mmss(sec - L.androidSec)} over the ${mmss(L.androidSec)} X's Android app takes (fine on the web and iPhone)` });
     return out;
   }
+  // 2.9.7: what keeps a video off X for this account: length and size only. Premium's 10-minute Android-app note is
+  // left out (it posts fine on the web and iPhone); only CLIP's For X bar shows that one. Used by the X tags and Fix for X.
+  const checkPost = (account, sec, bytes) => checkVideo(account, sec, bytes).filter(x => x.what !== 'android');
   // GIFs: over 15 MB X won't take it at all; over 5 MB the phone apps won't.
   function checkGif(bytes) {
     const G = LIMITS.gif;
@@ -46,6 +49,6 @@
   // The video bitrate (kb/s) that lands a file of `sec` seconds under `bytes` (3% spare, audio included)
   const kbpsForBytes = (bytes, sec, audioKbps) => Math.max(150, Math.floor((bytes * 0.97 * 8 / 1000) / Math.max(0.1, sec) - (audioKbps || 0)));
 
-  const api = { LIMITS, checkVideo, checkGif, secForBytes, kbpsForBytes, mmss, size, account: acct };
+  const api = { LIMITS, checkVideo, checkPost, checkGif, secForBytes, kbpsForBytes, mmss, size, account: acct };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.XLIMITS = api;
 })(typeof window !== 'undefined' ? window : globalThis);

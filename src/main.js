@@ -879,7 +879,7 @@ function registerIpc() {
   ipcMain.on('clip:open-file', (_e, p) => { if (clipper.inClipDir(p) && fs.existsSync(p)) shell.openPath(p); });
   // ---- 2.5 #22: X-ready MP4s (clip.js "X-ready", xready.js)
   ipcMain.handle('x:status', (_e, files) => clipper.xStatus(files));
-  ipcMain.handle('x:plan', (_e, f) => (typeof f === 'string' ? clipper.xPlan(f) : { ok: false }));
+  ipcMain.handle('x:plan', (_e, f, acct) => (typeof f === 'string' ? clipper.xPlan(f, acct === 'premium' ? 'premium' : 'free') : { ok: false }));
   ipcMain.handle('x:fix', (_e, o) => clipper.xFix(o).catch((e) => { log('Fix for X failed', e); return { ok: false, error: String(e.message || e) }; }));
   ipcMain.on('x:cancel', (_e, job) => clipper.cancel(job));
   ipcMain.handle('clip:delete', (_e, paths) => clipper.remove(paths));
@@ -889,6 +889,19 @@ function registerIpc() {
       filters: [{ name: 'Songs and videos', extensions: ['mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus', 'mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'wmv', 'flv', 'ts', 'mpg', 'mpeg'] }, { name: 'All files', extensions: ['*'] }] });
     return r.canceled ? null : r.filePaths[0];
   });
+  // 2.9.7 (CLIP part 3): Join, Captions from YouTube (yt-dlp, on demand), a picture for a still, a clip's saved extras
+  ipcMain.handle('clip:join', (_e, o) => clipper.joinSave(o).catch((e) => { log('join failed', e); return { ok: false, error: 'Couldn’t join the video.' }; }));
+  ipcMain.handle('clip:subs-youtube', async (_e, url) => {
+    if (!downloader || !downloader.available()) return { ok: false, error: 'The downloader isn’t included in this copy of SlopAMP.' };
+    try { return await downloader.fetchSubs(url, path.join(require('os').tmpdir(), `slopamp-subs-${process.pid}`)); } catch (e) { log('subs fetch failed', e); return { ok: false, error: 'Couldn’t get the subtitles.' }; }
+  });
+  ipcMain.handle('clip:pick-image', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Pick a picture for a still', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    return { path: r.filePaths[0], url: fileUrl(r.filePaths[0]) };
+  });
+  ipcMain.handle('clip:image-url', (_e, p) => (typeof p === 'string' && /\.(png|jpe?g|webp|bmp)$/i.test(p) && fs.existsSync(p) ? fileUrl(p) : null));
+  ipcMain.handle('clip:entry', (_e, p) => (typeof p === 'string' ? clipper.entry(p) : null));
   // shots (SLOP's LOOK, in CLIP since 2.3): o = { file, title, … }
   for (const [ch, fn] of [['clip:shots', 'shots'], ['clip:shot-add', 'shotAdd'], ['clip:shot-set', 'shotSet'], ['clip:shot-del', 'shotDel'], ['clip:shot-burst', 'shotBurst'], ['clip:shot-keep', 'shotKeep']]) {
     ipcMain.handle(ch, (_e, o) => (o && typeof o === 'object' && typeof o.file === 'string' ? clipper[fn](o).catch((e) => { log(`${ch} failed`, e); return { error: 'That didn’t work.' }; }) : { error: 'No file.' }));

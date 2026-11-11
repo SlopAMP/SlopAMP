@@ -119,10 +119,15 @@ contextBridge.exposeInMainWorld('phosphor', {
   clipLoudness: (o) => ipcRenderer.invoke('clip:loudness', o),          // 2.9.4
   clipGifEstimate: (o) => ipcRenderer.invoke('clip:gif-estimate', o),
   clipOpenFile: (p) => ipcRenderer.send('clip:open-file', p),
+  clipJoin: (o) => ipcRenderer.invoke('clip:join', o),                       // 2.9.7: Join v1
+  clipSubsYouTube: (url) => ipcRenderer.invoke('clip:subs-youtube', url),    // 2.9.7: Captions from YouTube (yt-dlp)
+  clipPickImage: () => ipcRenderer.invoke('clip:pick-image'),
+  clipImageUrl: (p) => ipcRenderer.invoke('clip:image-url', p),
+  clipEntry: (p) => ipcRenderer.invoke('clip:entry', p),
   onClip: (cb) => ipcRenderer.on('clip:event', (_e, ev) => cb(ev)),
   // 2.5 #22: X-ready MP4s
   xStatus: (files) => ipcRenderer.invoke('x:status', files),
-  xPlan: (f) => ipcRenderer.invoke('x:plan', f),
+  xPlan: (f, acct) => ipcRenderer.invoke('x:plan', f, acct),      // 2.9.7: acct = the saved X account
   xFix: (o) => ipcRenderer.invoke('x:fix', o),
   xCancel: (job) => ipcRenderer.send('x:cancel', job),
   clipShots: (o) => ipcRenderer.invoke('clip:shots', o),          // SHOTS (SLOP's LOOK, in CLIP)

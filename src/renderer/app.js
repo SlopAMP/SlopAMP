@@ -40,6 +40,8 @@ const S = {
   clipGif: null,       // 2.9.4 CLIP: GIF width / fps / loop / colours (null: 480, 15, loops, 256)
   xAccount: null,      // 2.9.5: 'free' | 'premium' (null: not asked yet; counts as Free)
   convPreset: 'forx',  // 2.9.5 CLIP → Convert: the preset used last
+  clipCap: null,       // 2.9.7 CLIP → Captions: { pos, size, srt } (one style; what was picked last)
+  clipCard: null,      // 2.9.7 CLIP → Join: the last title card's { bg, fade }
   mp3q: 'best',        // 2.9.2 Settings → Downloads → MP3 quality: best | 320 | 192 | 128
   dlWarn: 90,          // 2.9.2 Settings → Downloads → Warn me at (% of the limit; 0 = never)
   xq: 720,             // 2.9.2 Settings → YouTube & X → Streaming quality (480 | 720 | 1080)
@@ -2860,7 +2862,8 @@ P.onDl((ev) => {
     updateDlInfo();
     if (ev.x !== undefined) XS.set(ev.file, ev.x || null); else XS.delete(ev.file);   // 2.5 (#22): checked for X after the download
     xsRecheck();
-    const xn = ev.x && !ev.x.ready ? ` — not X-ready (${ev.x.why})` : ev.xAudioFixed ? ' — sound changed to AAC: X-ready' : '';
+    const xo = ev.x ? xOver(ev.x) : [];              // 2.9.7: over the saved X account's length / size
+    const xn = (ev.x && !ev.x.ready ? ` — not X-ready (${ev.x.why})` : ev.xAudioFixed ? ' — sound changed to AAC: X-ready' : '') + (xo.length ? ` — ${xo[0]} (X account: ${xAcctName()})` : '');
     showDlBar({ text: `✓ Saved: ${title}${note}${xn}`, pct: 100, buttons: [['Show in folder', () => P.showInFolder(ev.file)], ...(ev.x && !ev.x.ready ? [['𝕏 Fix for X', () => xFixOpen([ev.file])]] : [])], hideAfter: ev.x && !ev.x.ready ? 15000 : 8000 });
   } else if (ev.status === 'error') {
     if (ev.live && item) markLive(item, true);
@@ -4215,7 +4218,9 @@ const CL = { file: null, info: null, item: null, srcTitle: '', kind: 'mp3', in: 
   // 2.9.4 tools: reset for each new file (the length preset and the GIF settings are remembered in S)
   tab: 'trim', shape: null, even: false, vol: 0, speed: 1, loud: null, loudT: 0, gifEst: null, gifT: 0,
   // 2.9.5 (CLIP part 2): Convert the whole file (no trimming), its settings, and "fit under" a size ('off' | 'x' | MB)
-  whole: false, cv: null, fitSel: 'off' };
+  whole: false, cv: null, fitSel: 'off',
+  // 2.9.7 (CLIP part 3): Captions and the Join list (both start fresh with each file; Clip again brings them back)
+  cap: null, join: null, pa: null };
 const CV_PRESETS = { forx: { size: 'x', fps: 60, q: 1 }, small: { size: '720', fps: 0, q: 0.6 }, phone: { size: '1080', fps: 30, q: 1 }, best: { size: 'keep', fps: 0, q: 2 } };
 const CV_NAMES = { forx: 'For X', small: 'small', phone: 'phone', best: 'best', custom: 'converted' };
 const XL = window.XLIMITS;      // X's limits (xlimits.js): the one place they're kept
@@ -4251,8 +4256,14 @@ $('#clipMinBtn').onclick = () => { clipShade = !clipShade; syncWindows(); };
 // ------------------------------------------------------------------ X-ready MP4s (2.5, idea #22)
 // Video files get an "X ✓" / "not for X" tag (playlist and Library): H.264 + AAC within X's limits (xready.js).
 // "𝕏 Fix for X…" (right-click) makes "<name> (X).mp4" next to the original, which is kept: H.264 + AAC, yuv420p,
-// fitted to 1920×1200 / 1200×1900, ≤ 60 fps, +faststart, with CLIP's encoders. Over 2:20 or 512 MB it warns
-// (free X accounts) and offers to trim the video in CLIP first.
+// fitted to 1920×1200 / 1200×1900, ≤ 60 fps, +faststart, with CLIP's encoders. Over the account's length or size it
+// warns and offers to trim the video in CLIP first.
+// 2.9.7: the length / size part follows the saved X account (Settings → YouTube & X; Free until one is saved), with
+// the numbers from xlimits.js: "X ✓" = X takes the file as it is AND it's within that account's length and size.
+// Premium's 10-minute Android-app note stays in CLIP's For X bar only (never in the tags).
+const xOver = (x) => (x ? XL.checkPost(xAcct(), x.duration || 0, x.size || 0).map(o => o.text) : []);
+const xAcctName = () => (S.xAccount ? XL.LIMITS[xAcct()].name : 'Free, not set yet');
+const xTagOk = (x) => !!(x && x.ready && !xOver(x).length);
 const xVideoFile = (it) => (!it ? null : it.type === 'file' ? (it.hasVideo && !it.missing ? it.path : null) : (isWeb(it) && it.localVideo) || null);
 function xOf(f) {
   if (!f) return undefined;
@@ -4288,11 +4299,19 @@ function xsRecheck() {
   return xsRechecking;
 }
 function xTag(x, cls) {
-  const s = document.createElement('span');
-  s.className = `${cls} ${x.ready ? 'xok' : 'xno'}`;
-  s.textContent = x.ready ? 'X ✓' : 'not for X';
-  s.title = x.ready ? `Posts to X as it is: ${x.line}` : `X won't take it as it is (${x.why}): ${x.line}. Right-click → Fix for X`;
+  const s = document.createElement('span'), ok = xTagOk(x), over = xOver(x), cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  s.className = `${cls} ${ok ? 'xok' : 'xno'}`;
+  s.textContent = ok ? 'X ✓' : 'not for X';
+  s.title = ok ? `Posts to X as it is: ${x.line} (X account: ${xAcctName()})`
+    : x.ready ? `${over.map(cap).join('. ')} (X account: ${xAcctName()}). Trim it in CLIP (right-click → Clip video…).`
+      : `X won't take it as it is (${x.why}): ${x.line}. Right-click → Fix for X${over.length ? `\n${over.map(cap).join('. ')} (X account: ${xAcctName()}).` : ''}`;
   return s;
+}
+// the account changed (asked, or Settings): the tags and CLIP follow at once
+function xAcctChanged() {
+  renderList();
+  if ($('#dlmDlg').open && !skinMode()) dlmRender();
+  if (CL.info) clipRender();
 }
 const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
 async function xFixOpen(files) {
@@ -4301,10 +4320,12 @@ async function xFixOpen(files) {
   if (XJ.active) { toast('Fix for X is already running: wait for it to finish (or cancel it).'); return; }
   showBusy(true);
   const plans = [];
-  for (const f of files) plans.push(await P.xPlan(f));
+  for (const f of files) plans.push(await P.xPlan(f, xAcct()));      // 2.9.7: the saved X account
   showBusy(false);
   const bad = plans.filter(p => !p.ok), ready = plans.filter(p => p.ok && p.x.ready), todo = plans.filter(p => p.ok && !p.x.ready);
   if (!todo.length) {
+    const r1 = ready.length === 1 && !bad.length ? ready[0] : null;
+    if (r1 && r1.x.over.length) { toast(`"${r1.title}" is already X-ready (${r1.x.line}), but ${r1.x.over.join(' and ')} (X account: ${xAcctName()}). Trim it in CLIP (right-click → Clip video…).`, 8000); return; }
     toast(ready.length === 1 && !bad.length ? `"${ready[0].title}" is already X-ready (${ready[0].x.line}): nothing to do.`
       : ready.length && !bad.length ? `All ${ready.length} are already X-ready: nothing to do.` : `Can't fix that for X: ${bad[0] ? bad[0].error : 'unknown error'}`, 5000);
     return;
@@ -4319,10 +4340,10 @@ async function xFixOpen(files) {
   $('#xfOut').innerHTML = one ? `Saved as: <b>${esc(one.out.split(/[\\/]/).pop())}</b> next to the original (kept)` : 'Each saved as "&lt;name&gt; (X).mp4" next to its original (kept)';
   const warn = [];
   const long = todo.filter(p => p.x.long), big = todo.filter(p => p.x.big);
-  // 2.9.5: the numbers come from xlimits.js
-  const XF = XL.LIMITS.free, XP = XL.LIMITS.premium;
-  if (one && (one.x.long || one.x.big)) warn.push(`⚠ ${one.x.long ? `${mmss(one.x.duration)} long: over ${XL.mmss(XF.sec)}` : ''}${one.x.long && one.x.big ? ' and ' : ''}${one.x.big ? `${fmtSize(one.x.size)}: over ${XL.size(XF.bytes)}` : ''}. Free X accounts can't post it (X Premium: up to ${Math.round(XP.sec / 3600)} h on web / iOS, ${XL.size(XP.bytes)}). Trim it in CLIP first?`);
-  else if (long.length || big.length) warn.push(`⚠ ${[...new Set([...long, ...big])].length} of them are over ${XL.mmss(XF.sec)} or ${XL.size(XF.bytes)}: free X accounts can't post those (X Premium can).`);
+  // 2.9.5: the numbers come from xlimits.js; 2.9.7: the saved X account's (xready.js assess() with the account)
+  const XA = XL.LIMITS[xAcct()], acctT = ` (X account: ${xAcctName()})`, cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  if (one && (one.x.long || one.x.big)) warn.push(`⚠ ${one.x.over.map(cap).join('. ')}${acctT}. X won't take it at this length or size. Trim it in CLIP first?`);
+  else if (long.length || big.length) warn.push(`⚠ ${[...new Set([...long, ...big])].length} of them are over the ${XL.mmss(XA.sec)} or ${XL.size(XA.bytes)} X allows on ${XA.name}${S.xAccount ? '' : ' (no X account saved yet: counted as Free)'}: X won't take those as they are.`);
   if (ready.length) warn.push(`${ready.length} already X-ready (left as they are).`);
   if (bad.length) warn.push(`${bad.length} can't be fixed: ${bad[0].error}`);
   $('#xfWarn').textContent = warn.join(' '); $('#xfWarn').classList.toggle('hidden', !warn.length);
@@ -4413,6 +4434,7 @@ async function clipOpen(file, o = {}) {
   CL.quality = info.canCopyMp3 ? 'copy' : '320'; CL.cut = 'exact';
   // 2.9.4: the tools start fresh with each file (GE); "Clip again" of a sped-up clip brings its speed back
   if (!same) { CL.tab = 'trim'; CL.shape = null; CL.even = false; CL.vol = 0; CL.whole = false; CL.fitSel = 'off'; CL.cv = null; }
+  if (!same || !CL.cap) { CL.cap = capNew(); CL.join = joinNew(); tcClose(); }          // 2.9.7: kept while CLIP stays on this file
   if (!CL.cv) CL.cv = { preset: CV_PRESETS[S.convPreset] ? S.convPreset : 'forx', ...CV_PRESETS[CV_PRESETS[S.convPreset] ? S.convPreset : 'forx'], mp3k: 320 };
   if (o.convert) { CL.whole = true; CL.tab = 'convert'; }          // Library → Convert again
   CL.speed = [0.5, 1.5, 2].includes(o.speed) ? o.speed : same ? CL.speed : 1;
@@ -4427,6 +4449,7 @@ async function clipOpen(file, o = {}) {
   P.clipPeaks(file).then((pk) => { if (CL.file !== file) return; CL.peaks = pk; $('#clipWaveMsg').textContent = pk || !info.hasAudio ? '' : 'Couldn’t read the sound (the clip is still cut exactly)'; clipDraw(); });
   setTimeout(() => { clipDraw(); clipRuler(); clipFrames(); }, 60);
   clipShotsLoad();
+  if (o.entry) clipRestore(o.entry);          // 2.9.7: Clip again: the captions and join list saved with the clip
   return true;
 }
 
@@ -4459,8 +4482,8 @@ function clipShapeEff() {
   return { ...s, ow, oh };
 }
 const clipSoundOn = () => !!(CL.info && CL.info.hasAudio) && CL.kind !== 'gif' && (CL.even || CL.vol !== 0 || $('#clipFadeIn').checked || $('#clipFadeOut').checked);
-const clipPicTool = () => !!clipShapeEff() || CL.speed !== 1;          // these change the picture: re-encode
-function clipCutEff() { return CL.kind === 'mp4' && CL.cut === 'fast' && CL.info && CL.info.canFast && !clipPicTool() && !CL.whole && !clipFitBytes() ? 'fast' : 'exact'; }
+const clipPicTool = () => !!clipShapeEff() || CL.speed !== 1 || capOn();          // these change the picture: re-encode (2.9.7: captions too)
+function clipCutEff() { return CL.kind === 'mp4' && CL.cut === 'fast' && CL.info && CL.info.canFast && !clipPicTool() && !CL.whole && !clipFitBytes() && !(joinActive() && CL.join.mode === 'join') ? 'fast' : 'exact'; }
 function clipQualityEff() { return CL.quality === 'copy' && CL.info && CL.info.canCopyMp3 && !clipSoundOn() && CL.speed === 1 && !CL.whole ? 'copy' : '320'; }
 // ---- 2.9.5: the X account (asked once, Settings → YouTube & X), fitting under a size, Convert's picture size
 const xAcct = () => (S.xAccount === 'premium' ? 'premium' : 'free');
@@ -4492,7 +4515,14 @@ function clipGifSet() {
 }
 // about how big: MB from what's known (the GIF one comes from a 1 s test GIF)
 function clipSizeEst() {
-  const i = CL.info || {}, len = clipLen(), lo = clipLenOut();
+  const i = CL.info || {};
+  if (joinActive()) {                       // 2.9.7: the joined video, or the sections each on their own
+    const mb = (w, h) => Math.max(1.5, Math.min(12, w * h / 1e6 * 4)) * 1e6 + (i.hasAudio ? 192000 : 0);
+    if (CL.join.mode === 'join') { const [W, H] = joinWH(); return mb(W, H) * joinTotal() / 8; }
+    const fast = clipCutEff() === 'fast', [w, h] = clipOutSize();
+    return joinSecs().reduce((sum, x) => sum + (fast && i.size && i.duration ? i.size * (x.out - x.in) / i.duration : mb(w || 1280, h || 720) * (x.out - x.in) / CL.speed / 8), 0);
+  }
+  const len = clipLen(), lo = clipLenOut();
   if (CL.kind === 'gif') return CL.gifEst && CL.gifEst.key === clipGifKey() ? CL.gifEst.bytes : null;
   if (CL.kind === 'mp3') return clipQualityEff() === 'copy' ? (i.abr || 192000) * len / 8 : (CL.whole ? CL.cv.mp3k : 320) * 1000 * lo / 8;
   if (clipCutEff() === 'fast') {
@@ -4505,7 +4535,23 @@ function clipSizeEst() {
 }
 const clipMB = (b) => (b >= 10485760 ? `${Math.round(b / 1048576)} MB` : b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 // the line above Save (GB): what will be saved, whether it re-encodes, about how big
+// 2.9.7: the join list ("JOIN … → 1 MP4" / "SAVE EACH … → n clips") and burned-in captions
 function clipOutLine() {
+  const capN = capOn() ? capInRange().length : 0, capT = capN ? `<b>${capN} caption line${capN === 1 ? '' : 's'}</b> burned in${CL.kind !== 'gif' && CL.cap.srt ? ' (+ .srt)' : ''}` : '';
+  if (joinActive()) {
+    const sz = clipSizeEst(), est = ` &middot; &asymp; <b>${clipMB(sz)}</b>`, secs = joinSecs(), n = CL.join.items.length, i = CL.info;
+    const snd = [CL.even && 'evened out', CL.vol && `${CL.vol > 0 ? '+' : ''}${CL.vol} dB`, ($('#clipFadeIn').checked || $('#clipFadeOut').checked) && 'fades'].filter(Boolean);
+    if (CL.join.mode === 'join') {
+      const [W, H] = joinWH();
+      return `<span class="k">JOIN</span> ${n} piece${n === 1 ? '' : 's'} in order &rarr; 1 MP4 &middot; ${W}&times;${H} &middot; ${joinFps()} fps &middot; H.264 + AAC${snd.length ? ` &middot; ${htmlEsc(snd.join(', '))}` : ''}${CL.speed !== 1 ? ` &middot; ${CL.speed}&times;` : ''}${capT ? ` &middot; ${capT}` : ''} &middot; <span class="re">RE-ENCODE</span> &middot; length ${clipFmt(joinTotal())}${est}`;
+    }
+    const fast = clipCutEff() === 'fast', left = n - secs.length;
+    return `<span class="k">SAVE EACH</span> ${secs.length} section${secs.length === 1 ? '' : 's'} &rarr; ${secs.length} MP4 clip${secs.length === 1 ? '' : 's'}${capT ? ` &middot; ${capT}` : ''} &middot; ${fast ? '<span class="fast">FAST CUT OK</span>' : '<span class="re">RE-ENCODE</span>'}${left ? ` &middot; <span class="w">${left} still${left === 1 ? '' : 's'} / card${left === 1 ? '' : 's'} left out</span>` : ''}${i.hasVideo ? '' : ''}${est}`;
+  }
+  const line = clipOutLine0();
+  return capT ? line.replace('&middot; <span class="re">', `&middot; ${capT} &middot; <span class="re">`) : line;
+}
+function clipOutLine0() {
   const i = CL.info, esc = htmlEsc, sz = clipSizeEst(), [w, h] = clipOutSize(), sh = clipShapeEff();
   const est = sz == null ? ' &middot; &asymp; <b>&hellip;</b>' : ` &middot; &asymp; <b>${clipMB(sz)}</b>`;
   const sp = CL.speed !== 1 ? ` &middot; ${CL.speed}&times;` : '';
@@ -4525,7 +4571,7 @@ function clipOutLine() {
   const dims = `${w}&times;${h}${sh ? ` (${sh.ratio}${sh.up ? ', upscaled' : ''})` : ''}${CL.whole ? ` &middot; ${htmlEsc(CV_NAMES[CL.cv.preset])}` : ''}`;
   if (fast && clipSoundOn()) return `<span class="k">MP4</span> &middot; ${dims} &middot; picture copied, <b>sound re-encoded</b> (AAC 192k${snd.length ? `: ${esc(snd.join(', '))}` : ''}) &middot;${ok('FAST CUT OK')}${est}`;
   if (fast) return `<span class="k">MP4</span> &middot; ${dims} &middot; copied as it is &middot;${ok('FAST CUT')} no re-encode${est}`;
-  return `${cvt}<span class="k">MP4</span> &middot; ${dims} &middot; H.264 + AAC${snd.length ? ` &middot; ${esc(snd.join(', '))}` : ''}${sp} &middot;${re(CL.whole ? '' : lost ? `<span class="w">(Fast cut is off: ${clipFitBytes() && !clipPicTool() ? 'fitting under a size re-encodes' : 'Shape and Speed change the picture'})</span>` : 'exact cut')}${CL.speed !== 1 || CL.whole ? ` &middot; length ${clipFmt(clipLenOut())}` : ''}${fitT}${est}`;
+  return `${cvt}<span class="k">MP4</span> &middot; ${dims} &middot; H.264 + AAC${snd.length ? ` &middot; ${esc(snd.join(', '))}` : ''}${sp} &middot;${re(CL.whole ? '' : lost ? `<span class="w">(Fast cut is off: ${clipFitBytes() && !clipPicTool() ? 'fitting under a size re-encodes' : capOn() && !clipShapeEff() && CL.speed === 1 ? 'captions are burned into the picture' : 'Shape and Speed change the picture'})</span>` : 'exact cut')}${CL.speed !== 1 || CL.whole ? ` &middot; length ${clipFmt(clipLenOut())}` : ''}${fitT}${est}`;
 }
 function clipRender() {
   const has = !!CL.info;
@@ -4546,6 +4592,8 @@ function clipRender() {
     b.disabled = k === 'mp3' ? !i.hasAudio : !i.hasVideo;
     b.title = b.disabled ? (k === 'mp3' ? 'This file has no sound' : 'This file has no video') : k === 'gif' ? 'An animated GIF (no sound) → Downloads\\SlopAMP\\gifs' : '';
   }
+  if (CL.whole && CL.join.on) CL.join.on = false;                 // 2.9.7: Convert (the whole file) and Join don't mix
+  if (joinActive() && CL.kind !== 'mp4') CL.kind = 'mp4';           // a join is an MP4
   const V = CL.kind === 'mp4', G = CL.kind === 'gif';
   $('#clipPrev').classList.toggle('hidden', !i.hasVideo);
   $('#clipFilm').classList.toggle('hidden', !i.hasVideo);
@@ -4555,18 +4603,19 @@ function clipRender() {
   for (const id of ['#clipPlay', '#clipEdgeIn', '#clipEdgeOut', '#clipLoop', '#clipSetIn', '#clipSetOut']) $(id).disabled = !i.previewUrl;
   $('#clipExt').textContent = `.${CL.kind}`;
   // ---- tabs (GA): greyed when they can't do anything here; a dot when in use
-  const off = { shape: !clipHasPic(), sound: G || !i.hasAudio, speed: false, shots: !i.hasVideo, trim: false, convert: false };
+  const off = { shape: !clipHasPic(), sound: G || !i.hasAudio, speed: false, shots: !i.hasVideo, trim: false, convert: false, captions: !clipHasPic(), join: !i.hasVideo };
   if (off[CL.tab]) CL.tab = 'trim';
-  const dot = { shape: !!clipShapeEff(), sound: clipSoundOn(), speed: CL.speed !== 1, convert: CL.whole };
+  const dot = { shape: !!clipShapeEff(), sound: clipSoundOn(), speed: CL.speed !== 1, convert: CL.whole, captions: capOn(), join: joinActive() };
   for (const b of $('#clipTabs').children) {
     const t = b.dataset.t;
-    if (t === 'captions' || t === 'join') continue;          // 2.9.6
     b.disabled = !!off[t];
     b.classList.toggle('on', t === CL.tab);
-    b.title = off[t] ? { shape: CL.kind === 'mp3' ? 'An MP3 has no picture' : 'This file has no video', sound: G ? 'GIFs have no sound' : 'This file has no sound', shots: 'This file has no video' }[t] || '' : '';
+    b.title = off[t] ? { shape: CL.kind === 'mp3' ? 'An MP3 has no picture' : 'This file has no video', sound: G ? 'GIFs have no sound' : 'This file has no sound', shots: 'This file has no video',
+      captions: CL.kind === 'mp3' && i.hasVideo ? 'Captions are burned into the picture: save as MP4 or GIF' : 'This file has no video', join: 'Join makes an MP4: this file has no video' }[t] || '' : '';
     let d = b.querySelector('.dot'); if (dot[t] && !d) { d = document.createElement('span'); d.className = 'dot'; b.appendChild(d); } else if (!dot[t] && d) d.remove();
   }
-  for (const [t, id] of [['trim', '#clipPaneTrim'], ['shape', '#clipPaneShape'], ['sound', '#clipPaneSound'], ['speed', '#clipPaneSpeed'], ['convert', '#clipPaneConvert'], ['shots', '#clipPaneShots']]) $(id).classList.toggle('hidden', CL.tab !== t);
+  for (const [t, id] of [['trim', '#clipPaneTrim'], ['shape', '#clipPaneShape'], ['sound', '#clipPaneSound'], ['speed', '#clipPaneSpeed'], ['convert', '#clipPaneConvert'], ['captions', '#clipPaneCaptions'], ['join', '#clipPaneJoin'], ['shots', '#clipPaneShots']]) $(id).classList.toggle('hidden', CL.tab !== t);
+  if (CL.tab === 'captions' && !CL.cap.tried) capAuto();           // 2.9.7: the first look finds the file's subtitles
   // the GIF settings show in Trim, or in Convert while that's the tab
   { const g = $('#clipOptsGif'), host = CL.tab === 'convert' ? $('#clipCvGifSlot') : $('#clipPaneTrim'); if (g.parentElement !== host) host.insertBefore(g, CL.tab === 'convert' ? null : $('#clipAddRow')); }
   // ---- Trim
@@ -4581,12 +4630,12 @@ function clipRender() {
   if (!i.canFast) CL.cut = 'exact';
   const cut = clipCutEff(), fLock = !i.canFast || clipPicTool();
   $('#clipCutFast').disabled = fLock || !!clipFitBytes() || CL.whole;
-  $('#clipFastNote').textContent = !i.canFast ? '· for H.264 .mp4 videos only (this one is re-encoded)' : CL.whole ? '· Convert re-encodes the whole file' : clipFitBytes() ? '· off while fitting under a size' : clipPicTool() ? '· off while Shape or Speed is used (they change the picture)' : clipSoundOn() ? '· the picture is copied, only the sound is re-encoded' : '· no re-encode, may start up to a few seconds early (keyframes)';
+  $('#clipFastNote').textContent = !i.canFast ? '· for H.264 .mp4 videos only (this one is re-encoded)' : CL.whole ? '· Convert re-encodes the whole file' : clipFitBytes() ? '· off while fitting under a size' : clipPicTool() ? '· off while Shape, Speed or Captions is used (they change the picture)' : clipSoundOn() ? '· the picture is copied, only the sound is re-encoded' : '· no re-encode, may start up to a few seconds early (keyframes)';
   $('#clipCutExact').checked = cut === 'exact'; $('#clipCutFast').checked = cut === 'fast';
   $('#clipAlsoMp3').disabled = !i.hasAudio;
   if (G) clipRenderGif();
   // ---- Shape / Sound / Speed / Convert
-  clipRenderShape(); clipRenderSound(); clipRenderSpeed(); clipRenderConvert();
+  clipRenderShape(); clipRenderSound(); clipRenderSpeed(); clipRenderConvert(); clipRenderCaptions(); clipRenderJoin();
   $('#clipFmtInfo').innerHTML = clipOutLine();
   clipRenderX(); clipXBar();
   const t = clipTargetTab();
@@ -4605,8 +4654,11 @@ function clipRenderTimes() {
   const len = clipLen(), lo = clipLenOut();
   $('#clipLen').textContent = `LENGTH ${clipFmt(len)}${CL.speed !== 1 ? ` ▸ ${clipFmt(lo)}` : ''}`;
   $('#clipLen').title = CL.speed !== 1 ? `${clipFmt(len)} of the original, ${clipFmt(lo)} at ${CL.speed}×` : '';
-  $('#clipSave').innerHTML = CL.job ? $('#clipSave').innerHTML : CL.whole ? `&#8644; Convert ${clipFmt(lo)} &#9656;` : `&#9986; Save ${CL.kind === 'gif' ? 'GIF' : 'clip'} ${clipFmt(lo)} &#9656;`;
-  if (!CL.nameTouched) $('#clipName').value = CL.whole ? `${CL.srcTitle} (${CL.kind === 'mp4' ? CV_NAMES[CL.cv.preset] : 'converted'})${CL.speed !== 1 ? ` ${CL.speed}x` : ''}`
+  const J = joinActive(), each = J && CL.join.mode === 'each', nSec = J ? joinSecs().length : 0;
+  $('#clipSave').innerHTML = CL.job ? $('#clipSave').innerHTML : J ? (each ? `&#9986; Save ${nSec} clip${nSec === 1 ? '' : 's'} &#9656;` : `&#9636; Join &amp; save ${clipFmt(joinTotal())} &#9656;`)
+    : CL.whole ? `&#8644; Convert ${clipFmt(lo)} &#9656;` : `&#9986; Save ${CL.kind === 'gif' ? 'GIF' : 'clip'} ${clipFmt(lo)} &#9656;`;
+  $('#clipName').placeholder = each ? 'each section is named by its In–Out (type a name: “name (A)”, “name (B)”…)' : '';
+  if (!CL.nameTouched) $('#clipName').value = J ? (each ? '' : `${CL.srcTitle} (joined)${CL.speed !== 1 ? ` ${CL.speed}x` : ''}`) : CL.whole ? `${CL.srcTitle} (${CL.kind === 'mp4' ? CV_NAMES[CL.cv.preset] : 'converted'})${CL.speed !== 1 ? ` ${CL.speed}x` : ''}`
     : `${CL.srcTitle} (${clipCut(CL.in)}-${clipCut(CL.out)})${CL.speed !== 1 ? ` ${CL.speed}x` : ''}`;
   const z = CL.v1 - CL.v0 < clipDur() - 0.05;
   $('#clipZoomInfo').textContent = z ? `showing ${clipFmt(CL.v0, false)} – ${clipFmt(CL.v1, false)} of ${clipFmt(clipDur(), false)} ·` : '';
@@ -4621,6 +4673,8 @@ function clipRenderTimes() {
   }
   // the parts that depend on the length
   clipRenderSpeed();
+  if (CL.tab === 'captions') clipRenderCaptions();      // 2.9.7: only the lines between In and Out
+  { const d = { captions: capOn() }; const b = $('#clipTabs [data-t=captions]'); let dt = b.querySelector('.dot'); if (d.captions && !dt) { dt = document.createElement('span'); dt.className = 'dot'; b.appendChild(dt); } else if (!d.captions && dt) dt.remove(); }
   $('#clipFmtInfo').innerHTML = clipOutLine();
   clipRenderX(); clipXBar();
   clipLoudSoon(); clipGifSoon();
@@ -4667,6 +4721,17 @@ function clipDraw() {
   const green = WM.token('--green'), line = WM.token('--line-green'), amber = WM.token('--amber');
   const [ra, rb] = clipRange();       // 2.9.5: Convert lights the whole file
   x.globalAlpha = 0.16; x.fillStyle = green; x.fillRect(px(ra), 0, px(rb) - px(ra), h); x.globalAlpha = 1;
+  // 2.9.7: the join list's sections: A, B, C as coloured bands
+  if (CL.join && CL.join.items.length) {
+    joinSecs().forEach((sct, k) => {
+      const c = JOIN_COLS[k % JOIN_COLS.length], X0 = px(sct.in), X1 = px(sct.out);
+      if (X1 < 0 || X0 > w) return;
+      x.globalAlpha = CL.join.on ? 0.22 : 0.1; x.fillStyle = c; x.fillRect(X0, 0, Math.max(2, X1 - X0), h);
+      x.globalAlpha = 1; x.fillRect(X0, 0, Math.max(2, X1 - X0), 3);
+      x.font = 'bold 10px sans-serif'; x.textBaseline = 'top'; x.fillText(joinLetter(sct), Math.max(2, X0 + 3), 5);
+    });
+    x.globalAlpha = 1;
+  }
   const pk = CL.peaks;
   if (pk && pk.peaks && pk.peaks.length) {
     const step = 2, rate = pk.rate, arr = pk.peaks;
@@ -4730,7 +4795,11 @@ for (const [id, edge] of [['#clipIn', 'in'], ['#clipOut', 'out']]) {
 $('#clipSetIn').onclick = () => clipSet('in', clipMedia.currentTime || 0);
 $('#clipSetOut').onclick = () => clipSet('out', clipMedia.currentTime || 0);
 $('#clipReset').onclick = () => { CL.in = 0; CL.out = clipDur(); CL.v0 = 0; CL.v1 = clipDur(); clipDraw(); clipRuler(); clipRenderTimes(); clipFrames(); };
-for (const b of $('#clipKind').children) b.onclick = () => { if (b.disabled) return; CL.kind = b.dataset.k; clipRender(); };
+for (const b of $('#clipKind').children) b.onclick = () => {
+  if (b.disabled) return;
+  if (joinActive() && b.dataset.k !== 'mp4') { CL.join.on = false; toast('Join makes an MP4: the join list is kept (switched off).', 3500); }    // 2.9.7
+  CL.kind = b.dataset.k; clipRender(); clipDraw();
+};
 $('#clipName').addEventListener('input', () => { CL.nameTouched = !!$('#clipName').value.trim(); });
 for (const id of ['#clipFadeIn', '#clipFadeOut']) $(id).addEventListener('change', () => clipRender());     // 2.9.4: in Sound, for MP4 too
 $('#clipQCopy').addEventListener('change', () => { if ($('#clipQCopy').checked) CL.quality = 'copy'; clipRender(); });
@@ -4969,15 +5038,15 @@ async function xAccountAsk() {
   const v = await choiceBox('Which X account do you post with?',
     `SlopAMP checks your videos against X’s limits for it, and remembers the answer.\n\nFree: up to ${XL.mmss(F.sec)} and ${XL.size(F.bytes)} a video.\nPremium: up to ${Math.round(Pm.sec / 3600)} hours and ${XL.size(Pm.bytes)} on the web and iPhone (${Math.round(Pm.androidSec / 60)} minutes in X’s Android app).\n\nYou can change it any time in Settings → YouTube & X.`, 'Free', 'Premium');
   if (v === 'ok' || v === 'alt') { S.xAccount = v === 'ok' ? 'free' : 'premium'; saveSoon(); setXAcctSel(); }
-  if (CL.info) clipRender();
+  xAcctChanged();
   return S.xAccount || null;
 }
 function setXAcctSel() {
   const s = $('#setXAcct'); if (s) s.value = S.xAccount || '';
   const n = $('#setXAcctNote'), F = XL.LIMITS.free, Pm = XL.LIMITS.premium;      // the numbers from xlimits.js
-  if (n) n.textContent = `CLIP’s For X checks videos against it: Free ${XL.mmss(F.sec)} and ${XL.size(F.bytes)}; Premium ${Math.round(Pm.sec / 3600)} h and ${XL.size(Pm.bytes)} (${Math.round(Pm.androidSec / 60)} min in X’s Android app)`;
+  if (n) n.textContent = `CLIP’s For X, Fix for X and the X tags check videos against it: Free ${XL.mmss(F.sec)} and ${XL.size(F.bytes)}; Premium ${Math.round(Pm.sec / 3600)} h and ${XL.size(Pm.bytes)} (${Math.round(Pm.androidSec / 60)} min in X’s Android app)`;
 }
-$('#setXAcct').onchange = (e) => { S.xAccount = ['free', 'premium'].includes(e.target.value) ? e.target.value : null; saveSoon(); if (CL.info) clipRender(); };
+$('#setXAcct').onchange = (e) => { S.xAccount = ['free', 'premium'].includes(e.target.value) ? e.target.value : null; saveSoon(); xAcctChanged(); };
 
 // ---- the For X bar: over X's limits → the exact overage and a one-click fix. Never blocks saving.
 // Shown for MP4 clips (as 2.9.4's 2:20 note was), Convert's For X (or fitting under the X limit), and GIFs.
@@ -4986,6 +5055,11 @@ function clipXIssues() {
   if (CL.kind === 'gif') { const b = clipSizeEst(); return b == null ? [] : XL.checkGif(b); }
   if (CL.kind !== 'mp4') return [];
   if (CL.whole && CL.cv.preset !== 'forx' && CL.fitSel !== 'x') return [];        // Small / Phone / Best aren't for X
+  if (joinActive()) {          // 2.9.7: the joined video (or the longest section, saved each on its own)
+    if (CL.join.mode === 'join') return XL.checkVideo(xAcct(), joinTotal(), clipSizeEst() || 0);
+    const L = Math.max(...joinSecs().map(x => (x.out - x.in) / CL.speed)), all = joinSecs().reduce((a, x) => a + (x.out - x.in) / CL.speed, 0);
+    return XL.checkVideo(xAcct(), L, (clipSizeEst() || 0) * L / Math.max(0.1, all));
+  }
   return XL.checkVideo(xAcct(), clipLenOut(), clipSizeEst() || 0);
 }
 function clipXBar() {
@@ -4998,6 +5072,7 @@ function clipXBar() {
   const btns = [];
   const trimTo = (sec) => btns.push([`Trim to ${XL.mmss(Math.floor(sec))}`, () => clipTrimTo(sec)]);
   for (const x of iss) {
+    if (joinActive()) continue;                // 2.9.7: a join list is shortened by removing or trimming its cards
     if (x.what === 'length' || x.what === 'android') trimTo(x.limit);
     if (x.what === 'size' && CL.fitSel !== 'x') btns.push(['Lower the quality to fit', () => { CL.fitSel = 'x'; clipRender(); }]);
     if (x.what === 'gif-web' || x.what === 'gif-phone') {
@@ -5019,6 +5094,475 @@ function clipTrimTo(sec) {
   if (CL.tab === 'convert') CL.tab = 'trim';
   if (CL.in < CL.v0 || CL.out > CL.v1) clipZoomTo(CL.in, CL.out);
   clipRender(); clipDraw(); clipRuler(); clipFrames();
+}
+
+// ================= 2.9.7 (CLIP part 3): Captions (7A–7E) =================
+// Lines come from the file's own subtitle track or a .srt / .vtt next to it (read the way playback reads them),
+// YouTube's subtitles for a downloaded YouTube video (the bundled yt-dlp fetches them on demand, "auto" ones
+// labelled), a .srt / .vtt you load, or lines you type or paste. Only the lines between In and Out are shown and
+// burned in; each can be edited (amber = edited) or removed. One style (7B): bold white, black outline, bottom or
+// middle, S / M / L. Burned in with libass (clip.js); "Also save the captions as .srt" (on) for X's own captions.
+// Nothing is transcribed: SlopAMP has no speech-to-text.
+const CAP_SIZES = { s: 0.045, m: 0.06, l: 0.08 };
+let capSeq = 0, joinSeq = 0;
+function capNew() {
+  const c = S.clipCap || {};
+  return { on: false, src: '', srcLabel: '', lines: [], list: null, busy: false, msg: '', listKey: '', pos: c.pos === 'middle' ? 'middle' : 'bottom', size: ['s', 'm', 'l'].includes(c.size) ? c.size : 'm', srt: c.srt !== false, tried: false };
+}
+// WebVTT / SRT → [{ id, a, b, t, ed }]. YouTube's automatic captions roll: each cue repeats the line before it
+// (and has 10 ms "hold" cues); those repeats are dropped so every line shows once.
+function capParse(text) {
+  const raw = [];
+  text = String(text || '').replace(/\r/g, '').replace(/^﻿/, '');
+  const tm = (s) => { const m = /(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})/.exec(s || ''); return m ? (+(m[1] || 0)) * 3600 + (+m[2]) * 60 + (+m[3]) + (+m[4].padEnd(3, '0')) / 1000 : NaN; };
+  const ent = (s) => s.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+  for (const block of text.split(/\n{2,}/)) {
+    const ls = block.split('\n'), k = ls.findIndex(l => /-->/.test(l));
+    if (k < 0) continue;
+    const [x, y] = ls[k].split('-->'), a = tm(x), b = tm(y);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) continue;
+    const body = ls.slice(k + 1).map(l => ent(l.replace(/<[^>]*>/g, '').replace(/\{\\[^}]*\}/g, '')).replace(/\s+/g, ' ').trim()).filter(Boolean);
+    if (body.length) raw.push({ a, b, t: body.join('\n') });
+  }
+  const res = [];
+  for (const l of raw) {
+    if (l.b - l.a < 0.05) continue;                       // a rolling caption's "hold" cue
+    const prev = res[res.length - 1];
+    if (prev) {
+      const pl = prev.t.split('\n'), cl = l.t.split('\n');
+      if (cl.length > 1 && cl[0] === pl[pl.length - 1]) l.t = cl.slice(1).join('\n');    // the line before, again
+      if (l.t === prev.t && l.a - prev.b < 0.15) { prev.b = Math.max(prev.b, l.b); continue; }
+      if (prev.b > l.a && prev.a < l.a) prev.b = l.a;     // rolling cues overlap: one at a time
+    }
+    res.push(l);
+  }
+  return res.map(l => ({ id: ++capSeq, a: +l.a.toFixed(3), b: +l.b.toFixed(3), t: l.t, ed: false }));
+}
+// the pieces of the source that get saved: In–Out, the whole file (Convert), or the join list's sections
+function capPieces() {
+  if (joinActive()) return joinSecs().map(s => [s.in, s.out]);
+  return [clipRange()];
+}
+const capInRange = () => { const ps = capPieces(); return CL.cap.lines.filter(l => ps.some(([a, b]) => l.b > a + 0.01 && l.a < b - 0.01)); };
+const capOn = () => !!(CL.info && CL.cap.on && (joinActive() || clipHasPic()) && capInRange().length);
+function capPayload() {
+  if (!capOn()) return undefined;
+  return { lines: capInRange().map(l => ({ a: l.a, b: l.b, t: l.t })), pos: CL.cap.pos, size: CL.cap.size, srt: CL.cap.srt && CL.kind !== 'gif' };
+}
+async function capSources() {
+  if (CL.cap.list && CL.cap.list.file === CL.file) return CL.cap.list;
+  const file = CL.file, r = (await P.listSubs(file).catch(() => null)) || { embedded: [], external: [] };
+  if (CL.file !== file) return null;
+  const items = [];
+  for (const e of r.embedded || []) if (e.text && e.url) items.push({ id: e.id, label: `From the file: ${e.label}`, url: e.url, def: e.def });
+  for (const e of r.external || []) items.push({ id: e.id, label: `From ${e.label}`, url: e.url });
+  if (CL.item && CL.item.type === 'youtube' && (CL.item.url || CL.item.vid)) items.push({ id: 'yt', label: 'From YouTube (gets the subtitles)', yt: true });
+  CL.cap.list = { file, items };
+  return CL.cap.list;
+}
+// load the lines from one source (replacing what's there)
+async function capLoad(id) {
+  const file = CL.file, list = await capSources(); if (!list || CL.file !== file) return;
+  const src = list.items.find(x => x.id === id); if (!src) return;
+  if (CL.cap.lines.some(l => l.ed) && !(await confirmBox('Replace your edited lines?', 'The lines you edited or typed are replaced by the ones from the new source.', 'Replace'))) { clipRenderCaptions(); return; }
+  CL.cap.busy = true; CL.cap.msg = src.yt ? 'Getting the subtitles from YouTube…' : 'Reading the subtitles…'; clipRenderCaptions();
+  let lines = [], label = src.label, err = '';
+  try {
+    if (src.yt) {
+      const r = await P.clipSubsYouTube(CL.item.url || `https://www.youtube.com/watch?v=${CL.item.vid}`);
+      if (r && r.ok) { lines = capParse(r.vtt); label = `From YouTube: ${capLang(r.lang)}${r.auto ? ' (auto)' : ''}`; src.label = label; } else err = (r && r.error) || 'Couldn’t get the subtitles from YouTube.';
+    } else {
+      const res = await fetch(src.url); lines = capParse(await res.text());
+      if (!lines.length) err = 'No text lines in that subtitle track.';
+    }
+  } catch (e) { err = 'Couldn’t read the subtitles.'; }
+  if (CL.file !== file) return;
+  CL.cap.busy = false;
+  if (err) { CL.cap.msg = err; clipRender(); return; }
+  CL.cap.lines = lines; CL.cap.src = id; CL.cap.srcLabel = label; CL.cap.on = true; CL.cap.msg = '';
+  clipRender();
+}
+function capLang(l) { try { return new Intl.DisplayNames(['en'], { type: 'language' }).of(l) || l; } catch (_) { return l || '?'; } }
+// the first time the tab opens on a file: its own subtitles if it has some, else YouTube's (for a YouTube download)
+async function capAuto() {
+  if (CL.cap.tried || CL.cap.lines.length) return;
+  CL.cap.tried = true;
+  const list = await capSources(); if (!list || CL.tab !== 'captions') { clipRender(); return; }
+  const pick = list.items.find(x => x.def && !x.yt) || list.items.find(x => !x.yt) || list.items.find(x => x.yt);
+  if (pick) await capLoad(pick.id); else clipRender();
+}
+const capAt = () => (CL.info && CL.info.previewUrl ? clipMedia.currentTime || 0 : capPieces()[0][0]);
+function capAddLine() {
+  const t = capAt(), [, end] = capPieces().find(([a, b]) => t >= a && t < b) || capPieces()[0];
+  const next = CL.cap.lines.find(l => l.a > t + 0.05);
+  const b = Math.max(t + 0.5, Math.min(t + 3, next ? next.a : Infinity, end));
+  const l = { id: ++capSeq, a: +t.toFixed(3), b: +b.toFixed(3), t: '', ed: true };
+  CL.cap.lines.push(l); CL.cap.lines.sort((x, y) => x.a - y.a);
+  CL.cap.on = true; if (!CL.cap.src) { CL.cap.src = 'own'; CL.cap.srcLabel = 'Your lines'; }
+  CL.cap.listKey = ''; clipRender();
+  const inp = $(`#clipCapList [data-id="${l.id}"] input`); if (inp) inp.focus();
+}
+function capPasteLines(text) {
+  text = String(text || '');
+  let lines = /-->/.test(text) ? capParse(text) : [];
+  if (!lines.length) {
+    let t = capAt();
+    lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean).map(s => { const l = { id: ++capSeq, a: +t.toFixed(3), b: +(t + 3).toFixed(3), t: s.slice(0, 500), ed: true }; t += 3; return l; });
+  } else lines.forEach(l => { l.ed = true; });
+  if (!lines.length) return 0;
+  CL.cap.lines = [...CL.cap.lines, ...lines].sort((x, y) => x.a - y.a);
+  CL.cap.on = true; if (!CL.cap.src || CL.cap.src === '') { CL.cap.src = 'own'; CL.cap.srcLabel = 'Your lines'; }
+  CL.cap.listKey = ''; clipRender();
+  return lines.length;
+}
+function clipRenderCaptions() {
+  const c = CL.cap, i = CL.info; if (!i) return;
+  // where the lines come from
+  const sel = $('#clipCapSrc'), opts = [];
+  if (!c.src) opts.push(['', c.list ? (c.list.items.length ? 'Pick where the lines come from…' : 'No subtitles in this file') : 'Looking for subtitles…']);
+  if (c.src === 'own' || c.src === 'saved') opts.push([c.src, c.srcLabel || 'Your lines']);
+  for (const x of (c.list && c.list.items) || []) opts.push([x.id, x.id === c.src && c.srcLabel ? c.srcLabel : x.label]);
+  const key = JSON.stringify(opts) + c.src;
+  if (sel.dataset.key !== key) { sel.innerHTML = opts.map(([v, l]) => `<option value="${htmlEsc(v)}">${htmlEsc(l)}</option>`).join(''); sel.dataset.key = key; }
+  sel.value = c.src; sel.disabled = c.busy;
+  $('#clipCapOn').checked = c.on; $('#clipCapOn').disabled = c.busy || !c.lines.length;
+  for (const b of $('#clipCapPos').children) b.classList.toggle('on', b.dataset.v === c.pos);
+  for (const b of $('#clipCapSize').children) b.classList.toggle('on', b.dataset.v === c.size);
+  $('#clipCapSrt').checked = c.srt && CL.kind !== 'gif'; $('#clipCapSrt').disabled = CL.kind === 'gif';
+  $('#clipCapSrt').parentElement.title = CL.kind === 'gif' ? 'A GIF has no captions file: they’re only burned in' : 'The same lines, not burned in: X takes a .srt as the video’s own captions';
+  $('#clipCapAdd').textContent = `+ Add a line at ${clipFmt(capAt())}`;
+  for (const id of ['#clipCapAdd', '#clipCapPaste', '#clipCapLoad']) $(id).disabled = c.busy;
+  const inR = capInRange(), edited = inR.filter(l => l.ed).length;
+  $('#clipCapMsg').innerHTML = c.busy || c.msg ? htmlEsc(c.msg)
+    : !c.lines.length ? (c.list && !c.list.items.length ? 'This file has no subtitles. Type them (<b>+ Add a line</b>), paste them, or load a .srt / .vtt.' : '')
+      : !inR.length ? `None of the ${c.lines.length} lines fall between In and Out.`
+        : `<span class="ok">${inR.length} line${inR.length === 1 ? '' : 's'}</span> ${joinActive() ? 'in the join list’s sections' : 'between In and Out'}${edited ? ` &middot; ${edited} edited` : ''}${c.on ? ' &middot; burned in when you save' : ' &middot; <b>Burn in</b> is off'}${CL.speed !== 1 ? ` &middot; times follow ${CL.speed}&times;` : ''}`;
+  // the lines (rebuilt only when they change, so typing keeps its place)
+  const list = $('#clipCapList'), d = clipDoc();
+  const lk = JSON.stringify([CL.file, inR.map(l => l.id), c.src]);
+  if (lk !== c.listKey && !(d && list.contains(d.activeElement))) {
+    c.listKey = lk;
+    list.innerHTML = inR.slice(0, 600).map(l => `<div class="cap-row${l.ed ? ' ed' : ''}" data-id="${l.id}"><button type="button" class="cap-t" title="Play from here">${clipFmt(l.a)} – ${clipFmt(l.b)}</button><input type="text" maxlength="500" spellcheck="false" value="${htmlEsc(l.t.replace(/\n/g, ' / '))}">${l.ed ? '<span class="cap-ed">edited</span>' : ''}<button type="button" class="cap-x" title="Remove this line">&times;</button></div>`).join('')
+      + (inR.length > 600 ? `<div class="dim cap-row">… and ${inR.length - 600} more (all of them are burned in)</div>` : '');
+  }
+  capOverlay();
+}
+$('#clipCapList').addEventListener('click', (e) => {
+  const row = e.target.closest('.cap-row'); if (!row || !row.dataset.id) return;
+  const l = CL.cap.lines.find(x => x.id === +row.dataset.id); if (!l) return;
+  if (e.target.closest('.cap-x')) { CL.cap.lines = CL.cap.lines.filter(x => x !== l); CL.cap.listKey = ''; clipRender(); return; }
+  if (e.target.closest('.cap-t') && CL.info.previewUrl) { clipStopPreview(); clipMedia.currentTime = l.a + 0.01; clipClock(); clipDraw(); }
+});
+$('#clipCapList').addEventListener('input', (e) => {
+  const row = e.target.closest('.cap-row'), l = row && CL.cap.lines.find(x => x.id === +row.dataset.id); if (!l) return;
+  l.t = e.target.value.split(' / ').join('\n').slice(0, 500); l.ed = true; row.classList.add('ed');
+  if (!row.querySelector('.cap-ed')) { const s = document.createElement('span'); s.className = 'cap-ed'; s.textContent = 'edited'; e.target.after(s); }
+  capOverlay(); $('#clipFmtInfo').innerHTML = clipOutLine();
+});
+$('#clipCapList').addEventListener('focusout', () => setTimeout(() => { const d = clipDoc(); if (d && !$('#clipCapList').contains(d.activeElement)) { CL.cap.lines = CL.cap.lines.filter(l => l.t.trim()); clipRender(); } }, 0));
+$('#clipCapSrc').addEventListener('change', (e) => { const v = e.target.value; if (v && v !== 'own' && v !== 'saved') capLoad(v); });
+$('#clipCapOn').addEventListener('change', (e) => { CL.cap.on = e.target.checked; clipRender(); });
+for (const b of $('#clipCapPos').children) b.onclick = () => { CL.cap.pos = b.dataset.v; S.clipCap = { ...(S.clipCap || {}), pos: CL.cap.pos }; saveSoon(); clipRender(); };
+for (const b of $('#clipCapSize').children) b.onclick = () => { CL.cap.size = b.dataset.v; S.clipCap = { ...(S.clipCap || {}), size: CL.cap.size }; saveSoon(); clipRender(); };
+$('#clipCapSrt').addEventListener('change', (e) => { CL.cap.srt = e.target.checked; S.clipCap = { ...(S.clipCap || {}), srt: CL.cap.srt }; saveSoon(); clipRender(); });
+$('#clipCapAdd').onclick = capAddLine;
+$('#clipCapPaste').onclick = () => { $('#clipCapPasteBox').classList.remove('hidden'); $('#clipCapPasteT').focus(); };
+$('#clipCapPasteX').onclick = () => { $('#clipCapPasteBox').classList.add('hidden'); $('#clipCapPasteT').value = ''; };
+$('#clipCapPasteGo').onclick = () => { const n = capPasteLines($('#clipCapPasteT').value); $('#clipCapPasteBox').classList.add('hidden'); $('#clipCapPasteT').value = ''; if (!n) toast('Nothing to add: paste some lines first.'); };
+$('#clipCapLoad').onclick = async () => {
+  const f = await P.openSubDialog(CL.file); if (!f || !CL.info) return;
+  if (CL.cap.list) { CL.cap.list.items = CL.cap.list.items.filter(x => x.id !== f.id); CL.cap.list.items.splice(Math.max(0, CL.cap.list.items.findIndex(x => x.yt)), 0, { id: f.id, label: `From ${f.label}`, url: f.url }); }
+  else { await capSources(); if (CL.cap.list && !CL.cap.list.items.some(x => x.id === f.id)) CL.cap.list.items.unshift({ id: f.id, label: `From ${f.label}`, url: f.url }); }
+  capLoad(f.id);
+};
+// the line on the preview (white bold, black outline, like the burned-in one)
+function capOverlay() {
+  const ov = $('#clipCapOv'); if (!ov) return;
+  const on = capOn() && CL.info && CL.info.previewUrl && CL.info.hasVideo && !CL.pa;
+  let l = null;
+  if (on) { const t = clipMedia.currentTime || 0; l = capInRange().find(x => t >= x.a && t < x.b); }
+  ov.classList.toggle('hidden', !l);
+  if (!l) return;
+  ov.classList.toggle('mid', CL.cap.pos === 'middle');
+  const r = clipPicRect(), sh = clipShapeEff(), base = r ? (sh ? Math.min(sh.w, sh.h) * r.k : Math.min(r.w, r.h)) : 120;
+  const sp = $('#clipCapOvT'); sp.textContent = l.t; sp.style.fontSize = `${Math.max(9, Math.round(base * CAP_SIZES[CL.cap.size]))}px`;
+}
+
+// ================= 2.9.7 (CLIP part 3): Join v1 (6A–6I) =================
+// Sections of the file open in CLIP (In / Out, then + Section or J), stills (a SHOTS frame or any picture, 2.5 s)
+// and title cards (drawn here, saved as pictures, 3 s), in the order of the cards. "Join in order": one MP4,
+// re-encoded to the first section's size (or 1080p / 720p / 9:16), other shapes letterboxed or cropped to fill;
+// stills and cards silent or with the song going on under them. "Save each": each section as its own clip (Fast
+// cut OK). The list stays while CLIP stays on this file, and is saved with the joined clip (Clip again brings it back).
+const JOIN_COLS = ['#ffb627', '#4aa8ff', '#ff5fa2', '#7cff7c', '#c77dff', '#ff7b54'];
+const TC_COLS = ['#16213e', '#000000', '#ffffff', '#1f8a4c', '#c2185b', '#f5a623'];
+function joinNew() { return { items: [], on: false, size: 'first', fit: 'letterbox', under: 'silence', mode: 'join', sel: null, thumbs: {} }; }
+const joinSecs = () => CL.join.items.filter(i => i.type === 's');
+const joinActive = () => !!(CL.info && CL.info.hasVideo && CL.join.on && joinSecs().length);
+const joinLetter = (it) => String.fromCharCode(65 + (joinSecs().indexOf(it) % 26));
+const joinTotal = () => CL.join.items.reduce((s, i) => s + (i.type === 's' ? (i.out - i.in) / CL.speed : i.dur), 0);
+function joinWH() {
+  const k = CL.join.size;
+  if (k === '1080') return [1920, 1080]; if (k === '720') return [1280, 720]; if (k === '916') return [1080, 1920];
+  const i = CL.info, s = CL.shape ? clipShapeEffAs('mp4') : null;
+  return s ? [s.ow, s.oh] : [(i.width || 1280) & ~1, (i.height || 720) & ~1];
+}
+function clipShapeEffAs(kind) { const k = CL.kind; CL.kind = kind; try { return clipShapeEff(); } finally { CL.kind = k; } }
+const joinFps = () => { const f = CL.info.fps || 30; return Math.round(Math.min(60, CL.speed > 1 ? f * CL.speed : f) * 100) / 100; };
+function joinSel() { return CL.join.items.find(i => i.id === CL.join.sel) || null; }
+function joinOnNow() { CL.join.on = true; CL.whole = false; if (CL.kind !== 'mp4') CL.kind = 'mp4'; }
+async function joinAddSection() {
+  if (!CL.info || !CL.info.hasVideo) { toast('Join makes an MP4: this file has no video.'); return; }
+  const a = +CL.in.toFixed(3), b = +CL.out.toFixed(3);
+  if (b - a < 0.1) return;
+  if (joinSecs().some(s => Math.abs(s.in - a) < 0.05 && Math.abs(s.out - b) < 0.05)) { toast('That section is in the list already: move In / Out first.'); return; }
+  const it = { id: ++joinSeq, type: 's', in: a, out: b };
+  CL.join.items.push(it); CL.join.sel = it.id; joinOnNow();
+  clipRender(); clipDraw();
+  joinThumb(it);
+  return it;
+}
+async function joinThumb(it) {
+  if (it.type !== 's' || CL.join.thumbs[it.id]) return;
+  const f = CL.file, [u] = await P.clipFrames(f, [Math.min((it.in + it.out) / 2, clipDur() - 0.05)], 54).catch(() => [null]);
+  if (CL.file === f && u) { CL.join.thumbs[it.id] = u; clipRenderJoin(true); }
+}
+function joinAddStill(p, url) {
+  const it = { id: ++joinSeq, type: 'p', path: p, url, dur: 2.5 };
+  const at = CL.join.items.findIndex(x => x.id === CL.join.sel);
+  CL.join.items.splice(at >= 0 ? at + 1 : CL.join.items.length, 0, it); CL.join.sel = it.id;
+  if (joinSecs().length) joinOnNow();
+  $('#clipJoinStills').classList.add('hidden');
+  clipRender();
+}
+function joinAddCard(spec, replace) {
+  if (replace) { replace.spec = spec; replace.dur = spec.dur; replace.fade = spec.fade; delete CL.join.thumbs[replace.id]; clipRender(); return; }
+  const it = { id: ++joinSeq, type: 'c', spec, dur: spec.dur, fade: spec.fade };
+  const at = CL.join.items.findIndex(x => x.id === CL.join.sel);
+  CL.join.items.splice(at >= 0 ? at + 1 : 0, 0, it); CL.join.sel = it.id;
+  if (joinSecs().length) joinOnNow();
+  clipRender();
+}
+function clipRenderJoin(cardsOnly) {
+  const J = CL.join, i = CL.info; if (!i) return;
+  const box = $('#clipJoinCards'), esc = htmlEsc;
+  const cards = J.items.map((it) => {
+    let pic = '', lab = '', letter = '';
+    if (it.type === 's') {
+      const u = J.thumbs[it.id]; pic = u ? `<img src="${u}" alt="">` : '';
+      letter = `<span class="cj-letter" style="border-color:${JOIN_COLS[joinSecs().indexOf(it) % JOIN_COLS.length]}">${joinLetter(it)}</span>`;
+      lab = `<b>${clipFmt((it.out - it.in) / CL.speed)}</b> ${clipFmt(it.in, false)}–${clipFmt(it.out, false)}`;
+    } else if (it.type === 'p') { pic = it.url ? `<img src="${esc(it.url)}" alt="">` : ''; lab = `<b>${it.dur} s</b> still · ${esc(it.path.split(/[\\/]/).pop())}`; }
+    else { if (!J.thumbs[it.id]) J.thumbs[it.id] = tcPng(it.spec, 160, 90); pic = `<img src="${J.thumbs[it.id]}" alt="">`; lab = `<b>${it.dur} s</b> title card · ${esc(it.spec.text || '')}`; }
+    return `<div class="cj-card${it.id === J.sel ? ' on' : ''}" draggable="true" data-id="${it.id}" title="${it.type === 's' ? 'Click: In / Out go to this section' : it.type === 'c' ? 'Double-click: edit the card' : 'A still'} · drag to move · × removes">${letter}<span class="cj-x" title="Remove">&times;</span><div class="cj-pic">${pic}</div><div class="cj-l">${lab}</div></div>`;
+  }).join('');
+  const add = `<div class="cj-add"><button type="button" class="sb dim" data-a="s" title="The part between In and Out (J)">+ Section <kbd>J</kbd></button><button type="button" class="sb dim" data-a="p" title="A SHOTS frame or any picture, 2.5 s">+ Still</button><button type="button" class="sb dim" data-a="c" title="Text on a colour, 3 s">+ Title card</button></div>`;
+  const key = JSON.stringify([J.items.map(x => [x.id, x.type, x.in, x.out, x.dur, x.url, x.spec]), J.sel, Object.keys(J.thumbs).length, CL.speed]);
+  if (box.dataset.key !== key) { box.innerHTML = cards + add; box.dataset.key = key; }
+  if (cardsOnly) return;
+  const secs = joinSecs(), n = J.items.length;
+  $('#clipJoinOn').checked = joinActive(); $('#clipJoinOn').disabled = !secs.length;
+  $('#clipJoinCount').textContent = n ? `${secs.length} section${secs.length === 1 ? '' : 's'}${n > secs.length ? `, ${n - secs.length} still${n - secs.length === 1 ? '' : 's'} / card${n - secs.length === 1 ? '' : 's'}` : ''} · ${clipFmt(joinTotal())}` : 'empty: mark In / Out, then + Section';
+  $('#clipJoinPlay').disabled = !secs.length || !i.previewUrl; $('#clipJoinClear').disabled = !n;
+  $('#clipJoinPlay').innerHTML = CL.pa ? '&#9632; Stop' : `&#9654; Play all ${clipFmt(joinTotal())}`;
+  const [W, H] = (() => { const k = J.size; J.size = 'first'; const r = joinWH(); J.size = k; return r; })();
+  const fo = $('#clipJoinSize').options[0]; fo.textContent = `${W}×${H} (the first section)`;
+  $('#clipJoinSize').value = J.size;
+  for (const b of $('#clipJoinFit').children) b.classList.toggle('on', b.dataset.v === J.fit);
+  for (const b of $('#clipJoinUnder').children) { b.classList.toggle('on', b.dataset.v === J.under); b.disabled = !i.hasAudio; }
+  for (const b of $('#clipJoinMode').children) b.classList.toggle('on', b.dataset.v === J.mode);
+  const s = joinSel(), still = s && s.type !== 's';
+  $('#clipJoinSel').classList.toggle('hidden', !still);
+  if (still) {
+    $('#clipJoinSelT').innerHTML = s.type === 'c' ? `<b>Title card</b> “${esc(s.spec.text || '')}”` : `<b>Still</b> ${esc(s.path.split(/[\\/]/).pop())}`;
+    const durs = s.type === 'c' ? [2, 3, 5] : [2, 2.5, 3, 5];
+    $('#clipJoinDur').innerHTML = durs.map(d => `<button type="button" data-v="${d}" class="${d === s.dur ? 'on' : ''}">${d} s</button>`).join('');
+    $('#clipJoinEdit').classList.toggle('hidden', s.type !== 'c');
+  }
+}
+// the cards: click = select (a section: In / Out go there), × = remove, drag = reorder, drop a picture = a still
+$('#clipJoinCards').addEventListener('click', async (e) => {
+  const add = e.target.closest('.cj-add button');
+  if (add) { const a = add.dataset.a; if (a === 's') joinAddSection(); else if (a === 'c') tcOpen(); else joinStillPick(); return; }
+  const card = e.target.closest('.cj-card'); if (!card) return;
+  const it = CL.join.items.find(x => x.id === +card.dataset.id); if (!it) return;
+  if (e.target.closest('.cj-x')) { CL.join.items = CL.join.items.filter(x => x !== it); delete CL.join.thumbs[it.id]; if (CL.join.sel === it.id) CL.join.sel = null; if (!joinSecs().length) CL.join.on = false; clipRender(); clipDraw(); return; }
+  CL.join.sel = it.id;
+  if (it.type === 's') { clipWholeOff(); CL.in = it.in; CL.out = it.out; CL.last = 'out'; if (CL.in < CL.v0 || CL.out > CL.v1) clipZoomTo(CL.in, CL.out); clipRuler(); clipFrames(); if (CL.info.previewUrl) { clipStopPreview(); clipMedia.currentTime = it.in; } }
+  clipRender(); clipDraw();
+});
+$('#clipJoinCards').addEventListener('dblclick', (e) => { const card = e.target.closest('.cj-card'), it = card && CL.join.items.find(x => x.id === +card.dataset.id); if (it && it.type === 'c') tcOpen(it); });
+let cjDrag = null;
+$('#clipJoinCards').addEventListener('dragstart', (e) => { const card = e.target.closest('.cj-card'); if (!card) return; cjDrag = +card.dataset.id; card.classList.add('dragging'); try { e.dataTransfer.setData('text/x-slopamp-join', String(cjDrag)); e.dataTransfer.effectAllowed = 'move'; } catch (_) {} });
+$('#clipJoinCards').addEventListener('dragend', () => { cjDrag = null; for (const c of $$('#clipJoinCards .cj-card')) c.classList.remove('dragging', 'before'); $('#clipJoinCards').classList.remove('drop'); });
+$('#clipJoinCards').addEventListener('dragover', (e) => {
+  e.preventDefault();
+  const files = e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+  $('#clipJoinCards').classList.toggle('drop', !!files && cjDrag == null);
+  for (const c of $$('#clipJoinCards .cj-card')) c.classList.toggle('before', cjDrag != null && c === e.target.closest('.cj-card') && +c.dataset.id !== cjDrag);
+});
+$('#clipJoinCards').addEventListener('dragleave', (e) => { if (!e.currentTarget.contains(e.relatedTarget)) $('#clipJoinCards').classList.remove('drop'); });
+$('#clipJoinCards').addEventListener('drop', async (e) => {
+  e.preventDefault(); $('#clipJoinCards').classList.remove('drop');
+  const over = e.target.closest('.cj-card'), overId = over ? +over.dataset.id : null;
+  if (cjDrag != null) { joinMove(cjDrag, overId); cjDrag = null; return; }
+  for (const f of [...((e.dataTransfer && e.dataTransfer.files) || [])]) {
+    const p = P.pathForFile(f); if (!p || !/\.(png|jpe?g|webp|bmp)$/i.test(p)) { toast('Drop a picture (PNG, JPG, WebP or BMP) for a still.'); continue; }
+    joinAddStill(p, await P.clipImageUrl(p));
+  }
+});
+function joinMove(id, beforeId) {
+  const L = CL.join.items, it = L.find(x => x.id === id); if (!it || id === beforeId) return;
+  L.splice(L.indexOf(it), 1);
+  const at = beforeId == null ? L.length : L.findIndex(x => x.id === beforeId);
+  L.splice(at < 0 ? L.length : at, 0, it);
+  clipRender(); clipDraw();
+}
+// + Still: this video's SHOTS (if any) or any picture
+async function joinStillPick() {
+  const sh = (CL.shots && CL.shots.shots) || [], box = $('#clipJoinStills');
+  if (!sh.length) { const r = await P.clipPickImage(); if (r) joinAddStill(r.path, r.url); return; }
+  box.innerHTML = `<span class="dim">A still from SHOTS:</span>${sh.map(s => `<img src="${htmlEsc(s.url)}" data-p="${htmlEsc(s.path)}" title="${htmlEsc(s.file)}" alt="">`).join('')}<button type="button" class="sb dim" data-pick="1">Pick a picture…</button><button type="button" class="sb dim" data-x="1">Cancel</button>`;
+  box.classList.toggle('hidden');
+}
+$('#clipJoinStills').addEventListener('click', async (e) => {
+  const img = e.target.closest('img');
+  if (img) { joinAddStill(img.dataset.p, img.getAttribute('src')); return; }
+  if (e.target.closest('[data-pick]')) { $('#clipJoinStills').classList.add('hidden'); const r = await P.clipPickImage(); if (r) joinAddStill(r.path, r.url); return; }
+  if (e.target.closest('[data-x]')) $('#clipJoinStills').classList.add('hidden');
+});
+$('#clipJoinDur').addEventListener('click', (e) => { const b = e.target.closest('button'), s = joinSel(); if (!b || !s) return; s.dur = +b.dataset.v; if (s.type === 'c') s.spec = { ...s.spec, dur: s.dur }; clipRender(); });
+$('#clipJoinEdit').onclick = () => { const s = joinSel(); if (s && s.type === 'c') tcOpen(s); };
+$('#clipJoinOn').addEventListener('change', (e) => { if (e.target.checked) joinOnNow(); else CL.join.on = false; clipRender(); clipDraw(); });
+$('#clipJoinClear').onclick = async () => { if (CL.join.items.length > 1 && !(await confirmBox('Clear the join list?', `All ${CL.join.items.length} cards are removed (nothing saved is touched).`, 'Clear'))) return; joinStop(); CL.join = joinNew(); clipRender(); clipDraw(); };
+$('#clipJoinSize').addEventListener('change', (e) => { CL.join.size = e.target.value; clipRender(); });
+for (const [id, k] of [['#clipJoinFit', 'fit'], ['#clipJoinUnder', 'under'], ['#clipJoinMode', 'mode']]) for (const b of $(id).children) b.onclick = () => { if (b.disabled) return; CL.join[k] = b.dataset.v; clipRender(); };
+$('#clipJoinPlay').onclick = () => (CL.pa ? joinStop() : joinPlayAll());
+// ▶ Play all: the sections in the preview, each still / card on top of it for its length (the song under them isn't previewed)
+function joinPlayAll() {
+  if (!CL.info || !CL.info.previewUrl || !joinSecs().length) return;
+  clipStopPreview();
+  CL.pa = { i: -1 };
+  joinPlayNext();
+}
+function joinPlayNext() {
+  const pa = CL.pa; if (!pa) return;
+  clearTimeout(pa.t);
+  pa.i++;
+  const it = CL.join.items[pa.i], ov = $('#clipJoinOv');
+  if (!it) { joinStop(); return; }
+  CL.join.sel = it.id; clipRenderJoin();
+  if (it.type === 's') {
+    ov.classList.add('hidden');
+    CL.range = null;
+    if (status === 'playing') pause();
+    if (YW.visible) P.ytwPause();
+    CL.range = [it.in, it.out, false]; pa.sec = true;
+    clipMedia.currentTime = it.in; clipMedia.play().catch(() => {});
+    if (!CL.raf) CL.raf = clipDoc().defaultView.requestAnimationFrame(clipTick);
+  } else {
+    pa.sec = false;
+    try { clipMedia.pause(); } catch (_) {}
+    ov.src = it.type === 'c' ? tcPng(it.spec, 640, 360, joinWH()) : it.url || ''; ov.classList.remove('hidden');
+    pa.t = setTimeout(joinPlayNext, it.dur * 1000);
+  }
+}
+function joinStop() {
+  const pa = CL.pa; CL.pa = null;
+  if (pa) { clearTimeout(pa.t); try { clipMedia.pause(); } catch (_) {} CL.range = null; }
+  const ov = $('#clipJoinOv'); if (ov) ov.classList.add('hidden');
+  if (pa && CL.info) clipRenderJoin();
+}
+// ---- title cards (6D): drawn here (any font the skins use), saved as a PNG the size of the joined video
+function tcFonts() {
+  const skin = String(WM.token('--font-ui') || '').split(',')[0].replace(/["']/g, '').trim();
+  return [...new Set([skin, 'Segoe UI', 'Arial', 'Arial Black', 'Impact', 'Georgia', 'Trebuchet MS', 'Consolas', 'Courier New'].filter(Boolean))].map((f, i) => [f, i === 0 && skin ? `${f} (this skin)` : f]);
+}
+// draws the card; W × H: the picture's size; aspect: [w, h] of the joined video (the small previews keep its shape)
+function tcDraw(cv, spec, W, H) {
+  cv.width = W; cv.height = H;
+  const x = cv.getContext('2d'), bg = spec.bg || TC_COLS[0];
+  x.fillStyle = bg; x.fillRect(0, 0, W, H);
+  const lum = (() => { const n = parseInt(bg.slice(1), 16); return ((n >> 16) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000; })();
+  const ink = lum > 150 ? '#111111' : '#ffffff', base = Math.min(W, H), px = Math.round(base * { s: 0.08, m: 0.11, l: 0.15 }[spec.size || 'm']);
+  const font = (p, b) => `${b ? 'bold ' : ''}${p}px "${spec.font || 'Arial'}", Arial, sans-serif`;
+  x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = ink;
+  const fit = (t, p, b) => { let q = p; x.font = font(q, b); while (q > 8 && x.measureText(t).width > W * 0.9) { q -= 2; x.font = font(q, b); } return q; };
+  const t1 = String(spec.text || ''), t2 = String(spec.line2 || '');
+  const p1 = fit(t1, px, spec.bold !== false), p2 = t2 ? fit(t2, Math.round(px * 0.5), false) : 0;
+  const total = p1 + (t2 ? p2 * 1.6 : 0), y1 = H / 2 - total / 2 + p1 / 2;
+  x.font = font(p1, spec.bold !== false); x.fillText(t1, W / 2, y1);
+  if (t2) { x.globalAlpha = 0.8; x.font = font(p2, false); x.fillText(t2, W / 2, y1 + p1 / 2 + p2 * 1.1); x.globalAlpha = 1; }
+}
+function tcPng(spec, w, h, aspect) {
+  const cv = document.createElement('canvas');
+  if (aspect) { const [aw, ah] = aspect, k = Math.min(w / aw, h / ah); w = Math.round(aw * k); h = Math.round(ah * k); }
+  tcDraw(cv, spec, w, h);
+  return cv.toDataURL('image/png');
+}
+let TC = null;      // the card being made / edited: { spec, it }
+function tcOpen(it) {
+  const last = S.clipCard || {};
+  TC = { it: it || null, spec: it ? { ...it.spec } : { text: '', line2: '', font: tcFonts()[0][0], size: 'm', bold: true, bg: TC_COLS.includes(last.bg) ? last.bg : TC_COLS[0], dur: 3, fade: !!last.fade } };
+  $('#tcFont').innerHTML = tcFonts().map(([f, l]) => `<option value="${htmlEsc(f)}">${htmlEsc(l)}</option>`).join('');
+  $('#tcCols').innerHTML = TC_COLS.map(c => `<button type="button" data-c="${c}" style="background:${c}" title="${c}"></button>`).join('');
+  $('#tcText').value = TC.spec.text; $('#tcLine2').value = TC.spec.line2; $('#tcFont').value = TC.spec.font; $('#tcBold').checked = TC.spec.bold !== false; $('#tcFade').checked = !!TC.spec.fade;
+  $('#tcOk').textContent = it ? 'Done' : 'Add';
+  $('#clipTCard').classList.remove('hidden');
+  tcRender(); $('#tcText').focus();
+}
+function tcRender() {
+  if (!TC) return;
+  const s = TC.spec;
+  for (const b of $('#tcSize').children) b.classList.toggle('on', b.dataset.v === s.size);
+  for (const b of $('#tcDur').children) b.classList.toggle('on', +b.dataset.v === s.dur);
+  for (const b of $('#tcCols').children) b.classList.toggle('on', b.dataset.c === s.bg);
+  const [aw, ah] = CL.info ? joinWH() : [16, 9], cv = $('#tcCanvas'), k = Math.min(320 / aw, 180 / ah);
+  tcDraw(cv, { ...s, text: s.text || 'TITLE' }, Math.max(2, Math.round(aw * k)), Math.max(2, Math.round(ah * k)));
+  cv.style.width = `${cv.width}px`; cv.style.height = `${cv.height}px`;
+  $('#tcOk').disabled = !s.text.trim();
+}
+const tcClose = () => { TC = null; $('#clipTCard').classList.add('hidden'); };
+for (const [id, k] of [['#tcText', 'text'], ['#tcLine2', 'line2']]) $(id).addEventListener('input', (e) => { if (TC) { TC.spec[k] = e.target.value; tcRender(); } });
+$('#tcFont').addEventListener('change', (e) => { if (TC) { TC.spec.font = e.target.value; tcRender(); } });
+$('#tcBold').addEventListener('change', (e) => { if (TC) { TC.spec.bold = e.target.checked; tcRender(); } });
+$('#tcFade').addEventListener('change', (e) => { if (TC) { TC.spec.fade = e.target.checked; tcRender(); } });
+for (const b of $('#tcSize').children) b.onclick = () => { if (TC) { TC.spec.size = b.dataset.v; tcRender(); } };
+for (const b of $('#tcDur').children) b.onclick = () => { if (TC) { TC.spec.dur = +b.dataset.v; tcRender(); } };
+$('#tcCols').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && TC) { TC.spec.bg = b.dataset.c; tcRender(); } });
+$('#tcCancel').onclick = tcClose;
+$('#tcOk').onclick = () => {
+  if (!TC || !TC.spec.text.trim()) return;
+  const spec = { ...TC.spec, text: TC.spec.text.trim(), line2: TC.spec.line2.trim() };
+  S.clipCard = { bg: spec.bg, fade: spec.fade }; saveSoon();
+  joinAddCard(spec, TC.it); tcClose();
+};
+$('#tcText').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#tcOk').click(); } else if (e.key === 'Escape') tcClose(); });
+// what a save sends for the join list (the cards drawn at the joined video's size)
+function joinPayload() {
+  const [W, H] = joinWH();
+  return { items: CL.join.items.map(it => (it.type === 's' ? { type: 's', in: it.in, out: it.out } : it.type === 'p' ? { type: 'p', path: it.path, dur: it.dur }
+    : { type: 'c', dur: it.dur, fade: !!it.fade, spec: it.spec, png: tcPng(it.spec, W, H) })), size: CL.join.size, fit: CL.join.fit, under: CL.join.under };
+}
+// a saved join list / captions coming back (Clip again)
+async function clipRestore(entry) {
+  if (!entry || !CL.info) return;
+  if (entry.caps && Array.isArray(entry.caps.lines) && entry.caps.lines.length) {
+    CL.cap.lines = entry.caps.lines.map(l => ({ id: ++capSeq, a: l.a, b: l.b, t: l.t, ed: false }));
+    CL.cap.src = 'saved'; CL.cap.srcLabel = 'Lines saved with the clip'; CL.cap.on = true; CL.cap.tried = true;
+    if (entry.caps.pos) CL.cap.pos = entry.caps.pos; if (entry.caps.size) CL.cap.size = entry.caps.size;
+  }
+  if (entry.join && Array.isArray(entry.join.items)) {
+    const J = joinNew();
+    Object.assign(J, { size: entry.join.size || 'first', fit: entry.join.fit || 'letterbox', under: entry.join.under || 'silence' });
+    for (const x of entry.join.items) {
+      if (x.type === 's') J.items.push({ id: ++joinSeq, type: 's', in: x.in, out: x.out });
+      else if (x.type === 'p') J.items.push({ id: ++joinSeq, type: 'p', path: x.path, url: await P.clipImageUrl(x.path), dur: x.dur });
+      else if (x.type === 'c' && x.spec) J.items.push({ id: ++joinSeq, type: 'c', spec: x.spec, dur: x.dur, fade: !!x.fade });
+    }
+    if (J.items.some(x => x.type === 's')) { CL.join = J; joinOnNow(); CL.tab = 'join'; for (const it of J.items) joinThumb(it); }
+  }
+  clipRender(); clipDraw();
 }
 
 // ---- the wave: click = move the preview there; drag an edge / the clip; drag elsewhere = a new range
@@ -5060,20 +5604,24 @@ $('#clipWaveC').addEventListener('wheel', (e) => {
 }, { passive: false });
 
 // ---- preview (plays inside CLIP; the main player and the YouTube page pause)
-function clipClock() { $('#clipClock').innerHTML = `${clipMedia.paused ? '&#10074;&#10074;' : '&#9654;'} ${clipFmt(clipMedia.currentTime || 0)}`; $('#clipPrevT').textContent = clipFmt(clipMedia.currentTime || 0); }
+function clipClock() {
+  $('#clipClock').innerHTML = `${clipMedia.paused ? '&#10074;&#10074;' : '&#9654;'} ${clipFmt(clipMedia.currentTime || 0)}`; $('#clipPrevT').textContent = clipFmt(clipMedia.currentTime || 0);
+  if (CL.cap) { capOverlay(); if (CL.tab === 'captions') { const t = clipMedia.currentTime || 0; for (const r of $$('#clipCapList .cap-row')) { const l = CL.cap.lines.find(x => x.id === +r.dataset.id); r.classList.toggle('now', !!l && t >= l.a && t < l.b); } $('#clipCapAdd').textContent = `+ Add a line at ${clipFmt(capAt())}`; } }
+}
 function clipTick() {
   CL.raf = 0;
   if (clipMedia.paused) { clipClock(); clipDraw(); return; }
   const t = clipMedia.currentTime;
   if (CL.range && t >= CL.range[1]) {
     if (CL.range[2]) clipMedia.currentTime = CL.range[0];
-    else { clipMedia.pause(); CL.range = null; }
+    else { clipMedia.pause(); CL.range = null; if (CL.pa && CL.pa.sec) { CL.raf = 0; joinPlayNext(); return; } }     // 2.9.7: Play all goes on
   }
   clipClock(); clipDraw();
   CL.raf = clipDoc().defaultView.requestAnimationFrame(clipTick);
 }
 function clipPlayRange(a, b, loop) {
   if (!CL.info || !CL.info.previewUrl) return;
+  if (CL.pa) joinStop();
   if (status === 'playing') pause();
   if (YW.visible) P.ytwPause();
   CL.range = [Math.max(0, a), Math.min(clipDur(), b), !!loop];
@@ -5081,7 +5629,7 @@ function clipPlayRange(a, b, loop) {
   clipMedia.play().catch(() => {});
   if (!CL.raf) CL.raf = clipDoc().defaultView.requestAnimationFrame(clipTick);
 }
-function clipStopPreview() { try { clipMedia.pause(); } catch (_) {} CL.range = null; }
+function clipStopPreview() { if (CL.pa) joinStop(); try { clipMedia.pause(); } catch (_) {} CL.range = null; }
 function clipPausePreview() { if (!clipMedia.paused) clipMedia.pause(); }
 clipMedia.addEventListener('loadedmetadata', () => { if (CL.seekTo != null) { clipMedia.currentTime = CL.seekTo; CL.seekTo = null; } });
 for (const evn of ['seeked', 'timeupdate']) clipMedia.addEventListener(evn, () => { if (clipMedia.paused) { clipClock(); clipDraw(); } });
@@ -5105,7 +5653,8 @@ function clipKey(e) {
   if (!e.ctrlKey && !e.altKey && (k === 'i' || k === 'I')) { if (CL.info.previewUrl) clipSet('in', clipMedia.currentTime || 0); return true; }
   if (!e.ctrlKey && !e.altKey && (k === 'o' || k === 'O')) { if (CL.info.previewUrl) clipSet('out', clipMedia.currentTime || 0); return true; }
   if (!e.ctrlKey && !e.altKey && (k === 'g' || k === 'G')) { if (CL.info.hasVideo) clipShotAdd(); return true; }   // SLOP's G, now a CLIP shot
-  if (k === 'Escape') { clipStopPreview(); return true; }
+  if (!e.ctrlKey && !e.altKey && (k === 'j' || k === 'J')) { if (CL.info.hasVideo) joinAddSection(); return true; }   // 2.9.7: + Section
+  if (k === 'Escape') { if (TC) tcClose(); else clipStopPreview(); return true; }
   return false;
 }
 
@@ -5135,13 +5684,27 @@ async function clipSave() {
   let res;
   try {
     const G = CL.kind === 'gif';
-    res = await P.clipSave({ job, file: CL.file, in: CL.in, out: CL.out, kind: CL.kind, name: $('#clipName').value,
+    const o = { job, file: CL.file, in: CL.in, out: CL.out, kind: CL.kind, name: $('#clipName').value,
       fadeIn: !G && $('#clipFadeIn').checked ? 0.5 : 0, fadeOut: !G && $('#clipFadeOut').checked ? 2 : 0, quality: clipQualityEff(), cut: clipCutEff(),
       alsoMp3: CL.kind === 'mp4' && $('#clipAlsoMp3').checked, srcTitle: CL.srcTitle, item: CL.item,
       // 2.9.4 tools
       even: !G && CL.even, vol: G ? 0 : CL.vol, speed: CL.speed, shape: clipShapeEff(), gif: G ? clipGifSet() : undefined,
       // 2.9.5: Convert (the whole file) and fitting under a size
-      whole: CL.whole, conv: CL.whole ? { ...CL.cv, size: CL.cv.size === 'x' || CL.cv.size === 'keep' ? CL.cv.size : +CL.cv.size } : undefined, fit: clipFitBytes() || undefined });
+      whole: CL.whole, conv: CL.whole ? { ...CL.cv, size: CL.cv.size === 'x' || CL.cv.size === 'keep' ? CL.cv.size : +CL.cv.size } : undefined, fit: clipFitBytes() || undefined,
+      // 2.9.7: captions (burned in, + .srt)
+      caps: capPayload() };
+    if (joinActive() && CL.join.mode === 'join') res = await P.clipJoin({ ...o, kind: 'mp4', ...joinPayload() });            // 2.9.7: one joined MP4
+    else if (joinActive()) {                                                                                             // 2.9.7: Save each
+      const secs = joinSecs(), name = CL.nameTouched ? $('#clipName').value.trim() : '';
+      res = { ok: true, files: [] };
+      for (let k = 0; k < secs.length; k++) {
+        CL.step = `${k + 1}/${secs.length}`;
+        const r = await P.clipSave({ ...o, kind: 'mp4', in: secs[k].in, out: secs[k].out, alsoMp3: false, name: name ? `${name} (${joinLetter(secs[k])})` : '', caps: o.caps });
+        res.files.push(...((r && r.files) || []));
+        if (!r || !r.ok) { res = { ...(r || {}), ok: false, files: res.files }; break; }
+      }
+      CL.step = null;
+    } else res = await P.clipSave(o);
   } finally {
     CL.job = null; btn.classList.remove('busy'); btn.disabled = false;
     $('#clipCancel').classList.add('hidden');
@@ -5154,13 +5717,15 @@ async function clipSave() {
   if (playable.length && $('#clipAddTo').checked) { const t = clipTargetTab(); if (t >= 0) await addFilesToTab(playable.map(f => f.path), t); }
   const names = res.files.map(f => f.path.split(/[\\/]/).pop());
   const miss = res.files.find(f => f.fit && !f.fits);
-  toast(miss ? `✓ Saved ${names.join(' and ')}, but it came out at ${clipMB(miss.size)}: still over ${clipMB(miss.fit)}. Trim it to fit.` : `✓ Saved ${names.join(' and ')}`, miss ? 7000 : 3500);
+  const srts = res.files.filter(f => f.srt).length;
+  toast(miss ? `✓ Saved ${names.join(' and ')}, but it came out at ${clipMB(miss.size)}: still over ${clipMB(miss.fit)}. Trim it to fit.`
+    : `✓ Saved ${names.length > 3 ? `${names.length} clips (${names[0]} …)` : names.join(' and ')}${srts ? ` (captions also as .srt${srts > 1 ? ' files' : ''})` : ''}`, miss ? 7000 : 3500);
   if ($('#dlmDlg').open) dlmRefresh();
   return res;
 }
 $('#clipSave').onclick = clipSave;
 $('#clipCancel').onclick = () => { if (CL.job) P.clipCancel(CL.job); };
-P.onClip((ev) => { if (ev && ev.type === 'progress' && ev.job === CL.job) $('#clipSave').textContent = `Saving ${Math.max(0, Math.min(100, ev.pct))}%…`; });
+P.onClip((ev) => { if (ev && ev.type === 'progress' && ev.job === CL.job) $('#clipSave').textContent = `Saving ${CL.step ? `${CL.step} ` : ''}${Math.max(0, Math.min(100, ev.pct))}%…`; });
 $('#clipFolderBtn').onclick = () => P.clipFolder(CL.whole ? 'conv' : CL.kind);    // mp3 / mp4 / gif / Converted
 $('#clipLibBtn').onclick = () => openDownloadsManager('clips');
 $('#clipEmptyLib').onclick = () => openDownloadsManager('clips');
@@ -5354,7 +5919,7 @@ function clipAgain(r) {
   if (!r || !r.srcExists) { toast('The file this clip was cut from isn’t there any more.'); return; }
   if ($('#dlmDlg').open) $('#dlmDlg').close();
   const it = r.item && allItems().find(i => isWeb(i) && i.vid === r.item.vid);
-  clipOpen(r.src, { kind: r.kind === 'conv' ? { video: 'mp4', gif: 'gif' }[r.media] || 'mp3' : { mp4clip: 'mp4', gifclip: 'gif' }[r.kind] || 'mp3', convert: r.kind === 'conv', item: it || (r.item ? { ...r.item } : null), title: r.from || undefined, in: r.in, out: r.out, speed: r.speed });
+  P.clipEntry(r.path).then((entry) => clipOpen(r.src, { entry, kind: r.kind === 'conv' ? { video: 'mp4', gif: 'gif' }[r.media] || 'mp3' : { mp4clip: 'mp4', gifclip: 'gif' }[r.kind] || 'mp3', convert: r.kind === 'conv', item: it || (r.item ? { ...r.item } : null), title: r.from || undefined, in: r.in, out: r.out, speed: r.speed }));
 }
 // Library rows -> play / add (files, or the clip / download as a file item)
 async function libAdd(rows, play) {
@@ -6170,7 +6735,7 @@ function stateSnapshot() {
     tabs: S.tabs.map(t => ({ id: t.id, name: t.name, current: t.current >= 0 || !bootLast || t !== PT() ? t.current : t.items.indexOf(bootLast), src: t.src || undefined, items: t.items.map(({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at }) => ({ id, type, path, url, vid, music, live, title, duration, hasVideo, noEmbed, start, localVideo, localAudio, at })) })),
     tab: S.tab, playTab: S.playTab, vis: S.vis, volume: S.volume, muted: S.muted, shuffle: S.shuffle, repeat: S.repeat,
     showVideo: S.showVideo, showPlaylist: S.showPlaylist, plShade: S.plShade, vidShade: S.vidShade, remaining: S.remaining, plHeight: S.plHeight, visMode, eq: S.eq,
-    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, xPlay: S.xPlay, dlLimit: S.dlLimit, favs: S.favs, startMode: S.startMode, askCloseDl: S.askCloseDl, skipSecs: S.skipSecs, clipPreset: S.clipPreset, clipGif: S.clipGif, xAccount: S.xAccount, convPreset: S.convPreset, mp3q: S.mp3q, dlWarn: S.dlWarn, xq: S.xq, hist: S.hist, xhist: S.xhist
+    resume: S.resume, names: S.names, renameFile: S.renameFile, subsOn: S.subsOn, lib: S.lib, dlFormat: S.dlFormat, xPlay: S.xPlay, dlLimit: S.dlLimit, favs: S.favs, startMode: S.startMode, askCloseDl: S.askCloseDl, skipSecs: S.skipSecs, clipPreset: S.clipPreset, clipGif: S.clipGif, xAccount: S.xAccount, convPreset: S.convPreset, clipCap: S.clipCap, clipCard: S.clipCard, mp3q: S.mp3q, dlWarn: S.dlWarn, xq: S.xq, hist: S.hist, xhist: S.xhist
   };
 }
 function saveSoon() {
@@ -6249,6 +6814,9 @@ setInterval(() => { blink = !blink; }, 500);
     S.clipPreset = [5, 10, 15, 20, 25, 30, 60].includes(st.clipPreset) ? st.clipPreset : 0;          // 2.9.4 CLIP: remembered
     S.xAccount = ['free', 'premium'].includes(st.xAccount) ? st.xAccount : null;                     // 2.9.5: asked once
     S.convPreset = ['forx', 'small', 'phone', 'best'].includes(st.convPreset) ? st.convPreset : 'forx';
+    // 2.9.7: CLIP → Captions' position / size / "also save as .srt", and the last title card's colour / fade
+    S.clipCap = st.clipCap && typeof st.clipCap === 'object' ? { pos: st.clipCap.pos === 'middle' ? 'middle' : 'bottom', size: ['s', 'm', 'l'].includes(st.clipCap.size) ? st.clipCap.size : 'm', srt: st.clipCap.srt !== false } : null;
+    S.clipCard = st.clipCard && typeof st.clipCard === 'object' ? { bg: String(st.clipCard.bg || ''), fade: !!st.clipCard.fade } : null;
     if (st.clipGif && typeof st.clipGif === 'object') S.clipGif = { w: +st.clipGif.w, fps: +st.clipGif.fps, loop: st.clipGif.loop !== false, colors: +st.clipGif.colors };
     S.skipSecs = [0, 5, 10, 15, 30].includes(st.skipSecs) ? st.skipSecs : 10;
     S.mp3q = ['best', '320', '192', '128'].includes(st.mp3q) ? st.mp3q : 'best';

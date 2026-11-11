@@ -1,6 +1,15 @@
 # Changelog
 
-## 2.9.6 — unreleased
+## 2.9.7 — unreleased
+
+CLIP editor, part 3: Captions and Join, and X's limits follow your X account everywhere. Still only the FFmpeg and yt-dlp inside SlopAMP; the original is never changed and every save is a new file.
+
+- **Captions tab in CLIP: burn captions into the picture.** The lines come from the video's own subtitle track or a .srt / .vtt next to it, from YouTube for a downloaded YouTube video (SlopAMP's yt-dlp gets them on demand, nothing else is downloaded; YouTube's automatic ones are labelled "auto" and tidied so each line shows once), from a .srt / .vtt you load, or ones you type (**+ Add a line** at the preview spot) or paste. Only the lines between In and Out are listed; click a time to jump there, edit a line (edited lines are marked in amber) or remove it. One style: bold white with a black outline, **Bottom** or **Middle**, **S / M / L** (remembered). The line shows on the preview too. Burned in with libass for MP4 and GIF clips (it re-encodes: Fast cut is off while captions are on); times follow Speed. **Also save the captions as .srt** (on) puts the same lines, not burned in, next to an MP4 clip for X's own captions. Nothing is transcribed: if a video has no subtitles, it says so. Clip again brings the lines back.
+- **Join tab in CLIP (v1): one video from several pieces.** Mark In / Out, then **+ Section** (or **J**): sections show as coloured A, B, C bands on the wave and as cards. Add **stills** (a SHOTS frame or any picture; 2 / 2.5 / 3 / 5 s) and **title cards** (text, a second line, a font from the skins, S / M / L, bold, six colours, 2 / 3 / 5 s, fade; SlopAMP draws the card itself and saves it as a picture, so FFmpeg's fonts don't matter). Drag the cards to change the order, × removes one, **▶ Play all** previews the whole list. **Join in order** saves one MP4 (re-encoded) at the first section's size or 1080p / 720p / 9:16, other shapes **letterboxed** or **cropped to fill**; stills and cards are silent or **keep the song going** under them. **Save each** saves every section as its own clip (Fast cut OK). Shape, Sound, Speed and Captions apply to the whole joined video. The list stays while CLIP stays on that file, and **Clip again** on a joined clip brings it back. Sections from other files come later.
+- **Fix for X and the X tags follow your X account.** The "X ✓ / not for X" tags in the playlist and the Library and Fix for X now check a video's length and size against the account saved in Settings → YouTube & X (Premium: 4 hours and 16 GB; none saved yet: Free, 2:20 and 512 MB), with the numbers from xlimits.js. Before, they always used Free's limits (Fix for X) or didn't look at length at all (the tags). "X ✓" now means X takes the file as it is *and* it's within that account's length and size. Changing the account updates the tags at once. Premium's 10-minute Android-app note stays in CLIP's For X bar only. They're still warnings: nothing is blocked.
+- Test: `tests/clip-297.js`.
+
+## 2.9.6 — released Nov 10, 2026
 
 Hotfix: big playlists no longer freeze SlopAMP.
 

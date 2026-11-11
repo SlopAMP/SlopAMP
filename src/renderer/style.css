@@ -1189,3 +1189,53 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .pl-add-t { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-variant-numeric: tabular-nums; }
 .pl-add button { background: var(--menu-bg); color: var(--ink-menu); border: 1px solid var(--vctl-line); font: var(--fs-s) var(--font-ui); padding: 0 8px; cursor: pointer; }
 #pDlm.wait { animation: blink 0.9s infinite; }
+
+/* ---- 2.9.7 CLIP part 3: Captions (7A–7E) and Join v1 (6A–6I). Skin colours only (readable in all 10 skins);
+   the captions on the picture are fixed white with a black outline, like the burned-in ones. */
+.cc-ico { display: inline-block; border: 1px solid currentColor; border-radius: 2px; font-size: 9px; line-height: 10px; padding: 0 2px; vertical-align: 1px; font-weight: bold; }
+.clip-sel { background: var(--menu-bg); color: var(--ink-menu); border: 1px solid var(--vctl-line); font: var(--fs-m) var(--font-ui); padding: 1px 4px; max-width: 280px; }
+.clip-cap-ov { position: absolute; left: 4%; right: 4%; bottom: 7%; text-align: center; pointer-events: none; z-index: 2; }
+.clip-cap-ov.mid { bottom: auto; top: 50%; transform: translateY(-50%); }
+.clip-cap-ov span { color: #fff; font-weight: bold; font-family: Arial, sans-serif; white-space: pre-line; line-height: 1.15;
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 -1px 0 #000, 0 1px 0 #000, -1px 0 0 #000, 1px 0 0 #000; }
+.clip-join-ov { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; z-index: 3; pointer-events: none; }
+.clip-cap-msg { font-size: var(--fs-s); color: var(--ink); }
+.clip-cap-msg:empty { display: none; }
+.clip-cap-msg .ok { color: var(--menu-accent); font-weight: bold; }
+.clip-cap-tools { flex-wrap: wrap; }
+.clip-cap-paste textarea { width: 100%; box-sizing: border-box; background: var(--menu-bg); color: var(--ink-menu); border: 1px solid var(--vctl-line); font: var(--fs-m) var(--font-ui); resize: vertical; }
+.clip-cap-list { max-height: 150px; overflow-y: auto; border: 1px solid var(--vctl-line); margin-top: 4px; }
+.clip-cap-list:empty { display: none; }
+.cap-row { display: flex; align-items: center; gap: 6px; padding: 1px 4px; border-bottom: 1px solid var(--base-20b); }
+.cap-row.now { background: var(--btn-green); }
+.cap-row .cap-t { background: none; border: 0; color: var(--ink-dim); font: var(--fs-s) var(--font-lcd); cursor: pointer; white-space: nowrap; padding: 0; min-width: 118px; text-align: left; }
+.cap-row .cap-t:hover { color: var(--menu-accent); text-decoration: underline; }
+.cap-row input { flex: 1; min-width: 0; background: var(--menu-bg); color: var(--ink-menu); border: 1px solid var(--vctl-line); font: var(--fs-m) var(--font-ui); padding: 1px 4px; }
+.cap-row.ed input { border-color: #ffb627; box-shadow: inset 3px 0 0 #ffb627; }
+.cap-row .cap-ed { font-size: var(--fs-s); color: var(--ink); border-left: 3px solid #ffb627; padding-left: 3px; }
+.cap-row .cap-x { background: none; border: 0; color: var(--ink-dim); cursor: pointer; font-size: 13px; padding: 0 3px; }
+.cap-row .cap-x:hover { color: var(--ink); }
+.clip-jcards { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; min-height: 70px; padding: 4px; border: 1px dashed var(--vctl-line); }
+.clip-jcards.drop { border-color: var(--line-green); background: var(--btn-green); }
+.cj-card { position: relative; width: 112px; border: 1px solid var(--vctl-line); background: var(--menu-bg); color: var(--ink-menu); font: var(--fs-s) var(--font-ui); cursor: grab; user-select: none; }
+.cj-card.on { border-color: var(--line-green); box-shadow: inset 0 0 0 1px var(--line-green); }
+.cj-card.dragging { opacity: .4; }
+.cj-card.before { box-shadow: -4px 0 0 var(--amber); }
+.cj-card .cj-pic { height: 54px; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.cj-card .cj-pic img { max-width: 100%; max-height: 100%; display: block; }
+.cj-card .cj-l { padding: 2px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cj-card .cj-l b { color: var(--ink); }
+.cj-card .cj-letter { position: absolute; left: 3px; top: 3px; background: #000; color: #fff; border: 1px solid #fff; font: bold 10px var(--font-lcd); padding: 0 4px; }
+.cj-card .cj-x { position: absolute; right: 2px; top: 2px; background: #000; color: #fff; border: 1px solid #fff; font-size: 11px; line-height: 12px; padding: 0 3px; cursor: pointer; }
+.cj-add { display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.cj-add button { font: var(--fs-s) var(--font-ui); }
+.clip-jstills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px; border: 1px solid var(--vctl-line); margin-bottom: 4px; }
+.clip-jstills img { height: 42px; border: 1px solid var(--vctl-line); cursor: pointer; }
+.clip-jstills img:hover { border-color: var(--line-green); }
+#clipMain { position: relative; }
+.clip-tcard { position: absolute; left: 50%; top: 40px; transform: translateX(-50%); z-index: 20; width: 360px; background: var(--dialog-bg); color: var(--ink); border: 1px solid var(--line-green); box-shadow: 0 6px 24px rgba(0,0,0,.6); padding: 8px 10px; }
+.clip-tcard input[type=text] { flex: 1; background: var(--menu-bg); color: var(--ink-menu); border: 1px solid var(--vctl-line); font: var(--fs-m) var(--font-ui); padding: 2px 4px; }
+.clip-tcard canvas { display: block; width: 320px; height: 180px; margin: 6px auto; border: 1px solid var(--vctl-line); }
+.tc-cols { display: flex; gap: 5px; }
+.tc-cols button { width: 20px; height: 20px; border: 1px solid var(--vctl-line); cursor: pointer; padding: 0; }
+.tc-cols button.on { outline: 2px solid var(--line-green); outline-offset: 1px; }

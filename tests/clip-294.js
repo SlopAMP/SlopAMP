@@ -40,7 +40,7 @@ const lufs = (f) => { const e = require('child_process').spawnSync(FF, ['-hide_b
   // ================= 1. the layout (GA, GC)
   await ev((f) => clipOpen(f, { kind: 'mp4' }), V); await sleep(1500);
   const tabsShown = await ev(() => [...WM.$('#clipTabs').children].filter(b => !b.classList.contains('hidden')).map(b => b.dataset.t));
-  ok(JSON.stringify(tabsShown) === '["trim","shape","sound","speed","convert","shots"]', `tabs Trim, Shape, Sound, Speed, (2.9.5: Convert,) Shots; Captions and Join hidden ${JSON.stringify(tabsShown)}`);
+  ok(JSON.stringify(tabsShown) === '["trim","shape","sound","speed","convert","captions","join","shots"]', `tabs Trim, Shape, Sound, Speed, (2.9.5: Convert,) (2.9.7: Captions, Join,) Shots ${JSON.stringify(tabsShown)}`);
   const kinds = await ev(() => [...WM.$('#clipKind').children].filter(b => !b.classList.contains('hidden')).map(b => b.textContent));
   ok(JSON.stringify(kinds) === '["MP3","MP4","GIF"]', `Save as: MP3 · MP4 · GIF (More formats… hidden) ${JSON.stringify(kinds)}`);
   ok(/^MP4 · 1280×720 · H\.264 \+ AAC · RE-ENCODE exact cut · ≈ \d/.test(await outLine()), `the output line: what, re-encode, about how big: "${await outLine()}"`);

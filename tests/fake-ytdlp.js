@@ -19,6 +19,15 @@ const calls = fs.readFileSync(logF, 'utf8').split('\n').filter(Boolean).map(l =>
 const p = (cfg.posts || {})[id] || { mode: 'fail', error: `ERROR: [twitter] ${id}: No video could be found in this tweet` };
 const fail = (msg) => { process.stderr.write(`${msg}\n`); process.exit(1); };
 setTimeout(() => {
+  // 2.9.7: CLIP → Captions asks for a YouTube video's subtitles only (--skip-download): cfg.subs[id] =
+  //   { manual: "<vtt>" | null, auto: "<vtt>" | null, lang: "en" } written as <-o template with %(ext)s = <lang>.vtt>
+  if (args.includes('--skip-download')) {
+    const sb = (cfg.subs || {})[id];
+    if (!sb) fail(`ERROR: [youtube] ${id}: Video unavailable`);
+    const tpl = args[args.indexOf('-o') + 1], want = args.includes('--write-auto-subs') ? sb.auto : sb.manual;
+    if (want) { fs.mkdirSync(path.dirname(tpl), { recursive: true }); fs.writeFileSync(tpl.replace('%(ext)s', `${sb.lang || 'en'}.vtt`), want); }
+    process.exit(0);
+  }
   // 2.9.1: a YouTube item (posts with "size"): -j answers its size; a download writes a file that big (sparse)
   if (p.size || p.nosize) {
     const audio = args.includes('-x') || (args.includes('-f') && args[args.indexOf('-f') + 1] === 'ba/b');

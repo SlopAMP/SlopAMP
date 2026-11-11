@@ -3,12 +3,14 @@
 //
 // X takes MP4 / MOV with H.264 video (8-bit 4:2:0) + AAC audio, up to 1920×1200 (landscape) / 1200×1900
 // (portrait), up to 60 fps on the web, about 25 Mb/s. Free accounts: 2:20 and 512 MB; X Premium: up to 4 h
-// (web / iOS) and 16 GB. SlopAMP can't know the account, so length and size are warnings, never blocks.
+// (web / iOS) and 16 GB. 2.9.7: length and size follow the saved X account (Free when none is saved yet); they're
+// warnings, never blocks.
 // (X Help Center + spec pages, Oct 2026.)
 const path = require('path');
 
 // 2.9.5: the numbers live in renderer/xlimits.js (one place for X's limits, shared with the windows)
-const { LIMITS } = require('./renderer/xlimits');
+const XL = require('./renderer/xlimits');
+const { LIMITS } = XL;
 const BOX = { land: LIMITS.video.landscape, port: LIMITS.video.portrait };
 const FREE_LEN = LIMITS.free.sec;         // s (2:20)
 const FREE_SIZE = LIMITS.free.bytes;      // bytes
@@ -26,8 +28,10 @@ function fitSize(w, h) {
   return { w: even(w * k), h: even(h * k), scaled: true };
 }
 
-// info: media.js probe() result; size: bytes. null for a file without a picture (songs are never tagged).
-function assess(info, size) {
+// info: media.js probe() result; size: bytes; account: 'free' | 'premium' (anything else: Free). null for a file
+// without a picture (songs are never tagged). `ready`: the file itself is what X takes (H.264 + AAC MP4 in X's box);
+// `long` / `big` / `over`: past the account's length / size (2.9.7: the saved account, not always Free).
+function assess(info, size, account) {
   if (!info || !info.hasVideo || !info.video) return null;
   const v = info.video, a = info.audio;
   const fps = v.fps || 0;
@@ -49,13 +53,18 @@ function assess(info, size) {
     codec: v.codec, audio: a ? a.codec : '', w: v.width || 0, h: v.height || 0, fps, duration: dur, size: size || 0,
     line: `${upper(v.codec)} · ${v.height || '?'}p${fps ? ` · ${Math.round(fps)} fps` : ''}${a ? ` · ${upper(a.codec)}` : ' · no sound'}`,
     why: why.join(' + '),
-    long: dur > FREE_LEN, big: (size || 0) > FREE_SIZE
+    ...limits(account, dur, size || 0)
   };
+}
+// the account's part (also used again on a cached assess() when the account changes)
+function limits(account, dur, size) {
+  const acct = XL.account(account), over = XL.checkPost(acct, dur || 0, size || 0);
+  return { account: acct, long: over.some(o => o.what === 'length'), big: over.some(o => o.what === 'size'), over: over.map(o => o.text) };
 }
 
 // What Fix for X will make: { copyVideo, w, h, fps, line, estMB }
 function plan(info, size) {
-  const x = assess(info, size); if (!x) return null;
+  const x = assess(info, size); if (!x) return null;      // the picture and sound only: the account doesn't change them
   const fit = fitSize(x.w, x.h);
   const fps = x.fps > MAX_FPS + 0.5 ? MAX_FPS : x.fps;
   const copyVideo = x.videoOk;
@@ -96,4 +105,4 @@ function audioFixArgs(input, output) {
   return ['-i', input, '-map', '0:v:0', '-map', '0:a:0', '-map_metadata', '0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-ac', '2', '-ar', '48000', '-movflags', '+faststart', '-f', 'mp4', output];
 }
 
-module.exports = { assess, plan, outName, ffArgs, audioFixArgs, fitSize, FREE_LEN, FREE_SIZE, MAX_FPS };
+module.exports = { assess, limits, plan, outName, ffArgs, audioFixArgs, fitSize, FREE_LEN, FREE_SIZE, MAX_FPS };

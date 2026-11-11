@@ -126,6 +126,34 @@ class Downloader {
     }, 1500);
   }
 
+  // 2.9.7 (CLIP Captions): a YouTube video's subtitles, fetched on demand (nothing else is downloaded): English
+  // ones people wrote first, else YouTube's automatic ones ("auto"). -> { ok, lang, auto, vtt } | { ok: false, error }
+  async fetchSubs(url, tmpDir) {
+    const exe = this.ensureExe();
+    if (!exe) return { ok: false, error: 'The downloader (yt-dlp) is missing from this copy of SlopAMP.' };
+    if (typeof url !== 'string' || !/^https?:\/\//.test(url)) return { ok: false, error: 'No YouTube link for this video.' };
+    const env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', ...(this.jsRuntime ? this.jsRuntime.env : {}) };
+    fs.rmSync(tmpDir, { recursive: true, force: true }); fs.mkdirSync(tmpDir, { recursive: true });
+    const run = (extra) => new Promise((resolve) => {
+      const args = [...this.baseArgs(false), '--skip-download', ...extra, '--sub-format', 'vtt/best', '--convert-subs', 'vtt', '-o', path.join(tmpDir, 's.%(ext)s'), url];
+      this.log('yt-dlp subs', extra.join(' '));
+      const p = execFile(exe, args, { windowsHide: true, timeout: 90000, maxBuffer: 8 * 1024 * 1024, env }, (err, _o, stderr) => resolve(err ? String(stderr || err.message).trim().split('\n').pop() : ''));
+      this.subsProc = p;
+    });
+    const pick = () => {
+      let names = []; try { names = fs.readdirSync(tmpDir).filter(n => /\.vtt$/i.test(n)); } catch (_) {}
+      const lang = (n) => (/^s\.(.+)\.vtt$/i.exec(n) || [])[1] || '';
+      names.sort((a, b) => (/^en(-orig)?$/i.test(lang(b)) - /^en(-orig)?$/i.test(lang(a))) || (/^en/i.test(lang(b)) - /^en/i.test(lang(a))) || a.localeCompare(b));
+      return names[0] ? { name: names[0], lang: lang(names[0]) } : null;
+    };
+    let err = await run(['--write-subs', '--sub-langs', 'en.*,en']), auto = false, f = pick();
+    if (!f) { auto = true; const e2 = await run(['--write-auto-subs', '--sub-langs', 'en-orig,en,.*-orig']); err = e2 || err; f = pick(); }
+    if (!f) return { ok: false, error: err ? friendlyError(err) : 'This video has no subtitles on YouTube.' };
+    let vtt = ''; try { vtt = fs.readFileSync(path.join(tmpDir, f.name), 'utf8'); } catch (_) {}
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    return vtt ? { ok: true, lang: f.lang.replace(/-orig$/, ''), auto, vtt } : { ok: false, error: 'Couldn’t read the subtitles.' };
+  }
+
   // Options every yt-dlp call needs: quiet machine-readable output, our FFmpeg and JavaScript runtime.
   baseArgs(android) {
     const a = ['--no-playlist', '--no-colors', '--encoding', 'utf-8', '--ffmpeg-location', this.ffmpegDir];
