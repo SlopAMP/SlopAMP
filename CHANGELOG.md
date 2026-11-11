@@ -1,6 +1,17 @@
 # Changelog
 
-## 2.9.7 — unreleased
+## 2.9.8 — unreleased
+
+CLIP editor, part 4. Still only the FFmpeg inside SlopAMP; the original is never changed and every save is a new file.
+
+- **Your own lengths.** A **+** after 5 · 10 · 15 · 20 · 25 · 30 · 60 adds your own clip length (typed as 45 or 1:30, 1 s to 1 hour). Up to 3, shown with a dashed border, on keys **8, 9, 0**; click and Shift-click work like the built-in ones; right-click one to remove it. Remembered after a restart.
+- **Blurred fill.** Shape has a **Fit** row: **Crop to the box** (as before), **Whole picture, black bars**, or **Whole picture, blurred fill**: the whole picture stays in the middle and the bars show a blurred, enlarged copy of the same moment (Soft or Strong, darkened a little unless you turn that off). Out at 1080 or 720 on the short side (1080×1920 / 720×1280 for 9:16). While paused, the preview shows a real frame of the result. GIFs and WebPs get it too, and Join's Fit has **Blurred fill** next to Letterbox and Crop to fill. It always re-encodes.
+- **Animated WebP.** A **WebP** button next to GIF: the GIF settings (width, frames/s, loop) plus Quality (Smaller / Normal / Best), with a size estimate. Saved in Downloads\SlopAMP\gifs and listed with the GIFs in the Library. Usually a quarter of a GIF's size, full colour, no sound. The For X bar says it's not for X (X takes GIF, JPEG and PNG pictures): use GIF or MP4 there.
+- **Loop for MP4.** In the Trim tab: **Repeat ×2 / ×3 / ×5** or **up to 15 / 30 / 60 s**, and **Boomerang** (forward, then backward; clips up to 15 s). The repeats are copied, not re-encoded (a Fast cut loop stays a Fast cut); Boomerang re-encodes once. Sound Keep or Off. The For X bar counts the whole loop's length.
+- **Change the sound.** At the top of the Sound tab: **Original · Replace · Mix under**. Pick a song (MP3, M4A, WAV, FLAC, OGG) or another video for its sound (Pick a file…, From the playlist, or drop it on the tab). Line it up with "the sound from m:ss at m:ss of the clip" or by dragging its amber lane under the wave; **▶ Play both** previews them together. Mix under keeps the original quieter (−14 dB to start). The clip's length wins: a shorter sound loops (or goes quiet), a longer one fades out over the last 2 s. With Speed, the new sound plays at its normal speed. The picture is copied when nothing else changes it (Fast cut OK); Even out, Volume and Fades apply to the result. Works for MP4 clips, Convert and Join. Right-click a video in the playlist or Library → **♫ Change the sound…** opens CLIP on it with the Sound tab ready. Clip again brings the new sound back.
+- Test: `tests/clip-298.js`.
+
+## 2.9.7 — released Nov 10, 2026
 
 CLIP editor, part 3: Captions and Join, and X's limits follow your X account everywhere. Still only the FFmpeg and yt-dlp inside SlopAMP; the original is never changed and every save is a new file.
 

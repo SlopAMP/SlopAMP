@@ -214,16 +214,17 @@
         <span class="ed-sp"></span>
         <button type="button" class="sb dim" id="clipSetIn" title="The clip starts where the preview is (I, while CLIP is the active window)">Set In <kbd>I</kbd></button>
         <button type="button" class="sb dim" id="clipSetOut" title="The clip ends where the preview is (O, while CLIP is the active window)">Set Out <kbd>O</kbd></button>
-        <span class="dim">Save as</span><div class="dlm-seg clip-kind" id="clipKind"><button type="button" data-k="mp3">MP3</button><button type="button" data-k="mp4">MP4</button><button type="button" data-k="gif">GIF</button><button type="button" data-k="more" class="hidden">More formats&#8230;</button></div>
+        <span class="dim">Save as</span><div class="dlm-seg clip-kind" id="clipKind"><button type="button" data-k="mp3">MP3</button><button type="button" data-k="mp4">MP4</button><button type="button" data-k="gif">GIF</button><button type="button" data-k="webp">WebP</button><button type="button" data-k="more" class="hidden">More formats&#8230;</button></div>
       </div>
       <div class="ed-scroll">
         <div class="ed-sec clip-top">
           <div class="clip-prev hidden" id="clipPrev"><video id="clipVideo" playsinline preload="auto"></video>
             <div class="clip-crop hidden" id="clipCrop"><div class="cc-box" id="clipCropBox"><span class="cc-lab" id="clipCropLab"></span><i class="cc-g1"></i><i class="cc-g2"></i><b data-h="nw"></b><b data-h="n"></b><b data-h="ne"></b><b data-h="e"></b><b data-h="se"></b><b data-h="s"></b><b data-h="sw"></b><b data-h="w"></b></div></div>
-            <div class="clip-cap-ov hidden" id="clipCapOv"><span id="clipCapOvT"></span></div><img class="clip-join-ov hidden" id="clipJoinOv" alt="" draggable="false">
+            <img class="clip-shape-img hidden" id="clipShapeImg" alt="" draggable="false"><audio id="clipNsAudio" preload="auto"></audio><div class="clip-cap-ov hidden" id="clipCapOv"><span id="clipCapOvT"></span></div><img class="clip-join-ov hidden" id="clipJoinOv" alt="" draggable="false">
             <span class="clip-badge hidden" id="clipSpeedBadge"></span><span class="clip-prev-t" id="clipPrevT"></span><span class="clip-prev-msg hidden" id="clipPrevMsg"></span></div>
           <div class="clip-film hidden" id="clipFilm"></div>
           <div class="ed-wave clip-wave" id="clipWave" title="Click to move the preview there · drag the green edges (or the clip) · drag on the wave for a new clip"><canvas id="clipWaveC"></canvas><div class="ed-wave-msg" id="clipWaveMsg"></div></div>
+          <div class="clip-ns-lane hidden" id="clipNsLane" title="The new sound: drag it left or right to line it up"><canvas id="clipNsLaneC"></canvas><span class="ns-lab" id="clipNsLaneLab"></span></div>
           <div class="ed-ruler" id="clipRuler"></div>
           <div class="ed-row">
             <label>In <span class="ed-step clip-tm"><button type="button" data-e="in" data-d="-0.1" title="0.1 s earlier">&minus;</button><input type="text" id="clipIn" spellcheck="false" maxlength="12"><button type="button" data-e="in" data-d="0.1" title="0.1 s later">+</button></span></label>
@@ -250,11 +251,19 @@
             <div class="clip-col"><label><input type="radio" name="clipCut" value="exact" id="clipCutExact"> <span><b>Exact cut</b> <span class="dim">&middot; re-encodes, starts on the frame you picked (a little slower)</span></span></label><label><input type="radio" name="clipCut" value="fast" id="clipCutFast"> <span><b>Fast cut</b> <span class="dim" id="clipFastNote">&middot; no re-encode, may start up to a few seconds early (keyframes)</span></span></label></div>
             <div class="clip-col"><label class="ed-ck"><input type="checkbox" id="clipAlsoMp3"> Also save the sound as MP3 &rarr; <b>mp3clips</b></label></div>
           </div>
+          <!-- 2.9.8: Loop for MP4 (3B / 3C) -->
+          <div class="clip-loop hidden" id="clipLoopRow">
+            <div class="ed-row"><span class="clip-lab">LOOP</span><span>Repeat</span><div class="clip-seg" id="clipRepN"><button type="button" data-v="0">Off</button><button type="button" data-v="2">&times;2</button><button type="button" data-v="3">&times;3</button><button type="button" data-v="5">&times;5</button></div>
+              <span class="dim">or up to</span><div class="clip-seg" id="clipRepUp"><button type="button" data-v="15">15 s</button><button type="button" data-v="30">30 s</button><button type="button" data-v="60">60 s</button></div><span class="ed-lcd" id="clipRepLcd"></span></div>
+            <div class="ed-row"><label class="clip-tg-l"><input type="checkbox" id="clipRepBoom" class="clip-tg"> <b>Boomerang</b></label><span class="dim" id="clipRepBoomNote">&middot; forward, then backward (re-encodes; up to 15 s)</span>
+              <span class="clip-l2">Sound</span><div class="clip-seg" id="clipRepSound"><button type="button" data-v="1">Keep</button><button type="button" data-v="0">Off</button></div></div>
+            <div class="ed-row dim clip-hint" id="clipRepHint">An MP4 can&#8217;t carry a &#8220;loop&#8221; switch: Loop repeats the clip inside the file. X plays short videos on a loop by itself; other players play the repeats, then stop. The repeats are copied (no re-encode).</div>
+          </div>
           <div class="clip-gif hidden" id="clipOptsGif">
-            <div class="ed-row"><span class="clip-lab">GIF</span><span>Width</span><div class="clip-seg" id="clipGifW"><button type="button" data-v="320">320</button><button type="button" data-v="480">480</button><button type="button" data-v="640">640</button><button type="button" data-v="0">Original</button></div>
+            <div class="ed-row"><span class="clip-lab" id="clipAnimLab">GIF</span><span>Width</span><div class="clip-seg" id="clipGifW"><button type="button" data-v="320">320</button><button type="button" data-v="480">480</button><button type="button" data-v="640">640</button><button type="button" data-v="0">Original</button></div>
               <span>Frames/s</span><div class="clip-seg" id="clipGifFps"><button type="button" data-v="10">10</button><button type="button" data-v="15">15</button><button type="button" data-v="24">24</button></div>
               <label class="ed-ck"><input type="checkbox" id="clipGifLoop"> Loop forever</label></div>
-            <div class="ed-row"><span>Colours</span><div class="clip-seg" id="clipGifCol"><button type="button" data-v="256">Best (256)</button><button type="button" data-v="64">Smaller (64)</button></div>
+            <div class="ed-row"><span id="clipGifColLab">Colours</span><div class="clip-seg" id="clipGifCol"><button type="button" data-v="256">Best (256)</button><button type="button" data-v="64">Smaller (64)</button></div><div class="clip-seg hidden" id="clipWebpQ"><button type="button" data-v="small">Smaller</button><button type="button" data-v="normal">Normal</button><button type="button" data-v="best">Best</button></div>
               <span class="ed-lcd" id="clipGifEst">&asymp; &hellip;</span><span class="dim" id="clipGifEstNote">estimated from a quick 1 s test</span></div>
             <div class="ed-row clip-warn hidden" id="clipGifWarn"></div>
             <div class="ed-row dim clip-hint">GIFs have no sound (Sound is greyed); Shape and Speed work. Saved in Downloads\SlopAMP\gifs. Keep it short: every second adds to the size.</div>
@@ -264,11 +273,28 @@
         <div class="ed-sec clip-pane hidden" id="clipPaneShape">
           <div class="ed-row"><span class="clip-lab">SHAPE</span><div class="clip-seg" id="clipRatio"><button type="button" data-r="orig">Original</button><button type="button" data-r="16:9">16:9</button><button type="button" data-r="9:16">9:16 Shorts / TikTok</button><button type="button" data-r="1:1">1:1</button><button type="button" data-r="4:5">4:5</button></div>
             <span class="dim">Box:</span><div class="clip-seg" id="clipBoxPos"><button type="button" data-p="c">Center</button><button type="button" data-p="l">Left</button><button type="button" data-p="r">Right</button></div></div>
+          <div class="ed-row" id="clipFitRow2"><span class="clip-l2">Fit</span><div class="clip-seg" id="clipShapeFit"><button type="button" data-v="crop">Crop to the box</button><button type="button" data-v="bars">Whole picture, black bars</button><button type="button" data-v="blur">Whole picture, blurred fill</button></div></div>
+          <div class="ed-row hidden" id="clipBlurRow"><span class="clip-l2">Blur</span><div class="clip-seg" id="clipShapeBlur"><button type="button" data-v="soft">Soft</button><button type="button" data-v="strong">Strong</button></div><label class="ed-ck"><input type="checkbox" id="clipShapeDark"> Darken the fill a little</label><span class="dim">&middot; the bars show a blurred, enlarged copy of the same moment</span></div>
           <div class="ed-row" id="clipShapeOutRow"><span>Output</span><div class="clip-seg" id="clipShapeOut"><button type="button" data-u="0"></button><button type="button" data-u="1"></button></div><span class="dim" id="clipShapeNote"></span></div>
           <div class="ed-row clip-warn hidden" id="clipShapeWarn"></div>
           <div class="ed-row dim clip-hint" id="clipShapeHint">Drag the box on the picture to move it, drag its edges or corners to zoom in (it keeps the shape). One box for the whole clip.</div>
         </div>
         <div class="ed-sec clip-pane hidden" id="clipPaneSound">
+          <!-- 2.9.8: Change the sound (5A–5H) -->
+          <div class="clip-ns" id="clipNs">
+            <div class="ed-row"><span class="clip-lab">SOUND</span><div class="clip-seg" id="clipNsMode"><button type="button" data-v="orig">Original</button><button type="button" data-v="replace">Replace</button><button type="button" data-v="mix">Mix under</button></div>
+              <span class="ns-file hidden" id="clipNsFile"></span><button type="button" class="sb dim" id="clipNsPick">Pick a file&#8230;</button><select class="clip-sel" id="clipNsList" title="A song or video from the playlist"><option value="">From the playlist&#8230;</option></select></div>
+            <div class="ns-more" id="clipNsMore">
+              <div class="ed-row"><span class="clip-l2">Start</span><span class="dim">the sound from</span><span class="ed-step clip-tm"><button type="button" data-ns="from" data-d="-0.5" title="0.5 s earlier (Shift: 5 s)">&minus;</button><input type="text" id="clipNsFrom" spellcheck="false" maxlength="12"><button type="button" data-ns="from" data-d="0.5" title="0.5 s later (Shift: 5 s)">+</button></span>
+                <span class="dim">at</span><span class="ed-step clip-tm"><button type="button" data-ns="at" data-d="-0.5" title="0.5 s earlier (Shift: 5 s)">&minus;</button><input type="text" id="clipNsAt" spellcheck="false" maxlength="12"><button type="button" data-ns="at" data-d="0.5" title="0.5 s later (Shift: 5 s)">+</button></span><span class="dim">of the clip</span>
+                <button type="button" class="sb" id="clipNsPlay">&#9654; Play both</button><span class="dim">&middot; or drag the amber lane under the wave</span></div>
+              <div class="ed-row"><span class="clip-l2">Volume</span><span class="dim">new sound</span><span class="clip-vol"><input type="range" id="clipNsVol" min="-12" max="12" step="1" value="0"></span><span class="ed-lcd" id="clipNsVolLcd">0 dB</span>
+                <span class="dim" id="clipNsOrigLab">original</span><span class="clip-vol"><input type="range" id="clipNsOrig" min="-30" max="0" step="1" value="-14"></span><span class="ed-lcd" id="clipNsOrigLcd">−14 dB</span></div>
+              <div class="ed-row"><span class="clip-l2">Lengths</span><span class="dim" id="clipNsShortLab">if the sound is shorter than the clip:</span><div class="clip-seg" id="clipNsShort"><button type="button" data-v="loop">Loop it</button><button type="button" data-v="silence">Silence after</button></div>
+                <label class="ed-ck"><input type="checkbox" id="clipNsFade"> if it&#8217;s longer: fade out at the end (2 s)</label></div>
+            </div>
+            <div class="ed-row clip-ns-msg" id="clipNsMsg"></div>
+          </div>
           <div class="ed-row"><label class="clip-tg-l"><input type="checkbox" id="clipEven" class="clip-tg"> <b>Even out the volume</b></label><span class="dim">&middot; loudness normalization (FFmpeg loudnorm, measured first) to the level YouTube and Spotify use</span></div>
           <div class="ed-row dim clip-sub" id="clipLoudInfo"></div>
           <div class="ed-row"><span class="clip-l2">Volume</span><span class="clip-vol"><button type="button" class="sb dim" id="clipVolDn" title="1 dB quieter">&minus;</button><input type="range" id="clipVol" min="-12" max="12" step="1" value="0"><button type="button" class="sb dim" id="clipVolUp" title="1 dB louder">+</button></span><span class="ed-lcd" id="clipVolLcd">0 dB</span><span class="dim">&minus;12 &hellip; +12 dB &middot; after evening out &middot; double-click the slider: 0</span></div>
@@ -317,7 +343,7 @@
           <div class="clip-jstills hidden" id="clipJoinStills"></div>
           <div class="ed-row clip-jsel hidden" id="clipJoinSel"><span id="clipJoinSelT"></span><span class="clip-l2">Length</span><div class="clip-seg" id="clipJoinDur"></div><button type="button" class="sb dim hidden" id="clipJoinEdit">Edit card&#8230;</button></div>
           <div class="ed-row"><span class="clip-l2">Size</span><select id="clipJoinSize" class="clip-sel"><option value="first"></option><option value="1080">1920&times;1080 (1080p)</option><option value="720">1280&times;720 (720p)</option><option value="916">1080&times;1920 (9:16)</option></select>
-            <span class="clip-l2">Fit</span><div class="clip-seg" id="clipJoinFit"><button type="button" data-v="letterbox">Letterbox</button><button type="button" data-v="crop">Crop to fill</button></div></div>
+            <span class="clip-l2">Fit</span><div class="clip-seg" id="clipJoinFit"><button type="button" data-v="letterbox">Letterbox</button><button type="button" data-v="blur">Blurred fill</button><button type="button" data-v="crop">Crop to fill</button></div></div>
           <div class="ed-row"><span>Under stills &amp; cards</span><div class="clip-seg" id="clipJoinUnder"><button type="button" data-v="silence">Silence</button><button type="button" data-v="keep">Keep the song going</button></div>
             <span class="clip-l2">Save</span><div class="clip-seg" id="clipJoinMode"><button type="button" data-v="join">Join in order</button><button type="button" data-v="each">Save each</button></div></div>
           <div class="ed-row dim clip-hint">Mark In / Out, then <b>+ Section</b> (or <kbd>J</kbd>) &middot; drag the cards to change the order &middot; &times; removes &middot; a still or title card is a picture on screen for a few seconds &middot; Shape, Sound, Speed and Captions apply to the whole joined video &middot; joining always re-encodes (one size, one frame rate); &#8220;Save each&#8221; saves the sections as separate clips (Fast cut OK)</div>
@@ -338,6 +364,8 @@
         </div>
         </div>
       </div>
+      <!-- 2.9.8: your own length (1A) -->
+      <div class="clip-own-box hidden" id="clipOwnBox"><b>Your own length</b><input type="text" id="clipOwnIn" maxlength="8" spellcheck="false" placeholder="45 or 1:30"><span class="dim">s or m:ss</span><button type="button" class="sb go" id="clipOwnGo">Add</button><button type="button" class="sb dim" id="clipOwnX">Cancel</button><span class="dim" id="clipOwnMsg"></span><span class="dim">up to 3 (keys 8, 9, 0)</span></div>
       <!-- 2.9.7: the title card editor (6D): SlopAMP draws the card itself and saves it as a picture -->
       <div class="clip-tcard hidden" id="clipTCard">
         <div class="ed-h">TITLE CARD</div>

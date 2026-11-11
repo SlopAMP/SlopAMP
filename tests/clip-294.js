@@ -42,7 +42,7 @@ const lufs = (f) => { const e = require('child_process').spawnSync(FF, ['-hide_b
   const tabsShown = await ev(() => [...WM.$('#clipTabs').children].filter(b => !b.classList.contains('hidden')).map(b => b.dataset.t));
   ok(JSON.stringify(tabsShown) === '["trim","shape","sound","speed","convert","captions","join","shots"]', `tabs Trim, Shape, Sound, Speed, (2.9.5: Convert,) (2.9.7: Captions, Join,) Shots ${JSON.stringify(tabsShown)}`);
   const kinds = await ev(() => [...WM.$('#clipKind').children].filter(b => !b.classList.contains('hidden')).map(b => b.textContent));
-  ok(JSON.stringify(kinds) === '["MP3","MP4","GIF"]', `Save as: MP3 · MP4 · GIF (More formats… hidden) ${JSON.stringify(kinds)}`);
+  ok(JSON.stringify(kinds) === '["MP3","MP4","GIF","WebP"]', `Save as: MP3 · MP4 · GIF (2.9.8: · WebP; More formats… hidden) ${JSON.stringify(kinds)}`);
   ok(/^MP4 · 1280×720 · H\.264 \+ AAC · RE-ENCODE exact cut · ≈ \d/.test(await outLine()), `the output line: what, re-encode, about how big: "${await outLine()}"`);
   const c0 = await cw(); await c0.screenshot({ path: `${O}/1-trim-mp4.png` });
 
@@ -61,14 +61,14 @@ const lufs = (f) => { const e = require('child_process').spawnSync(FF, ['-hide_b
   await c1.keyboard.press('Shift+Digit1'); await sleep(150);   // In = Out − 5
   io = await ev(() => [CL.in, CL.out]);
   ok(io[0] === 45 && io[1] === 50, `Shift+1: In = Out − 5 (${io})`);
-  let pr = await ev(() => [...WM.$('#clipPresets').children].map(b => `${b.dataset.l}${b.classList.contains('on') ? '*' : ''}${b.classList.contains('last') ? '_' : ''}${b.disabled ? 'x' : ''}`).join(' '));
+  let pr = await ev(() => [...WM.$('#clipPresets').children].filter(b => b.dataset.l && b.dataset.own == null).map(b => `${b.dataset.l}${b.classList.contains('on') ? '*' : ''}${b.classList.contains('last') ? '_' : ''}${b.disabled ? 'x' : ''}`).join(' '));
   ok(pr === '5*_ 10 15 20 25 30 60', `the length that fits is lit, the last used underlined (amber) ${pr}`);
   await ev(() => { clipSet('in', 10); clipSet('out', 25); });
   await btn('#clipPresets', 'l', 60); await sleep(100);
   io = await ev(() => [CL.in, CL.out]);
   ok(io[0] === 10 && io[1] === 70, `60 from 0:10 stops at the end of the 70 s file (${io})`);
   await ev((f) => clipOpen(f, { kind: 'mp4' }), SHORT); await sleep(1200);
-  pr = await ev(() => [...WM.$('#clipPresets').children].map(b => `${b.dataset.l}${b.disabled ? 'x' : ''}`).join(' '));
+  pr = await ev(() => [...WM.$('#clipPresets').children].filter(b => b.dataset.l && b.dataset.own == null).map(b => `${b.dataset.l}${b.disabled ? 'x' : ''}`).join(' '));
   ok(pr === '5 10x 15x 20x 25x 30x 60x', `a 6 s file: presets longer than it are greyed ${pr}`);
 
   // ================= 3. Fast cut and the output line (GB)

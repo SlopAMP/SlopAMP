@@ -902,12 +902,20 @@ function registerIpc() {
   });
   ipcMain.handle('clip:image-url', (_e, p) => (typeof p === 'string' && /\.(png|jpe?g|webp|bmp)$/i.test(p) && fs.existsSync(p) ? fileUrl(p) : null));
   ipcMain.handle('clip:entry', (_e, p) => (typeof p === 'string' ? clipper.entry(p) : null));
+  // 2.9.8: a frame of Shape's whole-picture Fit; Change the sound: pick a file, what it is
+  ipcMain.handle('clip:shape-frame', (_e, o) => (o && typeof o === 'object' ? clipper.shapeFrame(o).catch((e) => { log('shape frame failed', e); return null; }) : null));
+  ipcMain.handle('clip:sound-info', (_e, f) => clipper.soundInfo(f).catch(() => ({ ok: false, error: 'SlopAMP can’t read that file.' })));
+  ipcMain.handle('clip:pick-sound', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Pick the new sound (a song, or a video for its sound)', properties: ['openFile'],
+      filters: [{ name: 'Songs and videos', extensions: ['mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus', 'mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi'] }, { name: 'All files', extensions: ['*'] }] });
+    return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+  });
   // shots (SLOP's LOOK, in CLIP since 2.3): o = { file, title, … }
   for (const [ch, fn] of [['clip:shots', 'shots'], ['clip:shot-add', 'shotAdd'], ['clip:shot-set', 'shotSet'], ['clip:shot-del', 'shotDel'], ['clip:shot-burst', 'shotBurst'], ['clip:shot-keep', 'shotKeep']]) {
     ipcMain.handle(ch, (_e, o) => (o && typeof o === 'object' && typeof o.file === 'string' ? clipper[fn](o).catch((e) => { log(`${ch} failed`, e); return { error: 'That didn’t work.' }; }) : { error: 'No file.' }));
   }
   ipcMain.on('clip:shot-folder', (_e, o) => { const d = clipper.shotDir(o || {}); try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} shell.openPath(d); });
-  ipcMain.on('clip:folder', (_e, kind) => { const d = downloadDirs()[kind === 'mp4' ? 'mp4clips' : kind === 'gif' ? 'gifs' : kind === 'conv' ? 'converted' : 'mp3clips']; try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} shell.openPath(d); });
+  ipcMain.on('clip:folder', (_e, kind) => { const d = downloadDirs()[kind === 'mp4' ? 'mp4clips' : kind === 'gif' || kind === 'webp' ? 'gifs' : kind === 'conv' ? 'converted' : 'mp3clips']; try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} shell.openPath(d); });
   // ---- the YOUTUBE window (2.3): ytweb.js
   ipcMain.on('ytweb:rect', (_e, r) => ytweb && ytweb.setRect(r));
   ipcMain.handle('ytweb:nav', (_e, cmd, arg) => (ytweb ? ytweb.nav(String(cmd), arg) : null));
@@ -1064,7 +1072,7 @@ function registerIpc() {
   ipcMain.handle('files:exists', (_e, paths) => (Array.isArray(paths) ? paths.map(p => typeof p === 'string' && fs.existsSync(p)) : []));
   // 2.6 Rename: a song / video / downloaded copy (check: only test the name); a saved playlist; a download's title
   ipcMain.handle('file:rename', async (_e, p, base, check) => {
-    if (typeof p !== 'string' || !(isMediaFile(p) || (/\.gif$/i.test(p) && clipper.inClipDir(p)))) return { error: 'That isn’t a song or video file.' };   // 2.9.4: or a CLIP GIF
+    if (typeof p !== 'string' || !(isMediaFile(p) || (/\.(gif|webp)$/i.test(p) && clipper.inClipDir(p)))) return { error: 'That isn’t a song or video file.' };   // 2.9.4: or a CLIP GIF
     let r = renameFileCore(p, base, !!check);
     for (let i = 0; i < 4 && r.busy; i++) { await new Promise(res => setTimeout(res, 300)); r = renameFileCore(p, base, false); }   // SlopAMP's own player lets go of a file a moment after it stops
     if (r.error || check || r.same) return r;

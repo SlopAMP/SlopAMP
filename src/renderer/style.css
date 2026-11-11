@@ -1239,3 +1239,22 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .tc-cols { display: flex; gap: 5px; }
 .tc-cols button { width: 20px; height: 20px; border: 1px solid var(--vctl-line); cursor: pointer; padding: 0; }
 .tc-cols button.on { outline: 2px solid var(--line-green); outline-offset: 1px; }
+
+/* ---- 2.9.8 CLIP part 4: your own lengths, Shape's Fit preview, Loop, Change the sound (skin colours; the new
+   sound's lane is a fixed amber, like the playhead, readable in every skin) */
+.clip-presets button.own { border-style: dashed; }
+.clip-presets button.own-add { font-weight: bold; min-width: 26px; }
+.clip-own-box { position: absolute; z-index: 25; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; max-width: 380px; background: var(--dialog-bg); color: var(--ink); border: 1px solid var(--line-green); box-shadow: 0 6px 20px rgba(0,0,0,.6); padding: 7px 9px; font: var(--fs-m) var(--font-ui); }
+.clip-own-box input { width: 70px; background: var(--menu-bg); color: var(--ink-menu); border: 1px solid #ffb627; font: var(--fs-m) var(--font-lcd); padding: 2px 4px; }
+.clip-shape-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; z-index: 1; pointer-events: none; }
+.clip-loop { border: 1px solid var(--vctl-line); padding: 3px 8px; margin: 4px 0; }
+.clip-loop .clip-lab { margin-right: 4px; }
+.clip-ns { border: 1px solid var(--vctl-line); padding: 4px 8px; margin: 0 0 6px; }
+.clip-ns.drop { border-color: var(--line-green); background: var(--btn-green); }
+.clip-ns .ns-file { display: inline-flex; gap: 5px; align-items: center; border: 1px solid var(--line-green); background: var(--btn-green); color: var(--ink); padding: 1px 8px; max-width: 300px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.clip-ns-msg { font-size: var(--fs-s); color: var(--ink); }
+.clip-ns-msg:empty { display: none; }
+.clip-ns .clip-tm input { width: 64px; }
+.clip-ns-lane { position: relative; height: 30px; border: 1px solid var(--base-20b); border-top: 0; background: #000; cursor: ew-resize; }
+.clip-ns-lane canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.clip-ns-lane .ns-lab { position: absolute; left: 4px; top: 2px; background: #ffb627; color: #000; font: bold 10px var(--font-ui); padding: 0 4px; pointer-events: none; max-width: 60%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

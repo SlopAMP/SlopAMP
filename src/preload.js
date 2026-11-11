@@ -124,6 +124,9 @@ contextBridge.exposeInMainWorld('phosphor', {
   clipPickImage: () => ipcRenderer.invoke('clip:pick-image'),
   clipImageUrl: (p) => ipcRenderer.invoke('clip:image-url', p),
   clipEntry: (p) => ipcRenderer.invoke('clip:entry', p),
+  clipShapeFrame: (o) => ipcRenderer.invoke('clip:shape-frame', o),       // 2.9.8
+  clipSoundInfo: (f) => ipcRenderer.invoke('clip:sound-info', f),
+  clipPickSound: () => ipcRenderer.invoke('clip:pick-sound'),
   onClip: (cb) => ipcRenderer.on('clip:event', (_e, ev) => cb(ev)),
   // 2.5 #22: X-ready MP4s
   xStatus: (files) => ipcRenderer.invoke('x:status', files),
