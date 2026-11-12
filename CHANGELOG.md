@@ -1,6 +1,19 @@
 # Changelog
 
-## 2.9.8 — unreleased
+## 2.9.9 — unreleased
+
+CLIP editor: **Join other files**. Join (2.9.7) now takes pieces from other videos and songs too. Still only the FFmpeg inside SlopAMP; the originals are never changed and every save is a new file.
+
+- **+ From another file…** sits next to + Section, + Still and + Title card in the Join tab (you can also drop files on the cards). A video or a song comes in as one **dashed card** covering the whole file; a picture is a still. The count says how many files the sections come from ("4 sections from 3 files").
+- **The join list belongs to the CLIP window.** Click a dashed card: CLIP opens that file and keeps the list, with In / Out on that card's piece, so you can mark more sections from it (**+ Section** adds from whichever file is open). Sound, Speed and the fades apply to the whole joined video and stay as you switch; Shape and Captions are each file's own (a file's Shape comes back when you return to it, and crops that file's sections). Opening a file the usual way still starts a fresh list, as before. **▶ Play all** previews the open file's pieces and the stills and cards; the other files play in the saved clip.
+- **Songs over a picture.** A song (or any audio file) plays over its **cover art**, or black if it has none. Put a still or a title card right in front of it to show that instead: it's shown for the song's length ("over the song").
+- **One size, one frame rate, one sound.** The joined video takes the first video section's size (after that file's Shape) and frame rate, unless Size is set to 1080p / 720p / 9:16; every other piece is fitted (Letterbox, Blurred fill or Crop to fill) and converted to that frame rate; all sound becomes 48 kHz stereo AAC. A joined MP4 always re-encodes. **Save each** saves each video section from its own file (Fast cut where that file allows it); songs are left out of Save each (it makes MP4 clips).
+- **Saved with the clip.** Clip again brings the whole list back, the other files' cards dashed. A file that's gone by then shows as a **red card** ("not there any more") and is skipped when saving; the line above Save and the saved message say how many were skipped.
+- **Phone footage.** A phone video with a rotation flag is turned upright before it's fitted (and opens upright in CLIP, so Shape's box matches the picture: before, a portrait phone clip was measured sideways). **HDR** (PQ / HLG, 10-bit) is turned to normal colours (tone-mapped with the bundled FFmpeg's zscale and tonemap) instead of looking washed out; the card says HDR and the line above Save says "HDR: turned to normal colours" (those pieces take about 2.5× longer). **Variable frame rate** video is joined at a steady rate (a phone's nominal 30 when it says so), and its sound stays with the picture. A video with **no sound** gets silence for its length (its card says "no sound"). **Even out the volume** with pieces from several files first brings each file to the same loudness, then evens out the whole result (still one checkbox).
+- **Up to 60 cards**, as before; adding past 60 says how many were left out.
+- Test: `tests/clip-299.js`.
+
+## 2.9.8 — released Nov 11, 2026
 
 CLIP editor, part 4. Still only the FFmpeg inside SlopAMP; the original is never changed and every save is a new file.
 

@@ -372,13 +372,21 @@ function summarize(j) {
     hasCover: !!cover,
     subs,
     coverIndex: cover ? cover.index : -1,
-    video: v ? { codec: v.codec_name, pixFmt: v.pix_fmt || '', width: v.width, height: v.height, profile: v.profile || '', fps: rate(v.avg_frame_rate) || rate(v.r_frame_rate) } : null,
+    video: v ? { codec: v.codec_name, pixFmt: v.pix_fmt || '', width: v.width, height: v.height, profile: v.profile || '', fps: rate(v.avg_frame_rate) || rate(v.r_frame_rate),
+      // 2.9.9 (Join other files): a phone's rotation flag, the colour tags (HDR) and the nominal frame rate (variable-rate video)
+      rot: rotOf(v), trc: v.color_transfer || '', prim: v.color_primaries || '', csp: v.color_space || '', range: v.color_range || '', rfps: rate(v.r_frame_rate) } : null,
     audio: a ? { codec: a.codec_name, sampleRate: parseInt(a.sample_rate, 10) || 0, channels: a.channels || 0, bitrate: parseInt(a.bit_rate, 10) || 0 } : null
   };
 }
 
 function rate(r) { const m = /^(\d+)\/(\d+)$/.exec(String(r || '')); const f = m && +m[2] ? +m[1] / +m[2] : 0; return f > 0 && f < 1000 ? Math.round(f * 100) / 100 : 0; }   // "30000/1001" -> 29.97
 function lowerKeys(o) { const r = {}; for (const k of Object.keys(o)) r[k.toLowerCase()] = o[k]; return r; }
+// 2.9.9: the display rotation (0 / 90 / 180 / 270) from the display matrix or an old "rotate" tag
+function rotOf(v) {
+  const sd = (v.side_data_list || []).find(s => s && Number.isFinite(+s.rotation) && /display matrix/i.test(String(s.side_data_type || '')));
+  const r = sd ? +sd.rotation : +((v.tags && (v.tags.rotate || v.tags.ROTATE)) || 0);
+  return Number.isFinite(r) ? ((Math.round(r / 90) * 90) % 360 + 360) % 360 : 0;
+}
 
 const SUB_EXT = /\.(srt|vtt|ass|ssa)$/i;
 const IMAGE_SUBS = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle', 'xsub', 'dvb_teletext']);

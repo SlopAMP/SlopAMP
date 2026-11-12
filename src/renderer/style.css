@@ -1227,6 +1227,17 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .cj-card .cj-l b { color: var(--ink); }
 .cj-card .cj-letter { position: absolute; left: 3px; top: 3px; background: #000; color: #fff; border: 1px solid #fff; font: bold 10px var(--font-lcd); padding: 0 4px; }
 .cj-card .cj-x { position: absolute; right: 2px; top: 2px; background: #000; color: #fff; border: 1px solid #fff; font-size: 11px; line-height: 12px; padding: 0 3px; cursor: pointer; }
+.cj-card.other { border-style: dashed; border-color: var(--ink-menu); }                 /* 2.9.9: from another file */
+.cj-card.other.on { border-color: var(--line-green); }
+.cj-card.gone { border-color: #e0383e; border-style: dashed; }                             /* 2.9.9 (4F): the file is gone */
+.cj-card.gone .cj-l { color: #ff6b6b; text-decoration: line-through; }
+.cj-card .cj-pic { position: relative; }
+.cj-card .cj-letter, .cj-card .cj-x { z-index: 2; }                                         /* above the picture */
+.cj-card .cj-gone { color: #ff6b6b; font: bold 10px var(--font-ui); text-align: center; padding: 0 4px; }
+.cj-card .cj-note { color: var(--amber); font-size: 24px; line-height: 1; }
+.cj-card .cj-tags { position: absolute; left: 2px; bottom: 2px; display: flex; gap: 2px; }
+.cj-card .cj-tag { background: #000; color: var(--amber); border: 1px solid var(--amber); font: bold 9px var(--font-ui); padding: 0 3px; line-height: 11px; }
+.clip-jhint { background: var(--btn-amber, rgba(255,182,39,.12)); border-left: 3px solid var(--amber); padding: 3px 6px; font: var(--fs-s) var(--font-ui); color: var(--ink-menu); }
 .cj-add { display: flex; flex-direction: column; justify-content: center; gap: 3px; }
 .cj-add button { font: var(--fs-s) var(--font-ui); }
 .clip-jstills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px; border: 1px solid var(--vctl-line); margin-bottom: 4px; }

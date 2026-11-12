@@ -122,6 +122,7 @@ contextBridge.exposeInMainWorld('phosphor', {
   clipJoin: (o) => ipcRenderer.invoke('clip:join', o),                       // 2.9.7: Join v1
   clipSubsYouTube: (url) => ipcRenderer.invoke('clip:subs-youtube', url),    // 2.9.7: Captions from YouTube (yt-dlp)
   clipPickImage: () => ipcRenderer.invoke('clip:pick-image'),
+  clipPickJoin: () => ipcRenderer.invoke('clip:pick-join'),          // 2.9.9
   clipImageUrl: (p) => ipcRenderer.invoke('clip:image-url', p),
   clipEntry: (p) => ipcRenderer.invoke('clip:entry', p),
   clipShapeFrame: (o) => ipcRenderer.invoke('clip:shape-frame', o),       // 2.9.8

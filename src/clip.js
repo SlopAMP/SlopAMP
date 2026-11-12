@@ -26,6 +26,9 @@
 //   animated WebP (libwebp_anim; Downloads\SlopAMP\gifs); Loop for MP4 (repeats joined without re-encoding by the
 //   concat demuxer; Boomerang = forward + reverse, re-encoded, up to 15 s); Change the sound (Replace / Mix under: a
 //   song or another video's sound, lined up, looped or faded; the picture is copied when nothing else changes it).
+// 2.9.9: Join other files: sections from other videos and songs (a song over its cover art, black, or the still /
+//   card in front of it), each file's own Shape, rotation flags turned upright, HDR tone-mapped (zscale + tonemap),
+//   variable frame rates made steady, silence for no sound, each file evened out first; missing files skipped.
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -57,11 +60,37 @@ class Clipper {
     this.xCache = new Map();        // file -> { key: mtime|size, x } (X-ready check, 2.5)
   }
   static cutName(title, a, b) { return `${title} (${fmtCut(a)}-${fmtCut(b)})`; }
+  // 2.9.9: what CLIP reads about a file, with the picture's size as it's shown: FFmpeg turns a phone video with a
+  // rotation flag upright (and so does the preview), so a 1920×1080 file flagged 90° is a 1080×1920 picture
+  async probe(file) {
+    const info = await this.server.probe(file);
+    const v = info && info.video;
+    if (!v || !(v.rot === 90 || v.rot === 270)) return info;
+    return { ...info, video: { ...v, width: v.height, height: v.width, codedW: v.width, codedH: v.height } };
+  }
+  // 2.9.9: HDR (PQ or HLG): turned to normal colours (tone-mapped) when joined; the bundled FFmpeg has zscale + tonemap
+  static hdrOf(v) { const t = v && v.trc; return t === 'smpte2084' ? 'pq' : t === 'arib-std-b67' ? 'hlg' : null; }
+  static toneChain(v) {
+    const tin = v.trc, pin = /^(bt2020|bt709|smpte432|smpte431)$/.test(v.prim) ? v.prim : 'bt2020';
+    const min = /^(bt2020nc|bt2020c|bt709)$/.test(v.csp) ? v.csp : 'bt2020nc', rin = v.range === 'pc' ? 'pc' : 'tv';
+    // zscale needs every colour tag spelled out (in and out), or it finds "no path between colorspaces"
+    return `zscale=tin=${tin}:min=${min}:pin=${pin}:rin=${rin}:t=linear:p=${pin}:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p`;
+  }
+  // 2.9.9: variable frame rate (phones): the nominal and the average rates differ; joined at a steady, usual rate
+  static isVfr(v) { return !!(v && v.rfps > 0 && v.fps > 0 && Math.abs(v.rfps - v.fps) / v.rfps > 0.02); }
+  static steadyFps(v) {
+    const f = (v && v.fps) || 30;
+    if (!Clipper.isVfr(v)) return f;
+    const STD = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60], near = (x) => STD.reduce((b, c) => (Math.abs(c - x) < Math.abs(b - x) ? c : b), 30);
+    // the nominal rate when it's a usual one (a phone's "30"), else the usual rate nearest the average
+    const r = v.rfps; if (r > 0 && r <= 60 && Math.abs(near(r) - r) / r < 0.01) return near(r);
+    return near(f);
+  }
 
   // ---------- a file to cut ----------
   async open(file) {
     if (typeof file !== 'string' || !fs.existsSync(file)) return { ok: false, error: 'The file isn’t there any more.' };
-    const info = await this.server.probe(file);
+    const info = await this.probe(file);
     if (!info || (!info.audio && !info.hasVideo) || !(info.duration > 0)) return { ok: false, error: 'SlopAMP can’t read this file.' };
     const prep = await this.server.prepare(file).catch(() => null);
     const ext = path.extname(file).toLowerCase();
@@ -78,7 +107,9 @@ class Clipper {
       size: (() => { try { return fs.statSync(file).size; } catch (_) { return 0; } })(),   // 2.9.4: the size estimate
       bitrate: info.bitrate || 0, abr: (a && a.bitrate) || (!info.hasVideo && info.bitrate) || 0, fps: (v && v.fps) || 0,
       previewUrl: prep && prep.ok && prep.mode === 'direct' ? prep.directUrl : null,
-      coverUrl: prep && prep.coverUrl
+      coverUrl: prep && prep.coverUrl,
+      // 2.9.9: for the join list's cards (rotation flag, HDR, variable frame rate)
+      rot: (v && v.rot) || 0, hdr: Clipper.hdrOf(v), vfr: Clipper.isVfr(v), sfps: v ? Clipper.steadyFps(v) : 0
     };
   }
 
@@ -87,7 +118,7 @@ class Clipper {
     let st; try { st = fs.statSync(file); } catch (_) { return null; }
     const key = `${file}|${st.mtimeMs}`;
     if (this.peakCache.has(key)) return this.peakCache.get(key);
-    const info = await this.server.probe(file);
+    const info = await this.probe(file);
     if (!info || !info.audio) return null;
     const dur = info.duration || 0;
     const sr = dur > 3 * 3600 ? 400 : 2000;
@@ -329,7 +360,7 @@ class Clipper {
   loudKey(file, tin, len) { let m = 0; try { m = fs.statSync(file).mtimeMs; } catch (_) {} return `${file}|${m}|${tin.toFixed(2)}|${len.toFixed(2)}`; }
   async loudness(o) {
     o = o || {};
-    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.server.probe(o.file) : null;
+    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.probe(o.file) : null;
     if (!info || !info.audio) return { ok: false, error: 'There’s no sound in this file.' };
     const tin = Math.max(0, num(o.in) || 0), len = Math.min(info.duration || Infinity, num(o.out)) - tin;
     if (!(len >= 0.1)) return { ok: false, error: 'The clip is too short.' };
@@ -369,7 +400,7 @@ class Clipper {
     if (!n || typeof n !== 'object' || !['replace', 'mix'].includes(n.mode)) return null;
     const file = typeof n.file === 'string' && fs.existsSync(n.file) ? n.file : null;
     if (!file) return { error: 'The new sound’s file isn’t there any more.' };
-    const info = await this.server.probe(file);
+    const info = await this.probe(file);
     if (!info || !info.audio || !(info.duration > 0)) return { error: 'There’s no sound in the file picked for the new sound.' };
     const dur = info.duration, from = Math.max(0, Math.min(num(n.from) || 0, Math.max(0, dur - 0.1)));
     return { file, mode: n.mode, dur, from, at: Math.max(0, num(n.at) || 0), vol: Math.max(-12, Math.min(12, Math.round(num(n.vol) || 0))),
@@ -498,7 +529,7 @@ class Clipper {
   // About how big the GIF (2.9.8: or WebP) will be: a 1-second test (of the saved clip's time) from the middle of the clip
   async gifEstimate(o) {
     o = o || {};
-    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.server.probe(o.file) : null;
+    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.probe(o.file) : null;
     if (!info || !info.hasVideo) return { ok: false, error: 'There’s no video in this file.' };
     const W = o.kind === 'webp', t = Clipper.tools(o, info), g = W ? Clipper.webpOpts(o.webp) : Clipper.gifOpts(o.gif);
     const tin = Math.max(0, num(o.in) || 0), tout = Math.min(info.duration || Infinity, num(o.out)), len = tout - tin;
@@ -526,7 +557,7 @@ class Clipper {
   async save(o) {
     o = o || {};
     const job = String(o.job || Date.now());
-    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.server.probe(o.file) : null;
+    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.probe(o.file) : null;
     if (!info) return { ok: false, error: 'The file isn’t there any more.' };
     const dur = info.duration || 0;
     const whole = !!o.whole;                 // 2.9.5 Convert: the whole file, no trimming
@@ -649,7 +680,7 @@ class Clipper {
     try {
       let unit = base;
       if (rep.boom) {
-        const info = await this.server.probe(base), v = (info && info.video) || {}, a = info && info.audio;
+        const info = await this.probe(base), v = (info && info.video) || {}, a = info && info.audio;
         let enc = this.server.encoder || await this.server.detectEncoder();
         if (!enc || enc === 'h264_mf' || enc === 'libvpx') enc = 'libopenh264';
         const mbps = Math.max(1.5, Math.min(12, (v.width || 1280) * (v.height || 720) / 1e6 * 4));
@@ -679,67 +710,92 @@ class Clipper {
     } finally { for (const f of parts) this.rm(f); }
   }
 
-  // ---------- 2.9.7 Join v1 (6A–6I) ----------
+  // ---------- 2.9.7 Join v1 (6A–6I), 2.9.9 Join other files (4A–4D, 4F) ----------
   // Sections of the file open in CLIP, stills (a SHOTS frame or any picture) and title cards (PNGs SlopAMP drew), one
-  // after the other in one MP4. Everything is re-encoded to one size and frame rate: the first section's (after
-  // Shape), or 1080p / 720p / 9:16. A different shape is letterboxed (black bars) or cropped to fill. Stills and cards
-  // are silent, or the song keeps going under them (the sound from where the section before them ended).
-  // Shape / Sound / Speed / Captions apply to the whole result.
-  // items: [{ type: 's', in, out } | { type: 'p', path, dur } | { type: 'c', png: data URL, dur, fade, spec }]
-  static joinItems(list, dur) {
-    const out = [];
+  // after the other in one MP4. 2.9.9: sections can come from other files too (a whole file comes in as one card), and
+  // a song (any audio file) plays over its cover art, black, or the still / title card right in front of it.
+  // Everything is re-encoded to one size and frame rate: the first video section's (after that file's Shape, upright,
+  // steady), or 1080p / 720p / 9:16. Other shapes are letterboxed, blurred-filled or cropped to fill. Stills and cards
+  // are silent, or the song keeps going under them (the sound from where the section before them ended). All sound
+  // is 48 kHz stereo; a file with no sound gets silence; HDR is tone-mapped; Sound / Speed apply to the whole result.
+  // items: [{ type: 's', file?, in, out } | { type: 'p', path, dur } | { type: 'c', png: data URL, dur, fade, spec }]
+  // files: { [path]: probe info, or null when the file isn't there any more }. Returns { items, gone }.
+  static joinItems(list, files, base) {
+    const out = []; let gone = 0;
     for (const it of (Array.isArray(list) ? list : []).slice(0, 60)) {
       if (!it || typeof it !== 'object') continue;
-      if (it.type === 's') { const a = Math.max(0, num(it.in)), b = Math.min(dur || Infinity, num(it.out)); if (b - a >= 0.1) out.push({ type: 's', in: a, out: b }); }
-      else if (it.type === 'p' || it.type === 'c') {
+      if (it.type === 's') {
+        const file = typeof it.file === 'string' && it.file ? it.file : base, info = files[file];
+        if (!info) { gone++; continue; }                     // 4F: a file that's gone is skipped
+        const a = Math.max(0, num(it.in)), b = Math.min(info.duration || Infinity, num(it.out)); if (b - a >= 0.1) out.push({ type: 's', file, in: a, out: b });
+      } else if (it.type === 'p' || it.type === 'c') {
         const d = Math.max(0.5, Math.min(30, num(it.dur) || 2.5));
-        if (it.type === 'p' && typeof it.path === 'string' && /\.(png|jpe?g|webp|bmp|gif)$/i.test(it.path) && fs.existsSync(it.path)) out.push({ type: 'p', path: it.path, dur: d });
+        if (it.type === 'p' && typeof it.path === 'string' && /\.(png|jpe?g|webp|bmp|gif)$/i.test(it.path)) { if (fs.existsSync(it.path)) out.push({ type: 'p', path: it.path, dur: d }); else gone++; }
         if (it.type === 'c' && typeof it.png === 'string' && /^data:image\/png;base64,/.test(it.png)) out.push({ type: 'c', png: it.png, dur: d, fade: !!it.fade, spec: it.spec && typeof it.spec === 'object' ? it.spec : null });
       }
     }
-    return out;
+    // 4C: a still or title card right in front of a song is shown over the song (instead of its cover art)
+    out.forEach((it, k) => { const nx = out[k + 1]; if ((it.type === 'p' || it.type === 'c') && nx && nx.type === 's' && !files[nx.file].hasVideo) { it.over = true; nx.pic = k; } });
+    return { items: out, gone };
   }
-  // the size and frame rate of the result
-  static joinSize(o, info, t) {
-    const v = info.video || {};
+  // the size and frame rate of the result: the first video section's file (its Shape, upright; a steady rate)
+  static joinSize(o, items, files, speed) {
     const f = { '1080': [1920, 1080], '720': [1280, 720], '916': [1080, 1920] }[String(o.size)];
-    const [W, H] = f || (t.shape ? [t.shape.ow, t.shape.oh] : [even(v.width || 1280), even(v.height || 720)]);
-    const F = Math.min(60, Math.round(Clipper.outFps(info, t, null) * 1000) / 1000) || 30;
+    const first = items.find(it => it.type === 's' && files[it.file].info.hasVideo), fx = first ? files[first.file] : null;
+    const v = (fx && fx.info.video) || {};
+    const [W, H] = f || (fx && fx.t.shape ? [fx.t.shape.ow, fx.t.shape.oh] : fx ? [even(v.width || 1280), even(v.height || 720)] : [1920, 1080]);
+    const src = fx ? Clipper.steadyFps(v) : 30, eff = speed > 1 ? Math.min(60, src * speed) : src;
+    const F = Math.min(60, Math.round(eff * 1000) / 1000) || 30;
     return { W, H, F };
   }
   // the ffmpeg command: one input per piece, one filter graph (fit, frame rate, sound) and concat.
-  // audioOnly: for measuring the loudness first (Even out the volume)
-  static joinGraph(o, info, t, items, { W, H, F }, audioOnly, cards) {
-    const ins = [], vf = [], af = [], parts = [], hasA = !!info.audio, sr = 48000;
+  // audioOnly: for measuring the loudness first (Even out the volume). files: { [path]: { info, t, hdr, gain, cover } }
+  static joinGraph(o, t, items, { W, H, F }, audioOnly, cards, files) {
+    const ins = [], vf = [], af = [], parts = [], sr = 48000;
+    const hasA = items.some(it => it.type === 's' && files[it.file].info.audio);
     // 2.9.8: Letterbox / Blurred fill / Crop to fill
     const fitK = (k) => Clipper.fitChain(o.fit === 'crop' ? 'crop' : o.fit === 'blur' ? 'blur' : 'bars', W, H, { blur: 'soft', dark: true }, `j${k}`);
     const tail = `fps=${F},format=yuv420p,setsar=1`;
     const aNorm = (d) => `aresample=${sr},aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=0:${d.toFixed(3)},asetpts=PTS-STARTPTS`;
-    const s = t.shape;
-    const crop = (k) => (s ? `${Clipper.shapeChain(s, `s${k}`)},` : '');
+    const tempo = t.speed !== 1 ? `,atempo=${t.speed}` : '';
+    const gain = (f) => (files[f] && files[f].gain ? `,volume=${files[f].gain.toFixed(2)}dB` : '');      // 2.9.9: each file evened out
+    const silence = (d, k) => `anullsrc=r=${sr}:cl=stereo,atrim=0:${d.toFixed(3)},asetpts=PTS-STARTPTS[a${k}]`;
+    const cardFade = (it, d) => (it.type === 'c' && it.fade ? `,fade=t=in:st=0:d=0.4,fade=t=out:st=${Math.max(0, d - 0.4).toFixed(3)}:d=0.4` : '');
     let n = 0, song = null, total = 0;
     items.forEach((it, k) => {
+      if (it.over) return;                     // 4C: this picture is shown over the song after it
       if (it.type === 's') {
-        const len = it.out - it.in, d = len / t.speed;
-        ins.push('-ss', it.in.toFixed(3), '-t', len.toFixed(3), '-i', o.file); const i = n++;
-        if (!audioOnly) vf.push(`[${i}:v:0]setpts=PTS-STARTPTS,${crop(k)}${t.speed !== 1 ? `setpts=PTS/${t.speed},` : ''}${fitK(k)},${tail},trim=duration=${d.toFixed(3)},setpts=PTS-STARTPTS[v${k}]`);
-        if (hasA) af.push(`[${i}:a:0]asetpts=PTS-STARTPTS${t.speed !== 1 ? `,atempo=${t.speed}` : ''},${aNorm(d)}[a${k}]`);
-        song = it.out; total += d;
+        const fx = files[it.file], info = fx.info, len = it.out - it.in, d = len / t.speed;
+        ins.push('-ss', it.in.toFixed(3), '-t', len.toFixed(3), '-i', it.file); const i = n++;
+        if (!audioOnly) {
+          if (info.hasVideo) {
+            const tone = fx.hdr ? `${Clipper.toneChain(info.video)},` : '';                  // 2.9.9: HDR to normal colours
+            const crop = fx.t.shape ? `${Clipper.shapeChain(fx.t.shape, `s${k}`)},` : '';      // that file's Shape
+            vf.push(`[${i}:v:0]setpts=PTS-STARTPTS,${tone}${crop}${t.speed !== 1 ? `setpts=PTS/${t.speed},` : ''}${fitK(k)},${tail},trim=duration=${d.toFixed(3)},setpts=PTS-STARTPTS[v${k}]`);
+          } else {                             // 4C: a song over the still / card in front of it, its cover art, or black
+            const pk = it.pic != null ? items[it.pic] : null, pic = pk ? (pk.type === 'c' ? cards[it.pic] : pk.path) : fx.cover;
+            if (pic) {
+              ins.push('-loop', '1', '-framerate', String(F), '-t', d.toFixed(3), '-i', pic); const j = n++;
+              vf.push(`[${j}:v:0]${fitK(k)},${tail}${pk ? cardFade(pk, d) : ''},trim=duration=${d.toFixed(3)},setpts=PTS-STARTPTS[v${k}]`);
+            } else vf.push(`color=c=black:s=${W}x${H}:r=${F}:d=${d.toFixed(3)},format=yuv420p,setsar=1[v${k}]`);
+          }
+        }
+        if (hasA) af.push(info.audio ? `[${i}:a:0]asetpts=PTS-STARTPTS${gain(it.file)}${tempo},${aNorm(d)}[a${k}]` : silence(d, k));   // no sound: silence
+        song = info.audio ? { file: it.file, at: it.out, dur: info.duration || 0 } : null; total += d;
       } else {
         const d = it.dur;
         if (!audioOnly) {
           ins.push('-loop', '1', '-framerate', String(F), '-t', d.toFixed(3), '-i', it.type === 'c' ? cards[k] : it.path); const i = n++;
-          const fade = it.type === 'c' && it.fade ? `,fade=t=in:st=0:d=0.4,fade=t=out:st=${Math.max(0, d - 0.4).toFixed(3)}:d=0.4` : '';
-          vf.push(`[${i}:v:0]${fitK(k)},${tail}${fade},trim=duration=${d.toFixed(3)},setpts=PTS-STARTPTS[v${k}]`);
+          vf.push(`[${i}:v:0]${fitK(k)},${tail}${cardFade(it, d)},trim=duration=${d.toFixed(3)},setpts=PTS-STARTPTS[v${k}]`);
         }
         if (hasA) {
           // "Keep the song going" (6F): the sound goes on from where the section before ended (silence past the end)
-          if (o.under === 'keep' && song != null && song < (info.duration || 0) - 0.05) {
-            const len = Math.min(d * t.speed, (info.duration || 0) - song);
-            ins.push('-ss', song.toFixed(3), '-t', len.toFixed(3), '-i', o.file); const i = n++;
-            af.push(`[${i}:a:0]asetpts=PTS-STARTPTS${t.speed !== 1 ? `,atempo=${t.speed}` : ''},${aNorm(d)}[a${k}]`);
-            song += len;
-          } else af.push(`anullsrc=r=${sr}:cl=stereo,atrim=0:${d.toFixed(3)},asetpts=PTS-STARTPTS[a${k}]`);
+          if (o.under === 'keep' && song && song.at < song.dur - 0.05) {
+            const len = Math.min(d * t.speed, song.dur - song.at);
+            ins.push('-ss', song.at.toFixed(3), '-t', len.toFixed(3), '-i', song.file); const i = n++;
+            af.push(`[${i}:a:0]asetpts=PTS-STARTPTS${gain(song.file)}${tempo},${aNorm(d)}[a${k}]`);
+            song.at += len;
+          } else af.push(silence(d, k));
         }
         total += d;
       }
@@ -750,15 +806,44 @@ class Clipper {
       : `${parts.map(k => `[v${k}]${hasA ? `[a${k}]` : ''}`).join('')}concat=n=${N}:v=1:a=${hasA ? 1 : 0}[vc]${hasA ? '[ac]' : ''}`;
     return { ins, graph: [...vf, ...af, cat], total, hasA };
   }
+  // 2.9.9: Even out the volume with pieces from more than one file: each file's sections are measured and brought to
+  // the same loudness first (one gain per file, so nothing pumps), then the whole result is evened out as before
+  async joinFileGains(job, items, files, work) {
+    const srcs = [...new Set(items.filter(it => it.type === 's' && files[it.file].info.audio).map(it => it.file))];
+    if (srcs.length < 2) return;
+    for (const f of srcs) {
+      const secs = items.filter(it => it.type === 's' && it.file === f).slice(0, 30), ins = [];
+      secs.forEach(s => ins.push('-ss', s.in.toFixed(3), '-t', (s.out - s.in).toFixed(3), '-i', f));
+      const g = `${secs.map((_, i) => `[${i}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[x${i}]`).join(';')};${secs.map((_, i) => `[x${i}]`).join('')}concat=n=${secs.length}:v=0:a=1,${LOUD}:print_format=json[ao]`;
+      const r = await this.runJob(job, ['-nostdin', '-hide_banner', '-nostats', ...ins, '-filter_complex', g, '-map', '[ao]', '-f', 'null', '-'], 0, () => {}, work);   // eslint-disable-line no-await-in-loop
+      if (this.jobs.get(job).canceled) return;
+      const l = Clipper.parseLoud(r.stderr);
+      if (l && !l.silent) files[f].gain = Math.max(-24, Math.min(24, -14 - l.I));     // at most 24 dB either way
+    }
+  }
   async joinSave(o) {
     o = o || {};
     const job = String(o.job || Date.now());
-    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.server.probe(o.file) : null;
+    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.probe(o.file) : null;
     if (!info) return { ok: false, error: 'The file isn’t there any more.' };
-    if (!info.hasVideo) return { ok: false, error: 'Join makes an MP4: this file has no video.' };
-    const items = Clipper.joinItems(o.items, info.duration || 0), secs = items.filter(i => i.type === 's');
-    if (!secs.length) return { ok: false, error: 'Add a section of the video first (mark In / Out, then + Section).' };
-    const t = Clipper.tools(o, info), size = Clipper.joinSize(o, info, t);
+    // 2.9.9: every file in the list (missing ones are skipped: 4F)
+    const probes = { [o.file]: info };
+    for (const it of Array.isArray(o.items) ? o.items.slice(0, 60) : []) {
+      const f = it && it.type === 's' && typeof it.file === 'string' && it.file;
+      if (f && !(f in probes)) probes[f] = fs.existsSync(f) ? await this.probe(f) : null;   // eslint-disable-line no-await-in-loop
+    }
+    for (const f of Object.keys(probes)) if (probes[f] && !probes[f].hasVideo && !probes[f].audio) probes[f] = null;
+    const { items, gone } = Clipper.joinItems(o.items, probes, o.file), secs = items.filter(i => i.type === 's');
+    if (!secs.length) return { ok: false, error: gone ? 'The files in the join list aren’t there any more.' : info.hasVideo ? 'Add a section of the video first (mark In / Out, then + Section).' : 'Join makes an MP4: this file has no video.' };
+    // the whole result's tools (Speed, Volume, Even out, fades): as if it all had sound when any piece has
+    const anyA = secs.some(s => probes[s.file].audio);
+    const t = Clipper.tools(o, { ...info, audio: info.audio || (anyA ? { codec: 'aac' } : null) });
+    const files = {};
+    for (const f of new Set(secs.map(s => s.file))) {
+      const pi = probes[f];
+      files[f] = { info: pi, t: f === o.file ? t : Clipper.tools({ shape: (o.shapes && typeof o.shapes === 'object' && o.shapes[f]) || null }, pi), hdr: pi.hasVideo && !!Clipper.hdrOf(pi.video), gain: 0, cover: null };
+    }
+    const size = Clipper.joinSize(o, items, files, t.speed);
     const nsx = await this.nsPrep(o.ns);              // 2.9.8: Change the sound, on the whole joined video
     if (nsx && nsx.error) return { ok: false, error: nsx.error };
     const dirs = this.dirs(), work = path.join(os.tmpdir(), `slopamp-join-${process.pid}-${(this.joinN = (this.joinN || 0) + 1)}`);
@@ -766,9 +851,24 @@ class Clipper {
     // title cards: the PNGs the window drew, saved as pictures
     const cards = {};
     items.forEach((it, k) => { if (it.type === 'c') { cards[k] = path.join(work, `card-${k + 1}.png`); fs.writeFileSync(cards[k], Buffer.from(it.png.split(',')[1], 'base64')); } });
-    // captions: each section's lines, at the section's place in the result (stills and cards have none)
+    // 4C: a song's cover art, as a picture (unless a still / card is shown over it)
+    let ci = 0;
+    for (const f of Object.keys(files)) {
+      const pi = files[f].info;
+      if (pi.hasVideo || !pi.hasCover || !secs.some(s => s.file === f && s.pic == null)) continue;
+      const out = path.join(work, `cover-${++ci}.png`);
+      const r = await this.run(['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', f, '-map', `0:${pi.coverIndex}`, '-frames:v', '1', out], 20000);   // eslint-disable-line no-await-in-loop
+      if (r.code === 0 && fs.existsSync(out)) files[f].cover = out; else this.log('cover art failed', r.stderr.slice(-300));
+    }
+    // captions: the open file's sections (4E, captions per file: later), at their place in the result
     const caps = Clipper.capClean(o.caps); let capLines = [];
-    if (caps) { let off = 0; for (const it of items) { if (it.type === 's') { capLines.push(...Clipper.capMap(caps, it.in, it.out, t.speed, off)); off += (it.out - it.in) / t.speed; } else off += it.dur; } }
+    if (caps) {
+      let off = 0;
+      for (const it of items) {
+        if (it.over) continue;
+        if (it.type === 's') { if (it.file === o.file) capLines.push(...Clipper.capMap(caps, it.in, it.out, t.speed, off)); off += (it.out - it.in) / t.speed; } else off += it.dur;
+      }
+    }
     const cap = capLines.length ? { dir: work, lines: capLines, style: caps } : null;
     const base = ((String(o.name || '').trim() && this.fileSafe(String(o.name)).slice(0, 150)) || `${path.basename(o.file).replace(/\.[^.]+$/, '')} (joined)`).replace(/\.mp4$/i, '');
     fs.mkdirSync(dirs.mp4, { recursive: true });
@@ -776,12 +876,13 @@ class Clipper {
     if (this.preCanceled && this.preCanceled.delete(job)) { this.rmDir(work); return { ok: false, canceled: true, files: [] }; }
     this.jobs.set(job, { canceled: false });
     try {
-      const g = Clipper.joinGraph(o, info, t, items, size, false, cards);
-      // Even out the volume: measure the joined sound first (two passes, like a clip)
+      // Even out the volume: each file's pieces first (2.9.9), then the joined sound is measured (two passes, like a clip)
       let loud = null, w0 = 0;
+      if (t.even) { await this.joinFileGains(job, items, files, work); if (this.jobs.get(job).canceled) return { ok: false, canceled: true, files: [] }; }
+      const g = Clipper.joinGraph(o, t, items, size, false, cards, files);
       if (t.even && (g.hasA || nsx)) {
         w0 = 0.25;
-        const ga = Clipper.joinGraph(o, info, t, items, size, true, cards);
+        const ga = Clipper.joinGraph(o, t, items, size, true, cards, files);
         let gr = `${ga.graph.join(';')};[ac]${LOUD}:print_format=json[ao]`;
         if (nsx) {
           const ni = ga.ins.filter(x => x === '-i').length;
@@ -827,26 +928,29 @@ class Clipper {
       const fsize = fs.statSync(final).size;
       let srt = null;
       if (cap && caps.srt) { srt = final.replace(/\.mp4$/i, '.srt'); try { fs.writeFileSync(srt, '﻿' + Clipper.srtText(capLines), 'utf8'); } catch (e) { this.log('srt failed', e.message); srt = null; } }
+      const own = secs.filter(s => s.file === o.file), nFiles = new Set(secs.map(s => s.file)).size, nHdr = Object.values(files).filter(x => x.hdr).length;
       const idx = this.getIndex();
-      idx[final] = { src: o.file, srcTitle: String(o.srcTitle || '').slice(0, 300), in: +secs[0].in.toFixed(3), out: +secs[secs.length - 1].out.toFixed(3), kind: 'mp4', dur: +g.total.toFixed(3), at: Date.now(),
+      idx[final] = { src: o.file, srcTitle: String(o.srcTitle || '').slice(0, 300), in: +(own.length ? own[0].in : 0).toFixed(3), out: +(own.length ? own[own.length - 1].out : Math.min(info.duration || 0, 30)).toFixed(3), kind: 'mp4', dur: +g.total.toFixed(3), at: Date.now(),
         ...(t.speed !== 1 ? { speed: t.speed } : {}),
-        // 6I: the join list comes back with "Clip again" (cards as what they say, so they can be drawn again)
-        join: { items: items.map(it => (it.type === 's' ? { type: 's', in: +it.in.toFixed(3), out: +it.out.toFixed(3) } : it.type === 'p' ? { type: 'p', path: it.path, dur: it.dur } : { type: 'c', dur: it.dur, fade: it.fade, spec: it.spec })),
-          size: ['1080', '720', '916'].includes(String(o.size)) ? String(o.size) : 'first', fit: o.fit === 'crop' ? 'crop' : o.fit === 'blur' ? 'blur' : 'letterbox', under: o.under === 'keep' ? 'keep' : 'silence' },
-        ...(cap ? { caps: { lines: caps.lines.filter(l => secs.some(x => l.b > x.in && l.a < x.out)).slice(0, 3000), pos: caps.pos, size: caps.size }, ...(srt ? { srt } : {}) } : {}),
+        // 6I: the join list comes back with "Clip again" (cards as what they say, so they can be drawn again);
+        // 2.9.9: a section from another file keeps its file (4F: shown red if it's gone by then)
+        join: { items: items.map(it => (it.type === 's' ? { type: 's', in: +it.in.toFixed(3), out: +it.out.toFixed(3), ...(it.file !== o.file ? { file: it.file } : {}) } : it.type === 'p' ? { type: 'p', path: it.path, dur: it.dur } : { type: 'c', dur: it.dur, fade: it.fade, spec: it.spec })),
+          size: ['1080', '720', '916'].includes(String(o.size)) ? String(o.size) : 'first', fit: o.fit === 'crop' ? 'crop' : o.fit === 'blur' ? 'blur' : 'letterbox', under: o.under === 'keep' ? 'keep' : 'silence',
+          ...(o.shapes && typeof o.shapes === 'object' ? { shapes: Object.fromEntries(Object.entries(o.shapes).filter(([f, s]) => files[f] && s && typeof s === 'object').slice(0, 60)) } : {}) },
+        ...(cap ? { caps: { lines: caps.lines.filter(l => own.some(x => l.b > x.in && l.a < x.out)).slice(0, 3000), pos: caps.pos, size: caps.size }, ...(srt ? { srt } : {}) } : {}),
         ...(nsx ? { ns: { file: nsx.file, mode: nsx.mode, from: nsx.from, at: nsx.at, vol: nsx.vol, origVol: nsx.origVol, short: nsx.short, fade: nsx.fade } } : {}),
         ...(o.item && typeof o.item === 'object' && /^(youtube|x)$/.test(o.item.type) ? { item: { type: o.item.type, vid: String(o.item.vid || '').slice(0, 40), url: String(o.item.url || '').slice(0, 300) } } : {}) };
       this.setIndex(idx);
       this.send({ type: 'progress', job, pct: 100 });
-      this.log(`join: ${path.basename(final)} (${items.length} pieces, ${size.W}x${size.H} ${size.F} fps, ${enc})`);
-      return { ok: true, files: [{ path: final, kind: 'mp4', duration: g.total, size: fsize, joined: items.length, w: size.W, h: size.H, ...(srt ? { srt } : {}), ...(cap ? { captions: capLines.length } : {}) }] };
+      this.log(`join: ${path.basename(final)} (${items.length} pieces from ${nFiles} file${nFiles === 1 ? '' : 's'}, ${size.W}x${size.H} ${size.F} fps, ${enc}${nHdr ? `, ${nHdr} HDR tone-mapped` : ''}${gone ? `, ${gone} not there any more` : ''})`);
+      return { ok: true, files: [{ path: final, kind: 'mp4', duration: g.total, size: fsize, joined: items.length, w: size.W, h: size.H, ...(gone ? { skipped: gone } : {}), ...(nFiles > 1 ? { fromFiles: nFiles } : {}), ...(srt ? { srt } : {}), ...(cap ? { captions: capLines.length } : {}) }] };
     } finally { this.jobs.delete(job); this.rmDir(work); }
   }
   // what's known about one saved clip (2.9.7: "Clip again" brings back its captions and join list)
   entry(p) { const e = this.getIndex()[p]; return e && typeof e === 'object' ? { caps: e.caps || null, join: e.join || null, speed: e.speed || 1, rep: e.rep || null, ns: e.ns || null } : null; }
   // 2.9.8: one frame of what Shape's whole-picture Fit makes (the preview while paused): a JPEG data URL
   async shapeFrame(o) {
-    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.server.probe(o.file) : null;
+    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.probe(o.file) : null;
     if (!info || !info.hasVideo) return null;
     const t = Clipper.tools({ shape: o.shape }, info); if (!t.shape) return null;
     const r = await this.run(['-nostdin', '-hide_banner', '-loglevel', 'error', '-ss', Math.max(0, num(o.t) || 0).toFixed(3), '-i', o.file, '-frames:v', '1',
@@ -856,7 +960,7 @@ class Clipper {
   // 2.9.8: what a file picked as the new sound is (and its URL for the preview)
   async soundInfo(file) {
     if (typeof file !== 'string' || !fs.existsSync(file)) return { ok: false, error: 'The file isn’t there any more.' };
-    const info = await this.server.probe(file);
+    const info = await this.probe(file);
     if (!info || !info.audio || !(info.duration > 0)) return { ok: false, error: 'There’s no sound in that file.' };
     return { ok: true, file, title: (info.title || path.basename(file).replace(/\.[^.]+$/, '')).replace(/\s*\[[\w-]{1,30}\]$/, ''), name: path.basename(file), duration: info.duration, hasVideo: !!info.hasVideo, url: this.urlOf(file) };
   }
@@ -901,7 +1005,7 @@ class Clipper {
       let st; try { st = fs.statSync(f); } catch (_) { out[f] = null; return; }
       const key = `${st.mtimeMs}|${st.size}`, hit = this.xCache.get(f);
       if (hit && hit.key === key) { out[f] = hit.x; return; }
-      const info = await this.server.probe(f);
+      const info = await this.probe(f);
       const x = X.assess(info, st.size);
       this.xCache.set(f, { key, x }); out[f] = x;
     };
@@ -913,7 +1017,7 @@ class Clipper {
   // the picture is copied). Anything else is only checked: a VP9 / AV1 fallback is labelled "not for X".
   async xAfterDownload(file) {
     let st; try { st = fs.statSync(file); } catch (_) { return null; }
-    let x = X.assess(await this.server.probe(file), st.size);
+    let x = X.assess(await this.probe(file), st.size);
     if (!x || x.ready || !(x.videoOk && x.container && !x.audioOk)) return { x, audioFixed: false };
     const tmp = `${file}.xfix.part`;
     const r = await this.run(['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', ...X.audioFixArgs(file, tmp)], 600000);
@@ -921,7 +1025,7 @@ class Clipper {
     try { fs.renameSync(tmp, file); } catch (e) { this.rm(tmp); this.log('X audio fix: could not replace', file, e.message); return { x, audioFixed: false }; }
     this.forgetX(file);
     st = fs.statSync(file);
-    x = X.assess(await this.server.probe(file), st.size);
+    x = X.assess(await this.probe(file), st.size);
     this.xCache.set(file, { key: `${st.mtimeMs}|${st.size}`, x });
     this.log(`X audio fix: ${path.basename(file)} now ${x && x.line}`);
     return { x, audioFixed: true };
@@ -934,7 +1038,7 @@ class Clipper {
   // ('free' | 'premium'; anything else counts as Free): the length / size warnings follow it.
   async xPlan(file, account) {
     let st; try { st = fs.statSync(file); } catch (_) { return { ok: false, error: 'The file isn’t there any more.' }; }
-    const info = await this.server.probe(file);
+    const info = await this.probe(file);
     const x = X.assess(info, st.size, account);
     if (!x) return { ok: false, error: info ? 'There’s no picture in this file.' : 'SlopAMP can’t read this file.' };
     if (!this.server.encoder && this.server.detectEncoder) await this.server.detectEncoder().catch(() => null);
@@ -946,7 +1050,7 @@ class Clipper {
   async xFix(o) {
     const job = String((o && o.job) || Date.now()), file = o && o.file;
     let st; try { st = fs.statSync(file); } catch (_) { return { ok: false, error: 'The file isn’t there any more.' }; }
-    const info = await this.server.probe(file);
+    const info = await this.probe(file);
     const x = X.assess(info, st.size);
     if (!x) return { ok: false, error: 'There’s no picture in this file.' };
     if (x.ready) return { ok: true, already: true, x };
@@ -964,7 +1068,7 @@ class Clipper {
         if (r.code === 0 && fs.existsSync(tmp)) {
           fs.renameSync(tmp, out);
           const size = fs.statSync(out).size;
-          const nx = X.assess(await this.server.probe(out), size);
+          const nx = X.assess(await this.probe(out), size);
           this.log(`Fix for X: ${path.basename(file)} -> ${path.basename(out)} (${enc}; ${nx && nx.line})`);
           return { ok: true, file: out, size, x: nx, encoder: enc };
         }
@@ -1023,10 +1127,10 @@ class Clipper {
   }
   async shots(o) {
     const dir = this.shotDir(o), d = this.shotData(dir);
-    return this.shotView(dir, d, await this.server.probe(o.file).catch(() => null));
+    return this.shotView(dir, d, await this.probe(o.file).catch(() => null));
   }
   async shotAdd(o) {
-    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.server.probe(o.file) : null;
+    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.probe(o.file) : null;
     if (!info || !info.hasVideo) return { error: 'There’s no video in this file.' };
     const dir = this.shotDir(o), d = this.shotData(dir);
     fs.mkdirSync(dir, { recursive: true });
@@ -1039,7 +1143,7 @@ class Clipper {
   }
   // patch: { name, kind, lead } and/or { dt } (re-grab dt seconds later; 0 = the same moment again)
   async shotSet(o) {
-    const info = await this.server.probe(o.file).catch(() => null);
+    const info = await this.probe(o.file).catch(() => null);
     const dir = this.shotDir(o), d = this.shotData(dir), s = d.shots.find(x => x.n === +o.n);
     if (!s) return { error: 'That shot isn’t there any more.' };
     const p = o.patch || {};
@@ -1062,11 +1166,11 @@ class Clipper {
       if (s.lead && d.shots.length) d.shots.sort((a, b) => a.n - b.n)[0].lead = true;
       this.shotRenumber(dir, d); this.shotSave(dir, d);
     }
-    return this.shotView(dir, d, await this.server.probe(o.file).catch(() => null));
+    return this.shotView(dir, d, await this.probe(o.file).catch(() => null));
   }
   // Burst: `count` frames spread across a..b (the clip), as candidates
   async shotBurst(o) {
-    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.server.probe(o.file) : null;
+    const info = typeof o.file === 'string' && fs.existsSync(o.file) ? await this.probe(o.file) : null;
     if (!info || !info.hasVideo) return { error: 'There’s no video in this file.' };
     const dir = this.shotDir(o), d = this.shotData(dir), bd = path.join(dir, '.burst');
     try { fs.rmSync(bd, { recursive: true, force: true }); } catch (_) {}
@@ -1085,7 +1189,7 @@ class Clipper {
     return this.shotView(dir, d, info);
   }
   async shotKeep(o) {
-    const info = await this.server.probe(o.file).catch(() => null);
+    const info = await this.probe(o.file).catch(() => null);
     const dir = this.shotDir(o), d = this.shotData(dir), bd = path.join(dir, '.burst');
     const picks = new Set((Array.isArray(o.picks) ? o.picks : []).map(Number));
     (d.burst || []).forEach((b, i) => {

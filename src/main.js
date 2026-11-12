@@ -900,6 +900,12 @@ function registerIpc() {
     if (r.canceled || !r.filePaths[0]) return null;
     return { path: r.filePaths[0], url: fileUrl(r.filePaths[0]) };
   });
+  // 2.9.9: Join other files: "+ From another file…" (videos, songs, pictures; several at once)
+  ipcMain.handle('clip:pick-join', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Add other files to the join list', properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Videos, songs and pictures', extensions: ['mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus', 'png', 'jpg', 'jpeg', 'webp', 'bmp'] }, { name: 'All files', extensions: ['*'] }] });
+    return r.canceled ? [] : r.filePaths.slice(0, 60);
+  });
   ipcMain.handle('clip:image-url', (_e, p) => (typeof p === 'string' && /\.(png|jpe?g|webp|bmp)$/i.test(p) && fs.existsSync(p) ? fileUrl(p) : null));
   ipcMain.handle('clip:entry', (_e, p) => (typeof p === 'string' ? clipper.entry(p) : null));
   // 2.9.8: a frame of Shape's whole-picture Fit; Change the sound: pick a file, what it is

@@ -339,6 +339,7 @@
         <div class="ed-sec clip-pane hidden" id="clipPaneJoin">
           <div class="ed-row"><label class="clip-tg-l"><input type="checkbox" id="clipJoinOn" class="clip-tg"> <b>Save the join list</b></label><span class="dim" id="clipJoinCount"></span>
             <span class="ed-sp"></span><button type="button" class="sb dim" id="clipJoinPlay" title="Preview the whole list in order">&#9654; Play all</button><button type="button" class="sb dim" id="clipJoinClear">Clear</button></div>
+          <div class="ed-row clip-jhint hidden" id="clipJoinHint">Dashed cards come from other files. Click one to open its file here and mark more sections from it (the join list stays). A song or other audio file shows over a picture: its cover art, or the still or title card you put in front of it. A red card&#8217;s file isn&#8217;t there any more: it&#8217;s skipped.</div>
           <div class="clip-jcards" id="clipJoinCards"></div>
           <div class="clip-jstills hidden" id="clipJoinStills"></div>
           <div class="ed-row clip-jsel hidden" id="clipJoinSel"><span id="clipJoinSelT"></span><span class="clip-l2">Length</span><div class="clip-seg" id="clipJoinDur"></div><button type="button" class="sb dim hidden" id="clipJoinEdit">Edit card&#8230;</button></div>
@@ -346,7 +347,7 @@
             <span class="clip-l2">Fit</span><div class="clip-seg" id="clipJoinFit"><button type="button" data-v="letterbox">Letterbox</button><button type="button" data-v="blur">Blurred fill</button><button type="button" data-v="crop">Crop to fill</button></div></div>
           <div class="ed-row"><span>Under stills &amp; cards</span><div class="clip-seg" id="clipJoinUnder"><button type="button" data-v="silence">Silence</button><button type="button" data-v="keep">Keep the song going</button></div>
             <span class="clip-l2">Save</span><div class="clip-seg" id="clipJoinMode"><button type="button" data-v="join">Join in order</button><button type="button" data-v="each">Save each</button></div></div>
-          <div class="ed-row dim clip-hint">Mark In / Out, then <b>+ Section</b> (or <kbd>J</kbd>) &middot; drag the cards to change the order &middot; &times; removes &middot; a still or title card is a picture on screen for a few seconds &middot; Shape, Sound, Speed and Captions apply to the whole joined video &middot; joining always re-encodes (one size, one frame rate); &#8220;Save each&#8221; saves the sections as separate clips (Fast cut OK)</div>
+          <div class="ed-row dim clip-hint">Mark In / Out, then <b>+ Section</b> (or <kbd>J</kbd>) &middot; drag the cards to change the order &middot; &times; removes &middot; a still or title card is a picture on screen for a few seconds &middot; <b>+ From another file&#8230;</b> (or drop files here) adds a video or a song as one card &middot; Sound and Speed apply to the whole joined video; Shape and Captions to the sections of the file they&#8217;re set on &middot; joining always re-encodes (one size, one frame rate); &#8220;Save each&#8221; saves the sections as separate clips (Fast cut OK)</div>
         </div>
         <div class="clip-pane hidden" id="clipPaneShots">
         <div class="ed-sec clip-shots hidden" id="clipShots">
