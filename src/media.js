@@ -284,8 +284,10 @@ class MediaServer {
   }
 
   // Subtitle choices for a media file: embedded text tracks + subtitle files next to it.
-  async listSubs(file) {
+  // opts.lrc (3.0.0, CLIP's Captions): synced lyrics (.lrc) next to a song count too
+  async listSubs(file, opts) {
     const out = { embedded: [], external: [] };
+    const ext = opts && opts.lrc ? /\.(srt|vtt|ass|ssa|lrc)$/i : SUB_EXT;
     if (!file || !fs.existsSync(file)) return out;
     const info = await this.probe(file);
     const key = this.keyFor(file);
@@ -300,10 +302,10 @@ class MediaServer {
     for (const d of dirs) {
       let names = []; try { names = fs.readdirSync(d); } catch (_) { continue; }
       for (const n of names.sort()) {
-        if (!SUB_EXT.test(n)) continue;
+        if (!ext.test(n)) continue;
         const low = n.toLowerCase();
         if (d === dir && !low.startsWith(base)) continue;
-        if (d !== dir && !low.startsWith(base) && names.filter(x => SUB_EXT.test(x)).length > 8) continue;
+        if (d !== dir && !low.startsWith(base) && names.filter(x => ext.test(x)).length > 8) continue;
         const full = path.join(d, n);
         if (seen.has(full.toLowerCase())) continue;
         seen.add(full.toLowerCase());

@@ -54,6 +54,7 @@ const ytdlpDir = [path.join(process.resourcesPath || '', 'ytdlp'), path.join(__d
   .find(d => fs.existsSync(path.join(d, process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'))) || path.join(process.resourcesPath || '', 'ytdlp');
 let closing = false;
 let closeOk = false;    // 2.9.2: closing was confirmed (or nothing was downloading)
+let convertBusy = false; // 3.0.0: a batch convert is running (closing asks first, like a download)
 const pendingOpen = [];
 
 // Another SlopAMP is already running: the lock request has handed it our files (second-instance).
@@ -204,7 +205,7 @@ function createWindow() {
   });
   win.on('close', (e) => {
     // 2.9.2: Settings → General → Ask before closing while something downloads (on by default): the player asks
-    if (!closeOk && (currentState || loadState()).askCloseDl !== false && downloader && (downloader.active || downloader.queue.length) && !win.webContents.isDestroyed()) {
+    if (!closeOk && (currentState || loadState()).askCloseDl !== false && ((downloader && (downloader.active || downloader.queue.length)) || convertBusy) && !win.webContents.isDestroyed()) {
       e.preventDefault(); win.webContents.send('app:close-ask'); return;
     }
     // If the page hangs while closing, close the window anyway.
@@ -901,6 +902,14 @@ function registerIpc() {
     return { path: r.filePaths[0], url: fileUrl(r.filePaths[0]) };
   });
   // 2.9.9: Join other files: "+ From another file…" (videos, songs, pictures; several at once)
+  // 3.0.0: Batch convert: the files to convert, their sizes, and "a batch is running" (closing asks first)
+  ipcMain.handle('clip:pick-convert', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Convert several files', properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Videos and songs', extensions: ['mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'wmv', 'flv', 'ts', 'mpg', 'mpeg', 'mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus'] }, { name: 'All files', extensions: ['*'] }] });
+    return r.canceled ? [] : r.filePaths;
+  });
+  ipcMain.handle('clip:sizes', (_e, paths) => (Array.isArray(paths) ? paths.slice(0, 1000).map(p => { try { return typeof p === 'string' ? fs.statSync(p).size : null; } catch (_) { return null; } }) : []));
+  ipcMain.on('clip:convert-busy', (_e, on) => { convertBusy = !!on; });
   ipcMain.handle('clip:pick-join', async () => {
     const r = await dialog.showOpenDialog(win, { title: 'Add other files to the join list', properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'Videos, songs and pictures', extensions: ['mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus', 'png', 'jpg', 'jpeg', 'webp', 'bmp'] }, { name: 'All files', extensions: ['*'] }] });
@@ -1114,7 +1123,7 @@ function registerIpc() {
     try { await shell.trashItem(p); return { ok: true }; } catch (e) { return { ok: false, error: String(e.message || e) }; }
   });
   // ---- subtitles
-  ipcMain.handle('subs:list', (_e, file) => (typeof file === 'string' ? server.listSubs(file) : { embedded: [], external: [] }));
+  ipcMain.handle('subs:list', (_e, file, opts) => (typeof file === 'string' ? server.listSubs(file, opts && typeof opts === 'object' ? { lrc: !!opts.lrc } : null) : { embedded: [], external: [] }));
   ipcMain.handle('subs:open-dialog', async (_e, near) => {
     const res = await dialog.showOpenDialog(win, {
       title: 'Load subtitle file',

@@ -319,10 +319,12 @@
           <div class="ed-row" id="clipFitRow"><span class="clip-l2">Fit under</span><div class="clip-seg" id="clipFitSel"><button type="button" data-v="off">Off</button><button type="button" data-v="10">10 MB</button><button type="button" data-v="25">25 MB</button><button type="button" data-v="50">50 MB</button><button type="button" data-v="x">X limit</button></div><span class="dim" id="clipFitNote"></span></div>
           <div class="clip-gif-slot" id="clipCvGifSlot"></div>
           <div class="ed-row" id="clipXAcctRow"><span class="clip-l2">X account</span><b id="clipXAcct"></b><button type="button" class="ed-link" id="clipXAcctChange">change</button></div>
+          <div class="ed-row"><button type="button" class="sb dim" id="clipCvMany" title="Several files with these settings, one at a time in the background (or drop several files on this tab)">&#8644; Convert several files&#8230;</button><span class="dim">or drop several files here</span></div>
           <div class="ed-row dim clip-hint" id="clipCvHint">Shape, Sound and Speed apply to the converted file too (a dot marks a tab in use). The original is never changed.</div>
         </div>
         <!-- 2.9.7 (CLIP part 3): Captions (7A–7E) -->
         <div class="ed-sec clip-pane hidden" id="clipPaneCaptions">
+          <div class="clip-capfiles hidden" id="clipCapFiles"></div>
           <div class="ed-row"><label class="clip-tg-l"><input type="checkbox" id="clipCapOn" class="clip-tg"> <b>Burn in</b></label>
             <select id="clipCapSrc" class="clip-sel" title="Where the lines come from"></select>
             <span class="clip-l2">Position</span><div class="clip-seg" id="clipCapPos"><button type="button" data-v="bottom">Bottom</button><button type="button" data-v="middle">Middle</button></div>
@@ -343,6 +345,10 @@
           <div class="clip-jcards" id="clipJoinCards"></div>
           <div class="clip-jstills hidden" id="clipJoinStills"></div>
           <div class="ed-row clip-jsel hidden" id="clipJoinSel"><span id="clipJoinSelT"></span><span class="clip-l2">Length</span><div class="clip-seg" id="clipJoinDur"></div><button type="button" class="sb dim hidden" id="clipJoinEdit">Edit card&#8230;</button></div>
+          <!-- 3.0.0: transitions between the pieces (1A-1I) -->
+          <div class="ed-row" id="clipJoinTrRow"><span class="clip-l2">Between pieces</span><div class="clip-seg" id="clipJoinTr"><button type="button" data-v="cut">Cut</button><button type="button" data-v="fade">Crossfade</button><button type="button" data-v="black">Fade through black</button></div>
+            <span class="clip-l2">Length</span><div class="clip-seg" id="clipJoinTrLen"><button type="button" data-v="0.25">0.25</button><button type="button" data-v="0.5">0.5</button><button type="button" data-v="1">1 s</button><button type="button" data-v="2">2 s</button></div><span class="dim clip-trnote" id="clipJoinTrNote"></span></div>
+          <div class="cj-gappop hidden" id="clipJoinGapPop"></div>
           <div class="ed-row"><span class="clip-l2">Size</span><select id="clipJoinSize" class="clip-sel"><option value="first"></option><option value="1080">1920&times;1080 (1080p)</option><option value="720">1280&times;720 (720p)</option><option value="916">1080&times;1920 (9:16)</option></select>
             <span class="clip-l2">Fit</span><div class="clip-seg" id="clipJoinFit"><button type="button" data-v="letterbox">Letterbox</button><button type="button" data-v="blur">Blurred fill</button><button type="button" data-v="crop">Crop to fill</button></div></div>
           <div class="ed-row"><span>Under stills &amp; cards</span><div class="clip-seg" id="clipJoinUnder"><button type="button" data-v="silence">Silence</button><button type="button" data-v="keep">Keep the song going</button></div>
@@ -507,6 +513,9 @@
       </div>
       <div class="set-sec" data-s="about"><h3>About</h3>
         <div class="set-row"><div class="set-l"><span class="set-lbl">Version, links and licenses</span></div><div class="set-c"><button type="button" id="setAbout">Open About&#8230;</button></div></div>
+        <!-- 3.0.0: the one place SlopAMP mentions a tip (no button, no pop-up, nothing at startup) -->
+        <div class="set-row set-tip" data-k="tip support donate x money heyopatriot slopampapp slopamp.com"><div class="set-l"><span class="set-txt">SlopAMP is free. If you like it, you can tip via X Money to <a href="#" data-url="https://x.com/HeyoPatriot">@HeyoPatriot</a> on X.</span>
+          <span class="set-links"><a href="#" data-url="https://x.com/slopAMPapp">@slopAMPapp on X</a><span>&#183;</span><a href="#" data-url="https://slopamp.com">slopamp.com</a></span></div></div>
       </div>
       <div class="set-none hidden" id="setNone"></div>
       </div>
@@ -627,12 +636,12 @@
       <thead><tr><th class="c"><span class="dlm-cb" id="dlmAll" title="Select all"></span></th><th data-sort="title">Title</th><th data-sort="kind">Type</th><th data-sort="size" class="r">Size</th><th data-sort="mtime" class="r">Date</th><th></th></tr></thead>
       <tbody id="dlmBody"></tbody>
     </table><div class="lp-grid hidden" id="dlmGrid"></div><div class="dlm-empty hidden" id="dlmEmpty"></div></div>
-    <div class="dlm-bar cl-bar"><button type="button" id="clAdd" disabled>&#9654; Add to playlist</button><button type="button" class="dim" id="clAgain" disabled>&#9986; Clip again&#8230;</button><button type="button" class="red" id="clDel" disabled>&#x1F5D1; Delete selected</button><span class="spacer"></span><button type="button" class="dim" id="clDir3">&#x1F4C1; mp3clips</button><button type="button" class="dim" id="clDir4">&#x1F4C1; mp4clips</button></div>
+    <div class="dlm-bar cl-bar"><button type="button" id="clAdd" disabled>&#9654; Add to playlist</button><button type="button" class="dim" id="clAgain" disabled>&#9986; Clip again&#8230;</button><button type="button" class="dim" id="clConv" disabled title="Convert the selected clips with Convert&#8217;s settings (several at once)">&#8644; Convert&#8230;</button><button type="button" class="red" id="clDel" disabled>&#x1F5D1; Delete selected</button><span class="spacer"></span><button type="button" class="dim" id="clDir3">&#x1F4C1; mp3clips</button><button type="button" class="dim" id="clDir4">&#x1F4C1; mp4clips</button></div>
     <div class="dlm-note cl-note">Clips are files in Downloads\SlopAMP\mp3clips, mp4clips, gifs and Converted (files you put there show up too). Double-click plays a clip; &#8220;Clip again&#8221; reopens CLIP on the original with the same In/Out. Deleted clips go to the Recycle Bin.</div>
     <div class="dlm-skins" id="dlmSkins"><div class="skl-list" id="sklList"></div></div>
     <div class="dlm-bar skl-bar"><button type="button" class="dim" id="sklNew">+ New skin</button><button type="button" class="dim" id="sklImport">Import&#8230;</button><button type="button" class="dim" id="sklOpenDir">&#x1F4C1; Open skins folder</button><span class="spacer"></span><button type="button" class="red" id="sklDel" disabled>&#x1F5D1; Delete selected</button></div>
     <div class="dlm-note skl-note">Your skins are .css files in Downloads\SlopAMP\skins; deleted ones go to the Recycle Bin. Built-in skins can&#8217;t be changed or deleted: Edit a copy starts a skin of your own from one. Double-click (or Enter) puts a skin on; Del deletes the selected ones of yours; &#8943; or right-click for Rename, Export and Show in Explorer.</div>
-    <div class="dlm-bar"><button type="button" id="dlmOpenTab" class="hidden">&#9654; Open in new tab</button><button type="button" class="red" id="dlmDel" disabled>&#x1F5D1; Delete selected</button><button type="button" class="red" id="dlmDelAll">Delete all&#8230;</button><span class="spacer"></span><button type="button" class="dim" id="dlmClean">Clean up missing</button><button type="button" class="dim" id="dlmOpen">&#x1F4C1; Open folder</button></div>
+    <div class="dlm-bar"><button type="button" id="dlmOpenTab" class="hidden">&#9654; Open in new tab</button><button type="button" class="dim" id="dlmConv" disabled title="Convert the selected videos and songs with Convert&#8217;s settings (several at once)">&#8644; Convert&#8230;</button><button type="button" class="red" id="dlmDel" disabled>&#x1F5D1; Delete selected</button><button type="button" class="red" id="dlmDelAll">Delete all&#8230;</button><span class="spacer"></span><button type="button" class="dim" id="dlmClean">Clean up missing</button><button type="button" class="dim" id="dlmOpen">&#x1F4C1; Open folder</button></div>
     <div class="dlm-note">Deleted files go to the Recycle Bin. Playlist items stay and stream from YouTube again. Deleting a saved playlist file doesn&#8217;t close any tab.</div>
       <div class="dlm-grip" id="dlmGrip" title="Drag to resize"></div>
   </dialog>
@@ -649,6 +658,26 @@
       <div class="share-to">Save to: <span id="shareDest"></span> <button type="button" id="shareChange">Change&#8230;</button></div>
       <div class="share-prog hidden" id="shareProg"><div class="share-bar"><i id="shareBar"></i></div><span id="shareProgText"></span></div>
       <div class="dlg-btns"><button type="button" id="shareCancel">Cancel</button><button type="button" id="shareShow" class="hidden">Show in folder</button><button type="button" id="shareGo">Make .zip</button></div>
+    </form>
+  </dialog>
+
+  <!-- 3.0.0: Batch convert (2A-2J): several files with Convert's settings, one at a time in the background -->
+  <dialog id="cbDlg">
+    <form method="dialog">
+      <div class="dlg-title" id="cbTitle">&#8644; Convert</div>
+      <div id="cbSetup">
+        <div class="ed-row"><span class="clip-l2">Save as</span><div class="clip-seg" id="cbKind"><button type="button" data-v="mp3">MP3</button><button type="button" data-v="mp4">MP4</button><button type="button" data-v="gif">GIF</button></div><span class="dim" id="cbKindNote"></span></div>
+        <div class="clip-cards" id="cbPreset"><button type="button" data-p="forx"><b>&#120143; For X</b><span>H.264 + AAC, up to 1080p, checked against X&#8217;s limits</span></button><button type="button" data-p="small"><b>Small</b><span>720p, a smaller file for chat apps</span></button><button type="button" data-p="phone"><b>Phone-friendly</b><span>up to 1080p, 30 fps, plays everywhere</span></button><button type="button" data-p="best"><b>Best quality</b><span>keeps size and frame rate, high bitrate</span></button></div>
+        <div class="ed-row" id="cbMp3Row"><span class="clip-l2">MP3</span><div class="clip-seg" id="cbMp3k"><button type="button" data-v="320">320 kb/s</button><button type="button" data-v="192">192 kb/s</button><button type="button" data-v="128">128 kb/s</button></div></div>
+        <div class="ed-row" id="cbGifRow"><span class="clip-l2">Width</span><div class="clip-seg" id="cbGifW"><button type="button" data-v="320">320</button><button type="button" data-v="480">480</button><button type="button" data-v="640">640</button></div><span class="clip-l2">Frames/s</span><div class="clip-seg" id="cbGifFps"><button type="button" data-v="10">10</button><button type="button" data-v="15">15</button><button type="button" data-v="24">24</button></div></div>
+        <div class="ed-row" id="cbFitRow"><span class="clip-l2">Fit under</span><div class="clip-seg" id="cbFit"><button type="button" data-v="off">Off</button><button type="button" data-v="10">10 MB</button><button type="button" data-v="25">25 MB</button><button type="button" data-v="50">50 MB</button><button type="button" data-v="x">X limit</button></div></div>
+        <div class="ed-row"><label class="ed-ck"><input type="checkbox" id="cbEven"> Even out the volume <span class="dim">(each file on its own)</span></label></div>
+        <div class="cb-list"><table class="xf-tbl" id="cbList"></table></div>
+        <div class="cb-note" id="cbNote"></div>
+        <div class="share-warn hidden" id="cbWarn"></div>
+      </div>
+      <div id="cbSum" class="hidden"><div class="cb-bar"><i id="cbSumBar"></i></div><div class="cb-list"><table class="xf-tbl" id="cbSumList"></table></div><div class="cb-note" id="cbSumNote"></div></div>
+      <div class="dlg-btns"><button type="button" id="cbRoom" class="hidden">Make room&#8230;</button><button type="button" id="cbFolder" class="hidden">Show in folder</button><button type="button" id="cbLib" class="hidden">Library &rarr; CLIPS</button><button type="button" id="cbCancel">Cancel</button><button type="button" id="cbGo">Convert</button></div>
     </form>
   </dialog>
 

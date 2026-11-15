@@ -871,6 +871,16 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .xf-tbl th { text-align: left; color: var(--ink-muted); font-weight: normal; padding: 2px 6px; }
 .xf-tbl td { padding: 3px 6px; border-top: 1px solid var(--base-14b); color: var(--ink-menu); }
 .xf-tbl td.xf-bad { color: var(--warn-ink); } .xf-tbl td.xf-ok { color: var(--ink-menu); font-weight: 600; }
+/* 3.0.0: Batch convert */
+#cbDlg { width: 560px; max-width: none; }        /* a fixed width: the dialog host sizes its window to the dialog (like #closeTabDlg) */
+#cbDlg .ed-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
+#cbDlg .clip-cards { margin: 6px 0; }
+.cb-list { max-height: 210px; overflow: auto; margin: 6px 0; }
+.cb-list td.n { max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-list td.dim, .cb-note { color: var(--ink-dim); }
+.cb-note { font-size: var(--fs-s); }
+.cb-list td.ok { color: var(--ink-menu); font-weight: 600; } .cb-list td.bad { color: var(--warn-ink); }
+.cb-bar { height: 6px; background: var(--base-14b); margin: 4px 0; } .cb-bar i { display: block; height: 100%; background: var(--line-green); }
 .xf-row { font-size: var(--fs-s); color: var(--ink-muted); margin: 4px 0; word-break: normal; overflow-wrap: anywhere; } .xf-row b { color: var(--ink-menu); font-weight: 600; }
 .clip-x { margin-left: 6px; font: bold var(--fs-xs) var(--font-label); padding: 0 4px; border: 1px solid currentColor; border-radius: 2px; }
 .clip-xwarn { color: var(--warn-ink); }
@@ -1047,6 +1057,11 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .set-sec h3 { margin: 4px 0 10px; font-size: var(--fs-l); color: var(--menu-accent); }
 .set-sec h4 { margin: 16px 0 6px; font-size: var(--fs-s); letter-spacing: 2px; text-transform: uppercase; color: var(--ink-dim); font-weight: normal; }
 .set-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--base-18); }
+/* 3.0.0: Settings → About: the tip line and the links */
+.set-tip .set-l { display: flex; flex-direction: column; gap: 4px; }
+.set-tip .set-txt { color: var(--ink-menu); font: var(--fs-m) var(--font-ui); }
+.set-tip a { color: var(--ink); text-decoration: underline; cursor: pointer; }
+.set-tip .set-links { display: flex; gap: 8px; font: var(--fs-s) var(--font-ui); color: var(--ink-dim); }
 .set-l { flex: 1; min-width: 0; }
 .set-l small { display: block; color: var(--ink-dim); font-size: var(--fs-s); margin-top: 1px; }
 .set-c { flex: none; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 60%; }
@@ -1239,6 +1254,24 @@ body.mini .win[data-win="main"] > .frame-tb, body.mini #deck, body.mini #updBar,
 .cj-card .cj-tag { background: #000; color: var(--amber); border: 1px solid var(--amber); font: bold 9px var(--font-ui); padding: 0 3px; line-height: 11px; }
 .clip-jhint { background: var(--btn-amber, rgba(255,182,39,.12)); border-left: 3px solid var(--amber); padding: 3px 6px; font: var(--fs-s) var(--font-ui); color: var(--ink-menu); }
 .cj-add { display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+/* 3.0.0: transitions: a chip in each gap between two cards, and the box to change one gap */
+.cj-gap { align-self: center; min-width: 30px; text-align: center; font: bold 10px var(--font-ui); line-height: 12px; color: var(--ink-menu); border: 1px dashed var(--vctl-line); background: var(--menu-bg); padding: 3px 3px; cursor: pointer; user-select: none; }
+.cj-gap small { display: block; font-weight: normal; font-size: 9px; }
+.cj-gap.on { border-style: solid; border-color: var(--line-green); color: var(--ink); background: var(--btn-green); }
+.cj-gap.own { border: 2px solid var(--amber); padding: 2px 2px; }        /* a gap's own choice: the text keeps the ink colour (readable in every skin) */
+.cj-gap:hover { filter: brightness(1.15); }
+.cj-card .cj-tag.cc { color: #fff; border-color: #fff; }        /* white on the tag's black, like the card letters (every skin) */
+.cj-gappop { position: fixed; z-index: 40; background: var(--dialog-bg, var(--menu-bg)); border: 1px solid var(--line-green); box-shadow: 0 6px 20px rgba(0,0,0,.6); padding: 7px 9px; color: var(--ink); font: var(--fs-m) var(--font-ui); }
+.cj-gappop .ed-row { display: flex; gap: 6px; align-items: center; margin: 3px 0; }
+.clip-trnote { font-size: var(--fs-s); }
+/* 3.0.0 (3B): each file's captions in a join */
+.clip-capfiles { border: 1px solid var(--vctl-line); background: var(--menu-bg); color: var(--ink-menu); padding: 4px 8px; margin: 0 0 6px; font: var(--fs-s) var(--font-ui); }
+.clip-capfiles table { border-collapse: collapse; width: 100%; }
+.clip-capfiles td { padding: 2px 6px; border-bottom: 1px solid var(--vctl-line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.clip-capfiles tr.f { cursor: pointer; }
+.clip-capfiles tr.f:hover td { filter: brightness(1.2); }
+.clip-capfiles tr.open td { background: var(--btn-green); color: var(--ink); }
+.clip-capfiles .ok { color: var(--line-green); }
 .cj-add button { font: var(--fs-s) var(--font-ui); }
 .clip-jstills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px; border: 1px solid var(--vctl-line); margin-bottom: 4px; }
 .clip-jstills img { height: 42px; border: 1px solid var(--vctl-line); cursor: pointer; }

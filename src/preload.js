@@ -51,7 +51,7 @@ contextBridge.exposeInMainWorld('phosphor', {
   dlTitle: (vid, title) => ipcRenderer.send('dl:title', vid, title),
   thumbGet: (file, kind, opts) => ipcRenderer.invoke('thumb:get', file, kind, opts),   // 2.7 Library preview
   plPeek: (p) => ipcRenderer.invoke('pl:peek', p),
-  listSubs: (file) => ipcRenderer.invoke('subs:list', file),
+  listSubs: (file, opts) => ipcRenderer.invoke('subs:list', file, opts),
   openSubDialog: (near) => ipcRenderer.invoke('subs:open-dialog', near),
   onMediaKey: (cb) => ipcRenderer.on('media-key', (_e, a) => cb(a)),
   prepare: (file, opts) => ipcRenderer.invoke('media:prepare', file, opts),
@@ -123,6 +123,9 @@ contextBridge.exposeInMainWorld('phosphor', {
   clipSubsYouTube: (url) => ipcRenderer.invoke('clip:subs-youtube', url),    // 2.9.7: Captions from YouTube (yt-dlp)
   clipPickImage: () => ipcRenderer.invoke('clip:pick-image'),
   clipPickJoin: () => ipcRenderer.invoke('clip:pick-join'),          // 2.9.9
+  clipPickConvert: () => ipcRenderer.invoke('clip:pick-convert'),    // 3.0.0: Batch convert
+  clipSizes: (paths) => ipcRenderer.invoke('clip:sizes', paths),
+  convertBusy: (on) => ipcRenderer.send('clip:convert-busy', !!on),
   clipImageUrl: (p) => ipcRenderer.invoke('clip:image-url', p),
   clipEntry: (p) => ipcRenderer.invoke('clip:entry', p),
   clipShapeFrame: (o) => ipcRenderer.invoke('clip:shape-frame', o),       // 2.9.8
