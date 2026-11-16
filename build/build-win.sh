@@ -29,9 +29,15 @@ for f in "$STAGE"/locales/*.pak; do
   n="$(basename "$f")"
   case "$n" in en-US.pak|en-GB.pak) ;; *) rm -f "$f"; printf '  Delete "$INSTDIR\\locales\\%s"\n' "$n" >> "$OUT/dropped-locales.nsh" ;; esac
 done
+# 3.1.0: Electron 44+ builds ANGLE in (no libEGL.dll / libGLESv2.dll) and Electron 45 has no dxil.dll. The same list
+# deletes those an older SlopAMP left in the install folder (only names this Electron doesn't ship), so an
+# upgraded folder holds exactly what a fresh install does.
+for n in libEGL.dll libGLESv2.dll dxil.dll; do
+  [ -e "$STAGE/$n" ] || printf '  Delete "$INSTDIR\\%s"\n' "$n" >> "$OUT/dropped-locales.nsh"
+done
 [ -f "$STAGE/locales/en-US.pak" ] || { echo "en-US.pak missing from the Electron locales"; exit 1; }
 [ -f "$STAGE/LICENSES.chromium.html" ] || { echo "LICENSES.chromium.html missing"; exit 1; }
-echo "locales: kept $(ls "$STAGE/locales" | tr '\n' ' '); dropped $(grep -c Delete "$OUT/dropped-locales.nsh")"
+echo "locales: kept $(ls "$STAGE/locales" | tr '\n' ' '); dropped $(grep -c 'locales' "$OUT/dropped-locales.nsh"); old Electron files deleted on upgrade: $(grep -v locales "$OUT/dropped-locales.nsh" | sed -E 's/.*\\([^"]+)".*/\1/' | tr '\n' ' ')"
 
 # app code
 mkdir -p "$STAGE/resources/app" "$STAGE/resources/ffmpeg"

@@ -1,6 +1,16 @@
 # Changelog
 
-## 3.0.0 — unreleased
+## 3.1.0 — unreleased
+
+SlopAMP now runs on Electron 45 (Chromium 156, Node 24) instead of Electron 41, which no longer gets security fixes. Nothing new to learn: everything works as in 3.0.0.
+
+- **Electron 45.** The newer Chromium brings its security fixes to everything SlopAMP shows, including the YOUTUBE and X windows, and they now present themselves as a current Chrome.
+- **File dialogs open where you last picked from.** With the newer Electron a file dialog would open in Downloads every time; SlopAMP now remembers the folder itself: one for Add files / Add folder and CLIP's pickers (a song or video, Convert several files, Join other files, Change the sound), and one each for pictures, skins and subtitle files. Kept between launches; a folder that's gone is skipped.
+- **A tidy install folder.** The newer Electron no longer ships libEGL.dll, libGLESv2.dll and dxil.dll; an update over an older SlopAMP removes them, so the folder holds exactly what a fresh install does.
+- The update works as before: 2.9.9 and 3.0.0 find 3.1.0 and install it (the same Setup file name and SHA256 line).
+- Tests: `tests/electron-310.js`, `tests/update-310.js`.
+
+## 3.0.0 — released Nov 15, 2026
 
 CLIP Join gets transitions and captions on every file, and Convert does several files at once. Still only the FFmpeg inside SlopAMP; the originals are never changed and every save is a new file.
 

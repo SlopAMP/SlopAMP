@@ -49,7 +49,7 @@ let clipper = null;   // CLIP (2.3, clip.js)
 let thumbs = null;   // Library preview pictures (2.7, thumbs.js)
 let ytweb = null;     // the YOUTUBE window's page (2.3, ytweb.js)
 // Keys owned by the main process; the renderer's state saves must not wipe them.
-const MAIN_KEYS = ['window', 'layout', 'playlistDir', 'dlVideoDir', 'dlAudioDir', 'ytdlpUpdatedAt', 'downloads', 'update', 'clips', 'sys'];
+const MAIN_KEYS = ['window', 'layout', 'playlistDir', 'dlVideoDir', 'dlAudioDir', 'ytdlpUpdatedAt', 'downloads', 'update', 'clips', 'sys', 'dlgDirs'];   // dlgDirs: 3.1.0, the file dialogs' last folders
 const ytdlpDir = [path.join(process.resourcesPath || '', 'ytdlp'), path.join(__dirname, '..', 'vendor', 'ytdlp', process.platform)]
   .find(d => fs.existsSync(path.join(d, process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'))) || path.join(process.resourcesPath || '', 'ytdlp');
 let closing = false;
@@ -225,6 +225,25 @@ function setMainState(patch) {
   const s = currentState || loadState();
   for (const [k, v] of Object.entries(patch)) { if (v === undefined) delete s[k]; else s[k] = v; }
   saveStateSoon(s);
+}
+// 3.1.0 (Electron 45): since Electron 43 a file dialog with no defaultPath opens in Downloads every time (Windows used
+// to reopen the folder you last picked from). SlopAMP remembers it itself now: the last folder per kind of pick
+// ('media': Add files / Add folder, CLIP's pickers, Convert several, Join other files, Change the sound; 'image',
+// 'skin', 'subs'), kept between launches; a folder that's gone is skipped (then Downloads, as Electron does).
+function dlgDir(kind) {
+  const d = ((currentState || loadState()).dlgDirs || {})[kind];
+  try { return typeof d === 'string' && fs.statSync(d).isDirectory() ? d : undefined; } catch (_) { return undefined; }
+}
+function dlgKeep(kind, res) {
+  // the folder the picked file is in; for a picked folder, the folder it's in (it opens there, next to it)
+  const p = res && !res.canceled && Array.isArray(res.filePaths) && res.filePaths[0];
+  if (!p) return res;
+  const s = currentState || loadState();
+  setMainState({ dlgDirs: { ...(s.dlgDirs || {}), [kind]: path.dirname(p) } });
+  return res;
+}
+async function pickFiles(kind, opts) {
+  return dlgKeep(kind, await dialog.showOpenDialog(win, { defaultPath: dlgDir(kind), ...opts }));
 }
 function rememberDownload(vid, kind, file, title) {
   const s = currentState || loadState();
@@ -723,7 +742,7 @@ function registerIpc() {
   // 2.9.6: the files (and links) a drop / Add folder… would add, without reading them (fast, for big adds)
   ipcMain.handle('files:expand', (_e, paths) => quickEntries(expandPaths((paths || []).filter(p => typeof p === 'string'))));
   ipcMain.handle('files:open-dialog', async (_e, kind) => {
-    const res = await dialog.showOpenDialog(win, kind === 'folder'
+    const res = await pickFiles('media', kind === 'folder'
       ? { properties: ['openDirectory', 'multiSelections'] }
       : {
         properties: ['openFile', 'multiSelections'],
@@ -886,7 +905,7 @@ function registerIpc() {
   ipcMain.handle('clip:delete', (_e, paths) => clipper.remove(paths));
   ipcMain.handle('clip:rename', (_e, p, name) => { try { return clipper.rename(p, name); } catch (e) { return { error: String(e.message || e) }; } });
   ipcMain.handle('clip:pick', async () => {
-    const r = await dialog.showOpenDialog(win, { title: 'Pick a song or video to clip', properties: ['openFile'],
+    const r = await pickFiles('media', { title: 'Pick a song or video to clip', properties: ['openFile'],
       filters: [{ name: 'Songs and videos', extensions: ['mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus', 'mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'wmv', 'flv', 'ts', 'mpg', 'mpeg'] }, { name: 'All files', extensions: ['*'] }] });
     return r.canceled ? null : r.filePaths[0];
   });
@@ -897,21 +916,21 @@ function registerIpc() {
     try { return await downloader.fetchSubs(url, path.join(require('os').tmpdir(), `slopamp-subs-${process.pid}`)); } catch (e) { log('subs fetch failed', e); return { ok: false, error: 'Couldn’t get the subtitles.' }; }
   });
   ipcMain.handle('clip:pick-image', async () => {
-    const r = await dialog.showOpenDialog(win, { title: 'Pick a picture for a still', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }] });
+    const r = await pickFiles('image', { title: 'Pick a picture for a still', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }] });
     if (r.canceled || !r.filePaths[0]) return null;
     return { path: r.filePaths[0], url: fileUrl(r.filePaths[0]) };
   });
   // 2.9.9: Join other files: "+ From another file…" (videos, songs, pictures; several at once)
   // 3.0.0: Batch convert: the files to convert, their sizes, and "a batch is running" (closing asks first)
   ipcMain.handle('clip:pick-convert', async () => {
-    const r = await dialog.showOpenDialog(win, { title: 'Convert several files', properties: ['openFile', 'multiSelections'],
+    const r = await pickFiles('media', { title: 'Convert several files', properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'Videos and songs', extensions: ['mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'wmv', 'flv', 'ts', 'mpg', 'mpeg', 'mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus'] }, { name: 'All files', extensions: ['*'] }] });
     return r.canceled ? [] : r.filePaths;
   });
   ipcMain.handle('clip:sizes', (_e, paths) => (Array.isArray(paths) ? paths.slice(0, 1000).map(p => { try { return typeof p === 'string' ? fs.statSync(p).size : null; } catch (_) { return null; } }) : []));
   ipcMain.on('clip:convert-busy', (_e, on) => { convertBusy = !!on; });
   ipcMain.handle('clip:pick-join', async () => {
-    const r = await dialog.showOpenDialog(win, { title: 'Add other files to the join list', properties: ['openFile', 'multiSelections'],
+    const r = await pickFiles('media', { title: 'Add other files to the join list', properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'Videos, songs and pictures', extensions: ['mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus', 'png', 'jpg', 'jpeg', 'webp', 'bmp'] }, { name: 'All files', extensions: ['*'] }] });
     return r.canceled ? [] : r.filePaths.slice(0, 60);
   });
@@ -921,7 +940,7 @@ function registerIpc() {
   ipcMain.handle('clip:shape-frame', (_e, o) => (o && typeof o === 'object' ? clipper.shapeFrame(o).catch((e) => { log('shape frame failed', e); return null; }) : null));
   ipcMain.handle('clip:sound-info', (_e, f) => clipper.soundInfo(f).catch(() => ({ ok: false, error: 'SlopAMP can’t read that file.' })));
   ipcMain.handle('clip:pick-sound', async () => {
-    const r = await dialog.showOpenDialog(win, { title: 'Pick the new sound (a song, or a video for its sound)', properties: ['openFile'],
+    const r = await pickFiles('media', { title: 'Pick the new sound (a song, or a video for its sound)', properties: ['openFile'],
       filters: [{ name: 'Songs and videos', extensions: ['mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus', 'mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi'] }, { name: 'All files', extensions: ['*'] }] });
     return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
   });
@@ -960,7 +979,7 @@ function registerIpc() {
     try { fs.copyFileSync(f, r.filePath); return { ok: true, file: r.filePath }; } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('skin:import', async () => {
-    const r = await dialog.showOpenDialog(win, { title: 'Import skins', properties: ['openFile', 'multiSelections'], filters: [{ name: 'SlopAMP skin', extensions: ['css'] }] });
+    const r = await pickFiles('skin', { title: 'Import skins', properties: ['openFile', 'multiSelections'], filters: [{ name: 'SlopAMP skin', extensions: ['css'] }] });
     if (r.canceled) return [];
     return r.filePaths.map(f => { try { return importSkin(f); } catch (e) { return { file: f, error: e.message }; } });
   });
@@ -1125,9 +1144,9 @@ function registerIpc() {
   // ---- subtitles
   ipcMain.handle('subs:list', (_e, file, opts) => (typeof file === 'string' ? server.listSubs(file, opts && typeof opts === 'object' ? { lrc: !!opts.lrc } : null) : { embedded: [], external: [] }));
   ipcMain.handle('subs:open-dialog', async (_e, near) => {
-    const res = await dialog.showOpenDialog(win, {
+    const res = await pickFiles('subs', {
       title: 'Load subtitle file',
-      defaultPath: typeof near === 'string' && fs.existsSync(near) ? path.dirname(near) : undefined,
+      defaultPath: typeof near === 'string' && fs.existsSync(near) ? path.dirname(near) : dlgDir('subs'),
       properties: ['openFile'],
       filters: [{ name: 'Subtitles', extensions: ['srt', 'vtt', 'ass', 'ssa'] }, { name: 'All files', extensions: ['*'] }]
     });

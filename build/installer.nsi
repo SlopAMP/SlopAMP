@@ -171,6 +171,7 @@ Section "SlopAMP (required)" SecMain
     RMDir /r "$INSTDIR\resources\app"
   ; 2.0 ships English UI strings only: remove the other Chromium locale packs an older SlopAMP put here
   ; (exact names, listed at build time; nothing else in locales\ is touched).
+  ; 3.1.0: the same list deletes Electron files a newer Electron no longer ships (libEGL.dll, libGLESv2.dll, dxil.dll).
   IfFileExists "$INSTDIR\${EXE}" 0 skipLocales
 !ifdef DROPPED_LOCALES
   !include "${DROPPED_LOCALES}"

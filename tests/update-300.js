@@ -13,7 +13,7 @@ const APP = process.env.SLOPAMP_APP || path.join(__dirname, '..');
 (async () => {
   const { isNewer, parseRelease } = require(path.join(APP, 'src/updater'));
   const pkg = JSON.parse(fs.readFileSync(path.join(APP, 'package.json'), 'utf8'));
-  ok(pkg.version === '3.0.0', `package.json says ${pkg.version}`);
+  ok(pkg.version === '3.0.0' || isNewer(pkg.version, '3.0.0'), `package.json says ${pkg.version} (3.0.0 or later; 3.1.0: see update-310.js)`);
   ok(isNewer('3.0.0', '2.9.9') && isNewer('v3.0.0', '2.9.9') && !isNewer('2.9.9', '3.0.0') && !isNewer('3.0.0', '3.0.0') && isNewer('3.0.1', '3.0.0') && isNewer('3.1.0', '3.0.9'), 'versions: 3.0.0 is newer than 2.9.9; 3.0.1 than 3.0.0');
   const hash = 'a'.repeat(64), url = 'https://github.com/SlopAMP/SlopAMP/releases/download/v3.0.0/SlopAMP-Setup-3.0.0.exe';
   const rel = (o) => ({ tag_name: 'v3.0.0', html_url: 'https://github.com/SlopAMP/SlopAMP/releases/tag/v3.0.0', body: `What's new in 3.0.0\n\nSHA256 (SlopAMP-Setup-3.0.0.exe): ${hash}`, assets: [{ name: 'SlopAMP-Setup-3.0.0.exe', browser_download_url: url, size: 1000 }], ...o });

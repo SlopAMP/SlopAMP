@@ -49,7 +49,7 @@ On Windows with Node.js installed:
 
 1. Put FFmpeg in `vendor\ffmpeg\win32\` (`ffmpeg.exe`, `ffprobe.exe` and DLLs from a [BtbN LGPL shared build](https://github.com/BtbN/FFmpeg-Builds/releases)).
 2. Optionally put `yt-dlp.exe` in `vendor\ytdlp\win32\` for the Download button.
-3. Run `npx electron@41.2.0 .`
+3. Run `npx electron@45.3.3 .`
 
 ## Building the installers
 
@@ -61,7 +61,7 @@ TOOLS=/path/to/tools bash build/build-win.sh
 
 `TOOLS` must contain:
 
-- `electron-win/`: unzipped `electron-v41.2.0-win32-x64.zip` (from Electron's GitHub releases)
+- `electron-win/`: unzipped `electron-v45.3.3-win32-x64.zip` (from Electron's GitHub releases)
 - `ffmpeg-win/<dir>/`: BtbN `ffmpeg-master-latest-win64-lgpl-shared`
 - `ffmpeg-linux/`: the matching linux64 LGPL build (used to read the version)
 - `ytdlp/`: `yt-dlp.exe`, plus `yt-dlp_linux` (used to read the version)

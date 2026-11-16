@@ -26,7 +26,7 @@ Quick start on Windows:
 
 1. Clone the repository.
 2. Put FFmpeg in `vendor\ffmpeg\win32\` (see BUILDING.md), and optionally yt-dlp in `vendor\ytdlp\win32\`.
-3. Run `npx electron@41.2.0 .`
+3. Run `npx electron@45.3.3 .`
 
 A few house rules:
 
