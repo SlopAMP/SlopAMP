@@ -3,6 +3,8 @@
 // Checks at most once a day, downloads the official SlopAMP-Setup-X.Y.Z.exe, verifies its
 // SHA256 against the "SHA256 (SlopAMP-Setup-X.Y.Z.exe): <hash>" line in the release notes,
 // and only then runs it silently (/S /UPDATE). Never installs without a click.
+// Linux (3.2.0): the AppImage does the same with SlopAMP-X.Y.Z-x86_64.AppImage (it replaces itself and reopens);
+// the .deb only tells you. A release with no file for this platform (a Linux-only fix, say) is skipped quietly.
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -11,11 +13,22 @@ const { Readable } = require('stream');
 const { pathToFileURL, fileURLToPath } = require('url');
 
 const REPO = 'SlopAMP/SlopAMP';
-const API_LATEST = `https://api.github.com/repos/${REPO}/releases/latest`;
+// 3.2.0: the list of releases (newest first), not /releases/latest: the newest release with this platform's files is the
+// one, so a release for one platform can be published without "Set as the latest release" and copies older than 3.2.0
+// (which only read /releases/latest) never see it.
+const API_LIST = `https://api.github.com/repos/${REPO}/releases?per_page=20`;
 const DOWNLOAD_PREFIX = `https://github.com/${REPO}/releases/download/`;
 const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
 const DAY = 24 * 3600 * 1000;
 const MODES = ['auto', 'notify', 'off'];
+// Each platform's files in a release: `file` is the one it updates itself with (Windows: the installer; Linux: the
+// AppImage); `any` tells whether the release has anything for it at all. One with nothing (a Linux-only fix on
+// Windows, say) is skipped quietly; one with a file for it but not the right one is still an error ('noasset').
+const PLATFORMS = {
+  win32: { file: (v) => `SlopAMP-Setup-${v}.exe`, any: /\.exe$/i },
+  linux: { file: (v) => `SlopAMP-${v}-x86_64.AppImage`, any: /\.(AppImage|deb)$/i }
+};
+const platformOf = (platform) => PLATFORMS[platform] || PLATFORMS.win32;
 
 // "1.2.0" / "v1.2.0" -> [1,2,0]; null for anything else (pre-release tags are ignored).
 function parseVersion(v) {
@@ -40,12 +53,15 @@ function cleanNotes(body) {
 }
 // GitHub release JSON -> what SlopAMP needs, or { error } when the release can't be used.
 // testDir: test mode only; the installer must then be a plain file name inside that folder.
-function parseRelease(rel, currentVersion, testDir) {
+// platform (3.2.0, default 'win32'): 'noplatform' when the release has none of that platform's files.
+function parseRelease(rel, currentVersion, testDir, platform = 'win32') {
   if (!rel || rel.draft || rel.prerelease) return { error: 'norelease' };
   const version = String(rel.tag_name || '').replace(/^v/, '');
   if (!parseVersion(version)) return { error: 'norelease' };
   const info = { version, newer: isNewer(version, currentVersion), notes: cleanNotes(rel.body), date: rel.published_at || '', page: typeof rel.html_url === 'string' && rel.html_url.startsWith(`https://github.com/${REPO}/`) ? rel.html_url : RELEASES_PAGE };
-  const file = `SlopAMP-Setup-${version}.exe`;
+  const pf = platformOf(platform);
+  if (!(rel.assets || []).some(a => a && pf.any.test(String(a.name || '')))) return { ...info, error: 'noplatform' };
+  const file = pf.file(version);
   const asset = (rel.assets || []).find(a => a && a.name === file);
   const url = asset && String(asset.browser_download_url || '');
   const ok = asset && (testDir ? /^[\w.-]+$/.test(url) : url.startsWith(`${DOWNLOAD_PREFIX}v${version}/`));
@@ -82,10 +98,14 @@ class Updater {
   // testFeed: path of a local release.json (SLOPAMP_UPDATE_TEST) used instead of GitHub, for trying updates
   // without publishing; its installer must sit next to it. Checks then run at every launch.
   // installDir: the folder SlopAMP runs from, reinstalled in place.
-  constructor({ fetch, version, tempDir, canInstall, installDir, getState, setState, emit, quit, openExternal, log, testFeed }) {
+  // platform (3.2.0): process.platform. appImage (Linux): the AppImage file SlopAMP runs from (its APPIMAGE), which an
+  // update replaces; canInstall is then true only when its folder is writable.
+  constructor({ fetch, version, tempDir, canInstall, installDir, getState, setState, emit, quit, openExternal, log, testFeed, platform, appImage }) {
     Object.assign(this, { version, tempDir, canInstall, installDir, getState, setState, emitFn: emit, quit, openExternal, log, testFeed });
+    this.platform = platform || 'win32';
+    this.appImage = appImage || null;
     this.fetch = testFeed ? (url, opts) => (url.startsWith('file:') ? readLocal(url) : fetch(url, opts)) : fetch;
-    this.feed = testFeed ? pathToFileURL(testFeed).href : API_LATEST;
+    this.feed = testFeed ? pathToFileURL(testFeed).href : API_LIST;
     this.dir = path.join(tempDir, 'SlopAMP-update');
     this.status = { status: 'idle' };
     this.release = null;
@@ -97,8 +117,8 @@ class Updater {
   emit() { this.emitFn(this.snapshot()); }
   snapshot() {
     const c = this.cfg(), r = this.release;
-    return { ...this.status, mode: c.mode, lastCheck: c.lastCheck, canInstall: this.canInstall, current: this.version, test: !!this.testFeed,
-      release: r && { version: r.version, notes: r.notes, date: r.date, size: r.size || 0, page: r.page } };
+    return { ...this.status, mode: c.mode, lastCheck: c.lastCheck, canInstall: this.canInstall, current: this.version, test: !!this.testFeed, platform: this.platform,
+      release: r && { version: r.version, notes: r.notes, date: r.date, size: r.size || 0, page: r.page, file: r.file || '' } };
   }
 
   // At startup: "Updated to X" once after an update, clean leftovers, then the daily check.
@@ -110,6 +130,10 @@ class Updater {
       this.set({ status: 'updated' });
     } else if (c.pending) this.patch({ pending: undefined });   // the install didn't happen
     try { fs.rmSync(this.dir, { recursive: true, force: true }); } catch (_) {}
+    if (this.appImage) {    // a copy of an update that was being put next to the AppImage when quitting was cut short
+      const dir = path.dirname(this.appImage);
+      try { for (const n of fs.readdirSync(dir)) if (/^\.SlopAMP-.+\.AppImage\.part-\d+$/.test(n)) fs.rmSync(path.join(dir, n), { force: true }); } catch (_) {}
+    }
     if (this.testFeed) { this.log(`update TEST MODE: feed ${this.testFeed}, pretending to be ${this.version}`); delayMs = Math.min(delayMs, 3000); }
     else if (c.mode === 'off' || Date.now() - c.lastCheck < DAY) return;
     this.timer = setTimeout(() => this.check(false).catch(e => this.log('update check failed', e)), delayMs);
@@ -132,7 +156,8 @@ class Updater {
       return this.snapshot();
     }
     this.patch({ lastCheck: Date.now() });
-    const info = rel ? parseRelease(rel, this.version, this.testFeed && path.dirname(this.testFeed)) : { error: 'norelease' };
+    // GitHub's list of releases (the test feed: a list too, or one release)
+    const info = this.newestForPlatform(Array.isArray(rel) ? rel : rel ? [rel] : []) || { error: 'norelease' };
     if (!info.newer) { this.release = null; this.set(manual ? { status: 'uptodate', manual } : { status: 'idle' }); return this.snapshot(); }
     this.release = info;
     this.log(`update ${info.version} found${info.error ? ` (unusable: ${info.error})` : ''}`);
@@ -142,6 +167,22 @@ class Updater {
     this.set({ status: 'available', manual, hidden });
     if (this.canInstall && c.mode === 'auto' && !hidden) this.download(false);
     return this.snapshot();
+  }
+
+  // 3.2.0: the newest full release that has this platform's files (or null). Releases with nothing for this platform
+  // (a Linux-only fix on Windows, say) are skipped without a word; one that has a file for it but not the right one
+  // still counts, so its error shows as before.
+  newestForPlatform(list) {
+    let best = null;
+    const skipped = [];
+    for (const rel of list.slice(0, 50)) {
+      const i = parseRelease(rel, this.version, this.testFeed && path.dirname(this.testFeed), this.platform);
+      if (i.error === 'norelease') continue;
+      if (i.error === 'noplatform') { if (i.newer) skipped.push(i.version); continue; }
+      if (!best || isNewer(i.version, best.version)) best = i;
+    }
+    if (skipped.length) this.log(`update: ${skipped.join(', ')} not for ${this.platform === 'linux' ? 'Linux' : 'Windows'} (no file for it); skipped`);
+    return best;
   }
 
   // Download + verify. installAfter: the user clicked "Update and restart" (the window then counts down).
@@ -219,6 +260,7 @@ class Updater {
     const f = this.installOnQuit;
     this.installOnQuit = null;
     if (!f) return false;
+    if (this.platform === 'linux') return this.swapAppImage(f);
     try {
       await new Promise((ok, bad) => {
         // Test-mode variables are left out, so the reopened SlopAMP is a normal run.
@@ -237,6 +279,42 @@ class Updater {
     return true;
   }
 
+  // Linux AppImage (3.2.0): put the verified AppImage where the running one is, then reopen SlopAMP from it once this
+  // process has exited. A file name with a version in it ("SlopAMP-3.2.0-x86_64.AppImage") becomes the new
+  // release's name and the old file goes; a name of your own ("SlopAMP.AppImage", what a menu entry may point at) stays
+  // and the file is replaced in place. The rename is atomic: the running copy keeps its own (unlinked) file open.
+  // Always resolves true: if the new file can't be put in place, the old AppImage is reopened instead.
+  async swapAppImage(f) {
+    const cur = this.appImage, dir = path.dirname(cur), base = path.basename(cur);
+    const dest = /\d+\.\d+\.\d+/.test(base) ? path.join(dir, path.basename(f)) : cur;
+    const tmp = path.join(dir, `.${path.basename(dest)}.part-${process.pid}`);
+    let open = dest;
+    try {
+      fs.copyFileSync(f, tmp);        // the download is in the temp folder, often on another file system
+      if (await sha256File(tmp) !== this.release.sha256) throw new Error('the copy doesn’t match the SHA256');
+      fs.chmodSync(tmp, 0o755);
+      fs.renameSync(tmp, dest);
+      if (dest !== cur) { try { fs.unlinkSync(cur); } catch (e) { this.log('the old AppImage couldn’t be removed', e.message); } }
+      this.log(`AppImage ${this.release.version} put in place: ${dest}`);
+    } catch (e) {
+      try { fs.rmSync(tmp, { force: true }); } catch (_) {}
+      this.log('could not put the new AppImage in place; reopening this one', e);
+      this.patch({ pending: undefined });
+      open = cur;
+    }
+    // /bin/sh waits for this process to end (at most 30 s), so the reopened SlopAMP gets the single-instance lock.
+    // Test-mode variables and the AppImage runtime's own are left out (the new AppImage sets its own).
+    const env = { ...process.env };
+    for (const k of ['SLOPAMP_UPDATE_TEST', 'SLOPAMP_TEST_VERSION', 'APPIMAGE', 'APPDIR', 'ARGV0', 'OWD', 'SLOPAMP_NO_SANDBOX']) delete env[k];
+    try {
+      const child = spawn('/bin/sh', ['-c', 'i=0; while kill -0 "$1" 2>/dev/null && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done; exec "$2"', 'slopamp-reopen', String(process.pid), open],
+        { detached: true, stdio: 'ignore', env, cwd: dir });
+      child.unref();
+      this.log(`reopening ${open} once SlopAMP has quit; exiting`);
+    } catch (e) { this.log('could not reopen SlopAMP', e); }
+    return true;
+  }
+
   setMode(mode) {
     if (!MODES.includes(mode)) return this.snapshot();
     this.patch({ mode });
@@ -252,4 +330,4 @@ class Updater {
   openPage() { this.openExternal((this.release && this.release.page) || RELEASES_PAGE); }
 }
 
-module.exports = { Updater, parseRelease, isNewer, findHash, cleanNotes, installerArgs, RELEASES_PAGE };
+module.exports = { Updater, parseRelease, isNewer, findHash, cleanNotes, installerArgs, PLATFORMS, RELEASES_PAGE };

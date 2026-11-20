@@ -1,0 +1,5 @@
+#!/bin/sh
+# /usr/bin/slopamp (the .deb, 3.2.0). SlopAMP runs on X11 (XWayland on a Wayland desktop): its windows snap, dock and
+# move together, and Wayland doesn't let an app place its own windows. SLOPAMP_WAYLAND=1 tries native Wayland instead.
+if [ "$SLOPAMP_WAYLAND" = 1 ]; then exec /opt/SlopAMP/slopamp "$@"; fi
+exec /opt/SlopAMP/slopamp --ozone-platform=x11 "$@"

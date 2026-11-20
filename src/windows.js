@@ -37,8 +37,9 @@ const r4 = (b) => ({ x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w),
 const overlap = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0);
 
 class WindowManager {
-  constructor({ getLayout, saveLayout, log, legacyWindow, legacyPlHeight, version }) {
+  constructor({ getLayout, saveLayout, log, legacyWindow, legacyPlHeight, version, x11 }) {
     this.log = log || (() => {});
+    this.x11 = !!x11;               // Linux on X11 / XWayland (3.2.0)
     this.version = version || '';
     this.saveLayout = saveLayout;
     this.wins = new Map();          // id -> BrowserWindow (panels and hosts)
@@ -193,13 +194,29 @@ class WindowManager {
     const common = { ...base, show: false, frame: false, thickFrame: false, skipTaskbar: true, parent: main || undefined, minimizable: false, maximizable: false };
     if (PANELS.includes(id)) {
       const b = this.rect(id);
-      return { ...common, x: b.x, y: b.y, width: b.w, height: b.h, resizable: false, fullscreenable: id === 'video' };
+      const o = { ...common, x: b.x, y: b.y, width: b.w, height: b.h, resizable: false, fullscreenable: id === 'video' };
+      // Linux X11 (3.2.0): Electron makes every window created with a parent a dialog (_NET_WM_WINDOW_TYPE_DIALOG), and
+      // GNOME never lets a dialog go fullscreen. The video window (fullscreen video and visualizer) is created without
+      // one and gets the player as its parent right after (attach), so it still stays with the player.
+      if (this.x11 && id === 'video') delete o.parent;
+      return o;
     }
     // popup menus / dialogs: positioned and sized when they're used
     return { ...common, width: 300, height: 200, resizable: false, fullscreenable: false, alwaysOnTop: id === 'popup', focusable: true };
   }
   attach(id, win) {
     this.wins.set(id, win);
+    if (this.x11 && id === 'video' && !win.getParentWindow()) {   // see childOptions (3.2.0)
+      const m = this.wins.get('main');
+      if (m && !m.isDestroyed()) win.setParentWindow(m);
+      // GNOME keeps only dialogs out of the dock, Alt+Tab and the Overview, and Electron's skipTaskbar does nothing on
+      // Linux: ask the window manager (x11.js) each time the window is shown
+      win.on('show', () => {
+        if (win.isDestroyed()) return;
+        require('./x11').netWmState(win.getNativeWindowHandle().readUInt32LE(0), true, ['_NET_WM_STATE_SKIP_TASKBAR', '_NET_WM_STATE_SKIP_PAGER'])
+          .then((r) => { if (r !== 'ok') this.log('video window: skip taskbar:', r); }, (e) => this.log('video window: skip taskbar failed:', e.message));
+      });
+    }
     if (id === 'main') { this.watch(id, win); win.on('focus', () => this.dialogUp()); if (this.layout.onTop) win.setAlwaysOnTop(true); return; }
     if (!PANELS.includes(id) && !HOSTS.includes(id)) return;
     win.setMenu(null);

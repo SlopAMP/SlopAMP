@@ -32,6 +32,7 @@ const APP = process.env.SLOPAMP_APP || path.join(__dirname, '..');
     body: `- **Transitions** in CLIP Join.\n- **Batch convert.**\n\nWhat's new in 3.0.0: transitions, captions on each file and batch convert.\n\nSHA256 (SlopAMP-Setup-3.0.0.exe): ${h}`,
     assets: [{ name: 'SlopAMP-Setup-3.0.0.exe', browser_download_url: 'SlopAMP-Setup-3.0.0.exe', size: inst.length }] }));
   process.env.SLOPAMP_UPDATE_TEST = path.join(FEED, 'release.json'); process.env.SLOPAMP_TEST_VERSION = '2.9.9';
+  process.env.SLOPAMP_TEST_PLATFORM = 'win32';     // 3.2.0: these releases are Windows-only (the Linux side: linux-320.js)
   const { app, win, errs } = await launch(path.join(os.tmpdir(), 'slopamp-test-300u'));
   const ev = (f, a) => win.evaluate(f, a);
   let st = null;

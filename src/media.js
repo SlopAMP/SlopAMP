@@ -161,21 +161,34 @@ class MediaServer {
   // ---------- encoder detection ----------
   async detectEncoder() {
     if (!this.hasFfmpeg()) return null;
+    // Linux (3.2.0): NVENC stays first for NVIDIA; then VA-API (AMD and Intel, with the system's VA-API driver) where
+    // the system's libva is new enough for this FFmpeg (vaapiUsable); then Vulkan Video (Mesa's RADV / ANV, NVIDIA)
+    const linux = process.platform === 'linux';
+    const va = linux ? vaapiUsable(this.ffmpeg) : null;
+    if (va && !va.ok) this.log('video encoder: VA-API skipped:', va.why);
     const candidates = process.platform === 'win32'
       ? ['h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf', 'libopenh264']
-      : ['h264_nvenc', 'libopenh264'];
+      : linux ? ['h264_nvenc', ...(va.ok ? ['h264_vaapi'] : []), 'h264_vulkan', 'libopenh264'] : ['h264_nvenc', 'libopenh264'];
     for (const enc of candidates) {
-      // eslint-disable-next-line no-await-in-loop
-      const ok = await new Promise((resolve) => {
-        const args = ['-hide_banner', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x240:d=0.3', ...encoderArgs(enc), '-f', 'null', '-'];
-        this.track(execFile(this.ffmpeg, args, { windowsHide: true, timeout: 15000 }, (err) => resolve(!err)));
-      });
-      if (ok) { this.encoder = enc; this.log('video encoder:', enc); return enc; }
+      // VAAPI: each GPU (render node) in turn, the first that encodes is used; Vulkan: the first two GPUs
+      const devices = enc === 'h264_vaapi' ? renderNodes() : enc === 'h264_vulkan' ? ['0', '1'] : [null];
+      for (const dev of devices) {
+        if (enc === 'h264_vaapi') this.vaapiDevice = dev; else if (enc === 'h264_vulkan') this.vulkanDevice = dev;
+        // eslint-disable-next-line no-await-in-loop
+        const ok = await new Promise((resolve) => {
+          const args = this.hwArgs(['-hide_banner', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=320x240:d=0.3', ...encoderArgs(enc), '-f', 'null', '-']);
+          this.track(execFile(this.ffmpeg, args, { windowsHide: true, timeout: 15000 }, (err) => resolve(!err)));
+        });
+        if (ok) { this.encoder = enc; this.log('video encoder:', enc, ...(dev ? [dev] : [])); return enc; }
+      }
     }
     this.encoder = 'libvpx';
     this.log('video encoder: libvpx (fallback)');
     return this.encoder;
   }
+
+  // An ffmpeg argument list as it must run with the chosen encoder (see hwUploadArgs); unchanged for every other encoder.
+  hwArgs(args) { return hwUploadArgs(args, { h264_vaapi: this.vaapiDevice, h264_vulkan: this.vulkanDevice }); }
 
   // ---------- HTTP ----------
   async handle(req, res) {
@@ -242,8 +255,9 @@ class MediaServer {
       }
     }
     args.push('pipe:1');
-    this.log('ffmpeg', args.join(' '));
-    const proc = spawn(this.ffmpeg, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const run = this.hwArgs(args);
+    this.log('ffmpeg', run.join(' '));
+    const proc = spawn(this.ffmpeg, run, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     this.procs.add(proc);
     let stderr = '';
     proc.stderr.on('data', d => { stderr += d; if (stderr.length > 8000) stderr = stderr.slice(-8000); });
@@ -336,6 +350,8 @@ function scaleFilter(maxW) {
 
 function encoderArgs(enc) {
   switch (enc) {
+    case 'h264_vaapi': return ['-c:v', 'h264_vaapi', '-rc_mode', 'CQP', '-qp', '23'];   // Linux (3.2.0); see hwUploadArgs
+    case 'h264_vulkan': return ['-c:v', 'h264_vulkan', '-rc_mode', 'cqp', '-qp', '23'];
     case 'h264_nvenc': return ['-c:v', 'h264_nvenc', '-preset', 'p3', '-rc', 'vbr', '-cq', '23', '-b:v', '0', '-pix_fmt', 'yuv420p'];
     case 'h264_amf': return ['-c:v', 'h264_amf', '-quality', 'speed', '-rc', 'cqp', '-qp_i', '22', '-qp_p', '24', '-pix_fmt', 'yuv420p'];
     case 'h264_qsv': return ['-c:v', 'h264_qsv', '-preset', 'veryfast', '-global_quality', '24', '-pix_fmt', 'nv12'];
@@ -343,6 +359,49 @@ function encoderArgs(enc) {
     case 'libopenh264': return ['-c:v', 'libopenh264', '-b:v', '5M', '-pix_fmt', 'yuv420p'];
     default: return ['-c:v', enc];
   }
+}
+
+// GPU encoders on Linux (3.2.0), VA-API and Vulkan: they take frames in video memory, so FFmpeg is told which GPU to
+// use and the picture is converted to NV12 and uploaded at the very end of its filters. Works on a finished argument
+// list; any other encoder passes through unchanged. The picture's filters are its -vf; else, in a -filter_complex, the
+// graph's output that the first "-map [label]" takes (SlopAMP's commands map the picture first); with neither, a -vf
+// is added. With -maxrate (X's limits) the constant quality becomes a variable bitrate under that cap.
+const HW_UPLOAD = {
+  h264_vaapi: { dev: (d) => ['-vaapi_device', d || '/dev/dri/renderD128'], cqp: 'CQP', vbr: 'VBR' },
+  h264_vulkan: { dev: (d) => ['-init_hw_device', `vulkan=vk:${d || 0}`, '-filter_hw_device', 'vk'], cqp: 'cqp', vbr: 'vbr' }
+};
+function hwUploadArgs(args, devices = {}) {
+  const c = args.findIndex((x, i) => i > 0 && args[i - 1] === '-c:v' && Object.prototype.hasOwnProperty.call(HW_UPLOAD, x));
+  if (c < 0) return args;
+  const hw = HW_UPLOAD[args[c]], a = args.slice(), up = 'format=nv12,hwupload';
+  const vf = a.indexOf('-vf'), fc = a.indexOf('-filter_complex');
+  const mi = a.findIndex((x, i) => i > 0 && a[i - 1] === '-map' && /^\[[\w.-]+\]$/.test(x));
+  if (vf >= 0) a[vf + 1] = `${a[vf + 1]},${up}`;
+  else if (fc >= 0 && mi >= 0) { const l = `${a[mi].slice(0, -1)}hw]`; a[fc + 1] = `${a[fc + 1]};${a[mi]}${up}${l}`; a[mi] = l; }
+  else a.splice(c - 1, 0, '-vf', up);
+  const mr = a.indexOf('-maxrate'), rc = a.indexOf('-rc_mode');
+  const cap = mr >= 0 ? parseFloat(a[mr + 1]) : 0;
+  if (cap > 0 && rc >= 0 && a[rc + 1] === hw.cqp && a[rc + 2] === '-qp') a.splice(rc, 4, '-rc_mode', hw.vbr, '-b:v', `${Math.round(cap * 5) / 10}M`);
+  return [...hw.dev(devices[args[c]]), ...a];
+}
+// This FFmpeg build loads libva, libva-drm and libdrm itself on first use, and stops dead (abort: a crash report on
+// Ubuntu) if one is missing or lacks a function it calls. It needs libva 2.21 or later (vaMapBuffer2); Ubuntu 24.04
+// has 2.20. So VA-API is only tried when they're there, looked for where the loader looks: FFmpeg's own lib/ (its
+// RPATH), LD_LIBRARY_PATH, then the system's library folders. Returns { ok, why }.
+function vaapiUsable(ffmpeg) {
+  const dirs = [path.join(path.dirname(ffmpeg), '..', 'lib'), ...String(process.env.LD_LIBRARY_PATH || '').split(':').filter(Boolean),
+    '/usr/lib/x86_64-linux-gnu', '/lib/x86_64-linux-gnu', '/usr/lib64', '/lib64', '/usr/lib', '/lib'];
+  const find = (n) => dirs.map(d => path.join(d, n)).find((f) => { try { return fs.statSync(f).isFile(); } catch (_) { return false; } });
+  const lib = find('libva.so.2');
+  const missing = ['libva.so.2', 'libva-drm.so.2', 'libdrm.so.2'].filter(n => !find(n));
+  if (missing.length) return { ok: false, why: `no ${missing.join(', ')}` };
+  let has = false;
+  try { has = fs.readFileSync(lib).includes('vaMapBuffer2'); } catch (_) {}
+  return has ? { ok: true, why: '' } : { ok: false, why: `${fs.realpathSync(lib)} is older than libva 2.21 (no vaMapBuffer2)` };
+}
+// The GPUs' render nodes (/dev/dri/renderD128, ...), in order
+function renderNodes() {
+  try { return fs.readdirSync('/dev/dri').filter(n => /^renderD\d+$/.test(n)).sort().map(n => `/dev/dri/${n}`); } catch (_) { return []; }
 }
 
 function summarize(j) {
@@ -442,4 +501,4 @@ function isMediaFile(p) {
   return MEDIA_EXT.has(path.extname(p).slice(1).toLowerCase());
 }
 
-module.exports = { MediaServer, isMediaFile, MEDIA_EXT, SUB_EXT, encoderArgs };
+module.exports = { hwUploadArgs, vaapiUsable, MediaServer, isMediaFile, MEDIA_EXT, SUB_EXT, encoderArgs };

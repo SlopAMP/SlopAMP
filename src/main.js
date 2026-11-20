@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, net, screen, Menu, globalShortcut, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, net, screen, Menu, globalShortcut, Tray, nativeImage, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { MediaServer, isMediaFile, encoderArgs } = require('./media');
@@ -22,6 +22,30 @@ if (PORTABLE_DIR) {
 }
 if (process.platform === 'win32') app.setAppUserModelId('app.slopamp.player');
 
+// ---------- Linux (3.2.0) ----------
+const LINUX = process.platform === 'linux';
+// SlopAMP's windows snap, dock and move together, and Wayland doesn't let an app place its own windows (nor tell it
+// where the mouse is). So on Linux SlopAMP runs on X11 (XWayland on a Wayland desktop). The .deb and AppImage
+// launchers pass --ozone-platform=x11; Electron picks the platform before this file runs, so a copy started without
+// it on Wayland (a dev run, the binary started by hand) restarts itself once with it. SLOPAMP_WAYLAND=1: stay on Wayland.
+const X11_RELAUNCH = LINUX && app.commandLine.getSwitchValue('ozone-platform') !== 'x11' && process.env.SLOPAMP_WAYLAND !== '1'
+  && !!(process.env.WAYLAND_DISPLAY || process.env.XDG_SESSION_TYPE === 'wayland') && !!process.env.DISPLAY
+  && !process.env.APPIMAGE && process.env.SLOPAMP_X11_RELAUNCH !== '1';
+if (X11_RELAUNCH) {
+  process.env.SLOPAMP_X11_RELAUNCH = '1';     // never twice
+  app.relaunch({ args: [...process.argv.slice(1), '--ozone-platform=x11'] });
+  app.exit(0);
+}
+// How this copy runs: 'appimage' (APPIMAGE is set by the AppImage runtime), 'deb' (installed in /opt/SlopAMP), 'dev'
+// (a checkout) or 'other' (an unpacked folder). The AppImage launcher sets SLOPAMP_NO_SANDBOX when this system
+// blocks the Chromium sandbox for apps without an AppArmor profile (Ubuntu 23.10+); About says so.
+const LINUX_KIND = !LINUX ? null : !app.isPackaged ? 'dev' : process.env.APPIMAGE ? 'appimage'
+  : process.execPath.startsWith('/opt/SlopAMP/') ? 'deb' : 'other';
+const LINUX_SANDBOX = LINUX && !app.commandLine.hasSwitch('no-sandbox');
+// On X11 (or XWayland): --ozone-platform=x11, or no platform asked for outside a Wayland session (Electron's default there)
+const LINUX_X11 = LINUX && (app.commandLine.getSwitchValue('ozone-platform') === 'x11'
+  || (!app.commandLine.getSwitchValue('ozone-platform') && !process.env.WAYLAND_DISPLAY));
+
 // Look like a normal Chrome browser to embed hosts (removes "Electron/x" tokens).
 app.userAgentFallback = app.userAgentFallback
   .replace(/\s?Electron\/[\d.]+/i, '')
@@ -29,7 +53,9 @@ app.userAgentFallback = app.userAgentFallback
 
 const isDev = !app.isPackaged || process.env.PHOSPHOR_DEV === '1' || process.env.WINAMPVLC_DEV === '1' || process.env.SLOPAMP_DEV === '1';
 // Packaged: <install>/resources/ffmpeg. Dev checkout: vendor/ffmpeg/<platform>.
-const ffmpegDir = [path.join(process.resourcesPath || '', 'ffmpeg'), path.join(__dirname, '..', 'vendor', 'ffmpeg', process.platform)]
+// Linux: the FFmpeg build keeps its programs in bin/ and its shared libraries in lib/ (found through RPATH $ORIGIN/../lib).
+const ffmpegDir = [...(LINUX ? [path.join(process.resourcesPath || '', 'ffmpeg', 'bin'), path.join(__dirname, '..', 'vendor', 'ffmpeg', 'linux', 'bin')] : []),
+  path.join(process.resourcesPath || '', 'ffmpeg'), path.join(__dirname, '..', 'vendor', 'ffmpeg', process.platform)]
   .find(d => fs.existsSync(path.join(d, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'))) || path.join(process.resourcesPath || '', 'ffmpeg');
 
 const logFile = () => path.join(app.getPath('userData'), 'slopamp.log');
@@ -59,7 +85,7 @@ const pendingOpen = [];
 
 // Another SlopAMP is already running: the lock request has handed it our files (second-instance).
 // Leave at once. app.quit() here used to let this copy start a server and a hidden window anyway.
-const gotLock = app.requestSingleInstanceLock();
+const gotLock = !X11_RELAUNCH && app.requestSingleInstanceLock();   // restarting on X11: the new copy takes the lock
 if (!gotLock) {
   app.exit(0);
 } else {
@@ -161,10 +187,14 @@ function createWindow() {
     legacyWindow: state.window,
     legacyPlHeight: state.plHeight,
     version: app.getVersion(),
+    x11: LINUX_X11,
     log
   });
   // backgroundColor = --frame-outer in skins/classic.css (only seen for a moment before the page paints)
-  const base = { backgroundColor: '#1b1d24', title: APP_NAME, icon: path.join(__dirname, 'renderer', 'icon.png'), webPreferences: webPrefs() };
+  // Linux (3.2.0): transparent (painted opaque by backgroundColor and the page). On X11 Chromium otherwise puts a drop
+  // shadow and a 10 px invisible border that takes clicks around every frameless window, over the neighbouring
+  // windows' edges when they're docked; what thickFrame: false does on Windows.
+  const base = { backgroundColor: '#1b1d24', title: APP_NAME, icon: path.join(__dirname, 'renderer', 'icon.png'), webPreferences: webPrefs(), ...(LINUX ? { transparent: true } : {}) };
   win = new BrowserWindow(wm.mainOptions({ ...base, frame: false, show: false }));
   wm.attach('main', win);
   // The YOUTUBE window's page appears / goes with its panel (2.3)
@@ -215,7 +245,12 @@ function createWindow() {
     flushState();
   });
   win.on('closed', () => { win = null; });
-  win.on('minimize', () => { if (sysCfg().tray) setImmediate(toTray); });     // Minimize to tray (2.4)
+  win.on('minimize', () => {     // Minimize to tray (2.4)
+    if (!sysCfg().tray) return;
+    if (!LINUX) { setImmediate(toTray); return; }
+    // Linux: only with a tray to show the icon in (else the windows couldn't be brought back); otherwise a plain minimize
+    trayHost().then((ok) => { if (ok && win && !win.isDestroyed() && win.isMinimized()) toTray(); else if (!ok) log('no tray on this desktop; minimized normally'); });
+  });
 
   win.loadURL(`${server.base}/app/index.html`);
   if (process.env.PHOSPHOR_DEVTOOLS === '1') win.webContents.openDevTools({ mode: 'detach' });
@@ -1176,18 +1211,35 @@ function registerIpc() {
 
   ipcMain.on('win:minimize', () => win && win.minimize());
   // ---- 2.4 #19: Minimize to tray / Use media keys (saved in state.sys), the tray tooltip (the song)
-  ipcMain.handle('sys:get', () => sysCfg());
-  ipcMain.handle('sys:set', (_e, key, value) => {
+  // Linux: trayHost says whether this desktop has a tray (Settings greys Minimize to the tray out without one)
+  ipcMain.handle('sys:get', async () => (LINUX ? { ...sysCfg(), trayHost: await trayHost() } : sysCfg()));
+  ipcMain.handle('sys:set', async (_e, key, value) => {
     const c = sysCfg();
     if (key === 'tray') c.tray = !!value;
     else if (key === 'mediaKeys') { c.mediaKeys = !!value; if (c.mediaKeys) registerMediaKeys(); else unregisterMediaKeys(); }
     setMainState({ sys: c });
-    return c;
+    return LINUX ? { ...c, trayHost: await trayHost() } : c;
   });
   ipcMain.on('sys:title', (_e, t) => { trayTitle = String(t || '').replace(/[\r\n]+/g, ' ').slice(0, 120); if (tray) { tray.setToolTip(trayTip()); tray.setContextMenu(trayMenu()); } });
   ipcMain.on('win:close', () => win && win.close());
   ipcMain.on('win:close-force', () => { closeOk = true; if (win) win.close(); });   // 2.9.2: after "Close anyway"
   ipcMain.handle('win:fullscreen', (_e, on) => wm.setFullscreen(on));
+  // 3.2.0: the Add link dialog's Paste button and right-click menu (plain text; SlopAMP's own pages only)
+  let dndLogged = false;
+  const ownPage = (e) => !!(e.senderFrame && String(e.senderFrame.url || '').startsWith(server.base));
+  ipcMain.handle('clipboard:read', (e) => (ownPage(e) ? clipboard.readText() : ''));
+  ipcMain.handle('clipboard:write', (e, s) => { if (ownPage(e)) clipboard.writeText(String(s == null ? '' : s)); });
+  // 3.2.0, Linux X11: the page took a dragged-in link or file; tell the drag's source right away (x11.js xdndAccept)
+  if (LINUX_X11) {
+    ipcMain.on('dnd:accepted', (e, id) => {
+      if (!ownPage(e)) return;
+      const w = wm.wins.get(String(id)) || wm.wins.get('main');
+      if (!w || w.isDestroyed()) return;
+      require('./x11').xdndAccept(w.getNativeWindowHandle().readUInt32LE(0)).catch((err) => {
+        if (!dndLogged) { dndLogged = true; log('drag and drop: telling the source failed:', err.message); }
+      });
+    });
+  }
   ipcMain.handle('win:mini', (_e, on) => wm.setMini(on));
   // ---- movable windows (windows.js). A bug here must never freeze SlopAMP behind an error box: log it.
   const safe = (fn) => (...a) => { try { return fn(...a); } catch (e) { log('window manager error', e); return null; } };
@@ -1222,6 +1274,8 @@ function registerIpc() {
     encoder: server.encoder,
     hasFfmpeg: server.hasFfmpeg(),
     platform: process.platform,
+    // Linux (3.2.0, About): how this copy runs and whether the Chromium sandbox is on
+    linux: LINUX ? { kind: LINUX_KIND, sandbox: LINUX_SANDBOX, sandboxBlocked: process.env.SLOPAMP_NO_SANDBOX === '1' } : undefined,
     pendingOpen: pendingOpen.splice(0)
   }));
 }
@@ -1277,6 +1331,7 @@ app.whenReady().then(async () => {
   });
   await server.start();
   log(`${APP_NAME} ${app.getVersion()} started on ${server.base}; ffmpeg=${server.hasFfmpeg()}`);
+  if (LINUX) log(`linux: ${LINUX_KIND}, ${app.commandLine.getSwitchValue('ozone-platform') || 'x11'} (${process.env.XDG_SESSION_TYPE || '?'} session, ${process.env.XDG_CURRENT_DESKTOP || '?'}), sandbox ${LINUX_SANDBOX ? 'on' : `OFF${process.env.SLOPAMP_NO_SANDBOX === '1' ? ' (the AppImage launcher: this system blocks it for AppImages; the .deb keeps it on)' : ' (--no-sandbox)'}`}`);
   // 2.7 Library preview: the pictures, cached in <userData>\thumbs; old ones cleaned up a minute after start
   thumbs = new Thumbs({ dir: path.join(app.getPath('userData'), 'thumbs'), ffmpeg: ffmpegExe, server, urlOf: (f) => fileUrl(f), log });
   setTimeout(() => { try { thumbs.prune(); } catch (e) { log('thumbs prune failed', e); } }, 60000);
@@ -1318,15 +1373,21 @@ app.whenReady().then(async () => {
   server.fetch = (u, o) => net.fetch(u, o);
   xstream = new XStream({ downloader, server, log });
   // Only the installed Windows build updates itself; the portable exe and dev runs just open the download page.
+  // Linux (3.2.0): the AppImage updates itself when its folder is writable (also with a "SlopAMP Data" folder next
+  // to it, which stays where it is); the .deb, unpacked folders and dev runs open the download page.
   const portable = !!(PORTABLE_DIR || process.env.SLOPAMP_PORTABLE) || /-portable$/i.test(path.basename(path.dirname(process.execPath)));
   const testFeed = process.env.SLOPAMP_UPDATE_TEST ? path.resolve(process.env.SLOPAMP_UPDATE_TEST) : null;
+  const appImage = LINUX_KIND === 'appimage' ? path.resolve(process.env.APPIMAGE) : null;
+  const appImageOk = () => { try { fs.accessSync(path.dirname(appImage), fs.constants.W_OK); return true; } catch (_) { return false; } };
   updater = new Updater({
     fetch: (url, opts) => net.fetch(url, opts),
     version: (testFeed && process.env.SLOPAMP_TEST_VERSION) || app.getVersion(),
     testFeed,
     tempDir: app.getPath('temp'),
-    canInstall: app.isPackaged && process.platform === 'win32' && !portable,
-    installDir: path.dirname(process.execPath),
+    canInstall: LINUX ? !!appImage && app.isPackaged && appImageOk() : app.isPackaged && process.platform === 'win32' && !portable,
+    installDir: appImage ? path.dirname(appImage) : path.dirname(process.execPath),
+    platform: (testFeed && process.env.SLOPAMP_TEST_PLATFORM) || process.platform,     // test feed only: pretend to be win32 / linux
+    appImage,
     getState: () => (currentState || loadState()).update,
     setState: (v) => setMainState({ update: v }),
     emit: (st) => { if (win && !win.isDestroyed()) win.webContents.send('upd:event', st); trayUpdateNote(st); },
@@ -1344,6 +1405,10 @@ app.whenReady().then(async () => {
 // 2.4 (#19): "Use media keys" (on by default) — off, SlopAMP lets go of them for Spotify, the browser…
 const MEDIA_KEYS = { MediaPlayPause: 'playpause', MediaNextTrack: 'next', MediaPreviousTrack: 'prev', MediaStop: 'stop' };
 function registerMediaKeys() {
+  // Linux: the desktop owns the media keys and hands them to the player over MPRIS, which Chromium provides from the
+  // page's navigator.mediaSession (app.js). Grabbing them as well would press Play/Pause twice (and on Wayland a
+  // grab only works while SlopAMP has the focus). "Use media keys" off turns the mediaSession handlers off.
+  if (LINUX) return;
   for (const [acc, action] of Object.entries(MEDIA_KEYS)) {
     try {
       if (globalShortcut.isRegistered(acc)) continue;
@@ -1363,7 +1428,31 @@ function sysCfg() { const s = (currentState || loadState()).sys || {}; return { 
 let tray = null, inTray = false, trayTitle = '', trayNote = '';
 function trayIcon() {
   const img = nativeImage.createFromPath(path.join(__dirname, 'renderer', 'icon.png'));
-  return img.isEmpty() ? img : img.resize({ width: 16, height: 16 });
+  const px = LINUX ? 32 : 16;     // Linux: the panel scales the icon itself (and is often HiDPI)
+  return img.isEmpty() ? img : img.resize({ width: px, height: px });
+}
+// Linux: is there a tray for the icon? Tray icons show through a StatusNotifier host (KDE, Cinnamon, XFCE, Budgie;
+// GNOME only with the AppIndicator extension, which Ubuntu turns on). Without one the icon would go nowhere and the
+// hidden windows couldn't be brought back, so Minimize to the tray then minimizes normally. Asks D-Bus with whichever
+// of gdbus / dbus-send / busctl is installed.
+function trayHost() {
+  const W = 'org.kde.StatusNotifierWatcher', P = 'IsStatusNotifierHostRegistered';
+  const tries = [
+    ['gdbus', ['call', '--session', '--dest', W, '--object-path', '/StatusNotifierWatcher', '--method', 'org.freedesktop.DBus.Properties.Get', W, P], /true/],
+    ['dbus-send', ['--session', '--print-reply', `--dest=${W}`, '/StatusNotifierWatcher', 'org.freedesktop.DBus.Properties.Get', `string:${W}`, `string:${P}`], /boolean true/],
+    ['busctl', ['--user', 'get-property', W, '/StatusNotifierWatcher', W, P], /^b true/]
+  ];
+  return new Promise((resolve) => {
+    const next = (i) => {
+      if (i >= tries.length) { resolve(false); return; }
+      const [cmd, args, yes] = tries[i];
+      require('child_process').execFile(cmd, args, { timeout: 3000 }, (err, stdout) => {
+        if (err && err.code === 'ENOENT') next(i + 1);      // not installed: try the next tool
+        else resolve(!err && yes.test(String(stdout)));
+      });
+    };
+    next(0);
+  });
 }
 function trayMenu() {
   const key = (a) => () => { if (win && !win.isDestroyed()) win.webContents.send('media-key', a); };
@@ -1380,7 +1469,10 @@ function trayMenu() {
 function toTray() {
   if (inTray || !win || win.isDestroyed() || closing) return;
   inTray = true;
-  for (const [id, w] of wm.wins) if (id !== 'main' && !w.isDestroyed() && w.isVisible()) w.hide();
+  // Linux (3.2.0): GNOME hides the player's other windows (transient for it) along with it when it's minimized, and
+  // Electron then calls them minimized, not visible. They're hidden all the same: left as GNOME had them, Show SlopAMP
+  // brought back only the player (GNOME re-checks them only when the player is un-minimized, not hidden and shown).
+  for (const [id, w] of wm.wins) if (id !== 'main' && !w.isDestroyed() && (w.isVisible() || (LINUX && (w.isMinimized() || wm.visible[id])))) w.hide();
   win.hide();
   try {
     tray = new Tray(trayIcon());
@@ -1417,7 +1509,7 @@ app.on('will-quit', (e) => {
   // "Restart now": SlopAMP has now quit cleanly; start the installer last, then exit.
   if (updater && updater.installOnQuit) {
     e.preventDefault();
-    updater.startInstaller().then((ok) => { if (!ok) app.relaunch(); app.exit(0); });
+    updater.startInstaller().then((ok) => { if (!ok) app.relaunch(); app.exit(0); });   // (the AppImage reopens itself: always ok)
   }
 });
 

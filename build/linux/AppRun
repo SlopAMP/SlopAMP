@@ -1,0 +1,31 @@
+#!/bin/sh
+# SlopAMP's AppImage launcher (3.2.0). The AppImage runtime has mounted the image, set APPIMAGE (the .AppImage file)
+# and APPDIR (where it's mounted), and runs this script.
+HERE="$(dirname "$(readlink -f "$0")")"
+
+# X11 (XWayland on a Wayland desktop): SlopAMP's windows snap, dock and move together, and Wayland doesn't let an
+# app place its own windows. SLOPAMP_WAYLAND=1 tries native Wayland instead.
+X11=--ozone-platform=x11
+[ "$SLOPAMP_WAYLAND" = 1 ] && X11=
+
+# The Chromium sandbox needs unprivileged user namespaces. Ubuntu 23.10 and later (AppArmor) allow them only to
+# programs with a profile, which an AppImage can't bring, so there SlopAMP runs without the sandbox: About says so,
+# the log too, and the .deb (which installs the profile) keeps it on. The test does what the sandbox needs: a user
+# namespace with its own root user (AppArmor refuses exactly that). Without unshare, the system settings decide.
+userns_ok() {
+  if command -v unshare >/dev/null 2>&1; then unshare --user --map-root-user true >/dev/null 2>&1; return; fi
+  [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ] && return 1
+  [ "$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null)" = 0 ] && return 1
+  [ "$(cat /proc/sys/user/max_user_namespaces 2>/dev/null)" = 0 ] && return 1
+  return 0
+}
+NOSB=
+if ! userns_ok; then NOSB=--no-sandbox; export SLOPAMP_NO_SANDBOX=1; else unset SLOPAMP_NO_SANDBOX; fi
+
+# A "SlopAMP Data" folder next to the AppImage keeps the playlists and settings there (like the Windows portable exe);
+# without one they're in ~/.config/SlopAMP, shared with the .deb.
+if [ -z "$SLOPAMP_DATA_DIR" ] && [ -n "$APPIMAGE" ] && [ -d "$(dirname "$APPIMAGE")/SlopAMP Data" ]; then
+  export SLOPAMP_DATA_DIR="$(dirname "$APPIMAGE")/SlopAMP Data"
+fi
+
+exec "$HERE/slopamp" $X11 $NOSB "$@"

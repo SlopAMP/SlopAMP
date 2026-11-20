@@ -15,8 +15,10 @@ const fs = require('fs'), path = require('path'), os = require('os');
 const fails = []; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); if (!c) fails.push(m); };
 const H = path.join(os.tmpdir(), 'slopamp-test-291');
 const MB = 1024 * 1024;
+const BIN = process.platform === 'linux' ? 'Trash' : 'Recycle Bin';     // 3.2.0: Linux words (app.js osText)
 (async () => {
   process.env.SLOPAMP_YTDLP = path.join(__dirname, 'fake-ytdlp.js');
+  // 3.2.0: deleted files go to the Trash on Linux (the same box says Recycle Bin on Windows)
   const { app, win, errs } = await launch(H);
   const ev = (f, a) => win.evaluate(f, a);
   const dl = (await app.evaluate(({ app }) => app.getPath('downloads'))) + '/SlopAMP';
@@ -94,7 +96,7 @@ const MB = 1024 * 1024;
   ok(/3 files in a playlist/.test(b.kept) && /tab Main/.test(b.kept) && /saved playlist Mix/.test(b.kept) && !/History/.test(b.kept) && /1 ★ favorite/.test(b.kept) && /clips/.test(b.kept), `kept (B and the downloaded Fits Fine in tab Main, E in saved Mix, C ★; the History copies don't count): ${b.kept}`);
   const why = await ev(() => ({ sum: WM.$('#roomWhySum').textContent, rows: [...WM.$$('#roomWhyList > div')].map(d => `${d.querySelector('.t').textContent} = ${d.querySelector('.by').textContent}`) }));
   ok(why.sum === 'Why are 4 files kept?' && why.rows.includes('In A Tab = tab “Main”') && why.rows.includes('Saved Song = saved playlist “Mix”') && why.rows.includes('Starred One = ★ favorite') && !why.rows.some(r => /History/.test(r)), `“Why are these kept?” names what keeps each file ${JSON.stringify(why)}`);
-  ok(/Recycle Bin, so you can restore them/.test(b.bin), 'the Recycle Bin note');
+  ok(new RegExp(`${BIN}, so you can restore them`).test(b.bin), `the ${BIN} note`);
   ok(JSON.stringify(b.btns) === JSON.stringify(['Choose files…', 'Cancel download', 'Delete 1 and download']) && b.focus === 'Cancel download' && !b.same, `buttons ${JSON.stringify(b.btns)}, Cancel has the focus`);
   ok(exists(fA) && !fs.readdirSync(V).some(f => /Needs Room/.test(f)), 'nothing deleted or downloaded while the box is up');
   await click('Cancel download'); await sleep(800);
@@ -110,7 +112,7 @@ const MB = 1024 * 1024;
   await ev((id) => { startDownload(S.items.find(i => i.id === id), 'video', 'xready'); }, await item('yyyyyyyyyy3'));
   b = await waitBox();
   ok(b.title === 'Not enough room under your 1 GB limit' && JSON.stringify(b.btns) === JSON.stringify(['Open Library', 'Cancel download', 'Download anyway']) && b.focus === 'Cancel download', `the not-enough box ${JSON.stringify([b.title, b.btns])}`);
-  ok(/wouldn’t make enough room/.test(b.what) && /Recycle Bin/.test(b.bin), b.what);
+  ok(/wouldn’t make enough room/.test(b.what) && b.bin.includes(BIN), b.what);
   await click('Cancel download'); await sleep(600);
   ok(exists(fD) && !fs.readdirSync(V).some(f => /Way Too Big/.test(f)), 'Cancel: nothing deleted or downloaded');
   // ================= size unknown: estimated from the length (600 s × 4 Mb/s = 300 MB → needs room)
@@ -191,7 +193,7 @@ const MB = 1024 * 1024;
   await ev(() => { S.dlLimit = 1; delete S.favs['y:dddddddddd4']; setOpen('downloads'); }); await sleep(500);     // un-star D: the only download not in a playlist
   await ev(() => WM.$('#dlRoomBtn').click());
   b = await waitBox();
-  ok(b.open && b.title === 'Make room' && JSON.stringify(b.btns) === JSON.stringify(['Cancel', 'Delete 1']) && JSON.stringify(b.list) === '["Newer Video"]' && /Recycle Bin/.test(b.bin), `Make room… opens the same box ${JSON.stringify([b.title, b.btns, b.list])}`);
+  ok(b.open && b.title === 'Make room' && JSON.stringify(b.btns) === JSON.stringify(['Cancel', 'Delete 1']) && JSON.stringify(b.list) === '["Newer Video"]' && b.bin.includes(BIN), `Make room… opens the same box ${JSON.stringify([b.title, b.btns, b.list])}`);
   ok(/all it can/.test(b.what), `with too little to free it says so: ${b.what}`);
   const opts = await ev(() => [...WM.$$('#roomFree option')].map(o => o.textContent));
   ok(opts.includes('1 GB') && opts.includes('everything it can'), `how much to free ${JSON.stringify(opts)}`);

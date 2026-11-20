@@ -15,7 +15,7 @@ const fails = []; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m
 const H = path.join(os.tmpdir(), 'slopamp-test-300');
 const O = process.env.SLOPAMP_SHOTS || path.join(os.tmpdir(), 'slopamp-300-shots');
 fs.mkdirSync(O, { recursive: true });
-const APPFF = path.join(process.env.SLOPAMP_APP || path.join(__dirname, '..'), 'vendor/ffmpeg/linux');
+const APPFF = ((d) => (require('fs').existsSync(path.join(d, 'bin', 'ffmpeg')) ? path.join(d, 'bin') : d))(path.join(process.env.SLOPAMP_APP || path.join(__dirname, '..'), 'vendor/ffmpeg/linux'))   // 3.2.0: bin/ + lib/;
 const FF = path.join(APPFF, 'ffmpeg'), FP = path.join(APPFF, 'ffprobe');
 const probe = (f) => JSON.parse(execFileSync(FP, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', f]).toString());
 const sdur = (f, type) => +(probe(f).streams.find(s => s.codec_type === type) || {}).duration;

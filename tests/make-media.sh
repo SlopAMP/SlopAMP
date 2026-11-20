@@ -1,10 +1,11 @@
 #!/bin/bash
 # Sample videos and songs for the Library preview test (tests/library-preview.js), made with FFmpeg's own
 # test sources: six different-looking videos, three songs with different waveforms and one with cover art.
-# Usage: tests/make-media.sh [ffmpeg] [out dir]   (defaults: vendor/ffmpeg/linux/ffmpeg, tests/media)
+# Usage: tests/make-media.sh [ffmpeg] [out dir]   (defaults: vendor/ffmpeg/linux/bin/ffmpeg, tests/media)
 set -e
 cd "$(dirname "$0")/.."
-FF=${1:-vendor/ffmpeg/linux/ffmpeg}; M=${2:-tests/media}
+DEF=vendor/ffmpeg/linux/bin/ffmpeg; [ -x "$DEF" ] || DEF=vendor/ffmpeg/linux/ffmpeg     # 3.2.0: the FFmpeg build's bin/ + lib/
+FF=${1:-$DEF}; M=${2:-tests/media}; FF="$(realpath "$FF")"      # absolute: the script works inside $M
 mkdir -p "$M"; cd "$M"
 VENC=libopenh264; "$FF" -hide_banner -encoders 2>/dev/null | grep -q libx264 && VENC=libx264
 mk() { "$FF" -v error -y -f lavfi -i "$1" -f lavfi -i "sine=frequency=$3:duration=6" -t 6 -c:v $VENC -b:v 1M -pix_fmt yuv420p -c:a aac -shortest "$2"; }

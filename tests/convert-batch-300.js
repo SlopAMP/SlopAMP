@@ -14,7 +14,7 @@ const fails = []; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m
 const H = path.join(os.tmpdir(), 'slopamp-test-300b');
 const O = process.env.SLOPAMP_SHOTS || path.join(os.tmpdir(), 'slopamp-300-shots');
 fs.mkdirSync(O, { recursive: true });
-const APPFF = path.join(process.env.SLOPAMP_APP || path.join(__dirname, '..'), 'vendor/ffmpeg/linux');
+const APPFF = ((d) => (require('fs').existsSync(path.join(d, 'bin', 'ffmpeg')) ? path.join(d, 'bin') : d))(path.join(process.env.SLOPAMP_APP || path.join(__dirname, '..'), 'vendor/ffmpeg/linux'))   // 3.2.0: bin/ + lib/;
 const FF = path.join(APPFF, 'ffmpeg'), FP = path.join(APPFF, 'ffprobe');
 const probe = (f) => JSON.parse(execFileSync(FP, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', f]).toString());
 const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
@@ -67,7 +67,7 @@ const vol = (f) => { const r = spawnSync(FF, ['-hide_banner', '-i', f, '-af', 'v
   let b = await box();
   ok(b.open && b.title === '⇄ Convert 3 files' && b.rows.length === 3 && /One file isn’t a video or a song\./.test(b.note), `the box: "${b.title}", the picture left out ("${b.note.slice(-45)}")`);
   ok(/^Night Main 360p\.mp4 \| [\d.]+ [KM]B \| For X$/.test(b.rows[0]) && /^Slow Build - Rising\.mp3 \| [\d.]+ KB \| MP3 \(no picture\)$/.test(b.rows[2]) && b.kindNote === 'a song in the list becomes an MP3 (no picture)', `each file and what it becomes: ${JSON.stringify(b.rows)}`);
-  ok(/To Downloads\\SlopAMP\\Converted, one at a time, each as “name \(For X\)\.mp4” \(a new name if it’s taken\)\. The originals are never changed\. About [\d.]+ [KM]B in all\./.test(b.note), `where and how big: "${b.note.slice(0, 160)}"`);
+  ok(/To Downloads[\\/]SlopAMP[\\/]Converted, one at a time, each as “name \(For X\)\.mp4” \(a new name if it’s taken\)\. The originals are never changed\. About [\d.]+ [KM]B in all\./.test(b.note), `where and how big: "${b.note.slice(0, 160)}"`);
   await ev(() => WM.$('#cbKind [data-v=gif]').click()); b = await box();
   ok(/skipped: a GIF needs a picture/.test(b.rows[2]) && /a song is skipped/.test(b.kindNote), `GIF: the song is skipped ("${b.rows[2]}")`);
   await ev(() => WM.$('#cbKind [data-v=mp3]').click()); b = await box();

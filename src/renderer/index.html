@@ -589,7 +589,7 @@
       <div class="dlg-title">Add YouTube or X links</div>
       <textarea id="urlText" rows="4" placeholder="https://www.youtube.com/watch?v=...&#10;https://x.com/.../status/..."></textarea>
       <div class="dlg-note">One link per line. YouTube videos stream through the official embedded players &#8212; nothing is downloaded. X posts can&#8217;t stream here: they play after you download them.</div>
-      <div class="dlg-btns"><button value="cancel">Cancel</button><button value="ok" id="urlOk">Add</button></div>
+      <div class="dlg-btns"><button type="button" id="urlPaste" title="Paste from the clipboard (Ctrl+V)">Paste</button><button value="cancel">Cancel</button><button value="ok" id="urlOk">Add</button></div>
     </form>
   </dialog>
 
@@ -728,6 +728,7 @@
       <div class="about-body">
         <p>A retro-styled player for your own media files plus YouTube videos through YouTube’s official embedded player, and X video posts streamed in its own player. The DOWNLOAD button saves a copy with yt-dlp — only download videos you have the right to save.</p>
         <p id="aboutEnc"></p>
+        <p id="aboutSys" class="hidden"></p>
         <p>SlopAMP is free software (MIT). It bundles Electron/Chromium and FFmpeg (LGPL v3). It includes the Butterchurn visualizer (MIT) and its preset collection. Not affiliated with or endorsed by Winamp, VideoLAN, YouTube/Google, or X.</p>
         <iframe id="licFrame" title="Licenses" class="hidden"></iframe>
       </div>

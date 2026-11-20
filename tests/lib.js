@@ -19,7 +19,9 @@ async function launch(H, opts = {}) {
   if (!opts.keep || !fs.existsSync(stateFile)) fs.writeFileSync(stateFile, JSON.stringify({ update: { mode: 'off' }, ytdlpUpdatedAt: Date.now() }));
   const env = { ...process.env, HOME: H, PHOSPHOR_DEV: '1' };
   for (const k of ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy']) delete env[k];
-  const app = await _electron.launch({ executablePath: electronPath(), args: [APP, '--no-sandbox', ...(opts.args || [])], env });
+  // 3.2.0: SlopAMP runs on X11 (main.js); on a Wayland desktop the tests stay on xvfb's display, not the real one
+  delete env.WAYLAND_DISPLAY;
+  const app = await _electron.launch({ executablePath: electronPath(), args: [APP, '--no-sandbox', '--ozone-platform=x11', ...(opts.args || [])], env });
   const win = await app.firstWindow();
   await win.waitForFunction(() => window.__phosphor, null, { timeout: 20000 }); await sleep(1200);
   const errs = []; win.on('pageerror', (e) => errs.push(e.message)); win.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });

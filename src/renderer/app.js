@@ -1,6 +1,28 @@
 /* SlopAMP renderer — playlist, engines (local / YouTube), UI. */
 'use strict';
 const P = window.phosphor;
+// Linux (3.2.0): the same app in Linux words: the Trash for the Recycle Bin, "Show in folder" for Show in Explorer,
+// Downloads/SlopAMP/… for Downloads\SlopAMP\…. On Windows osText() returns its text untouched, so every Windows text
+// stays exactly as it was. Applied by toast(), the confirm box and the popup menus, to index.html once at the start
+// (osTextDocs), and by hand where code builds a text straight into the page.
+const LINUX = P.platform === 'linux';
+const PSEP = LINUX ? '/' : '\\';
+const osText = !LINUX ? (t) => t : (t) => String(t)
+  .replace(/Downloads\\[^\n"“”]*/g, (m) => m.replace(/\\/g, '/'))
+  .replace(/Recycle Bin/g, 'Trash')
+  .replace(/Show in Explorer/g, 'Show in folder');
+function osTextDocs() {
+  if (!LINUX) return;
+  const hit = /Downloads\\|Recycle Bin|Show in Explorer/;
+  for (const d of WM.docs) {
+    const w = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) if (hit.test(n.nodeValue)) n.nodeValue = osText(n.nodeValue);
+    for (const el of d.querySelectorAll('[title]')) if (hit.test(el.title)) el.title = osText(el.title);
+  }
+  // Settings → Minimize to the tray: no taskbar clock on Linux (sysRender adds the no-tray case)
+  const tr = $('#sysTray'), hint = tr && tr.closest('.set-row').querySelector('small');
+  if (hint) hint.textContent = 'The \u2013 button hides SlopAMP in the system tray; its icon\u2019s menu brings it back. \u2715 still quits.';
+}
 // The player's panels are spread over several windows (winmgr.js): $ / $$ search all of them.
 const $ = WM.$, $$ = WM.$$;
 const VW = () => WM.wins.video || window;          // the video/visualizer window
@@ -77,7 +99,7 @@ function fmt(t) {
 function fmtShort(t) { if (!t) return ''; const f = fmt(t); return f.replace(/^0(\d:)/, '$1'); }
 let toastTimer;
 function toast(msg, ms = 2600, act) {
-  const t = WM.host($('#toast'), WM.noticeDoc()); t.textContent = msg; t.classList.remove('hidden');
+  const t = WM.host($('#toast'), WM.noticeDoc()); t.textContent = osText(msg); t.classList.remove('hidden');
   if (act) {      // 2.6: a button on the toast (Undo after a rename)
     const b = t.ownerDocument.createElement('button'); b.type = 'button'; b.className = 'toast-act'; b.textContent = act.label;
     b.onclick = () => { clearTimeout(toastTimer); t.classList.add('hidden'); act.fn(); };
@@ -1393,9 +1415,16 @@ WM.onDocs('dragleave', (e) => { e.preventDefault(); const d = dropDocOf(e); if (
 WM.onDocs('dragover', (e) => {
   e.preventDefault();
   e.dataTransfer.dropEffect = draggingInternal ? 'move' : 'copy';
+  if (LINUX && !draggingInternal) dragAccepted(dropDocOf(e));
   clearDropMarks();
   const t = dropTarget(e); if (t.li) t.li.classList.add(t.after ? 'drop-after' : 'drop-before');
 });
+// 3.2.0, Linux: a drag from another app (GNOME on Wayland, through XWayland) only drops when SlopAMP's last answer to it
+// said yes, and Electron's answer lags one step behind the page: say yes again as the page takes it (x11.js xdndAccept)
+function dragAccepted(doc) {
+  const id = Object.keys(WM.wins || {}).find(k => WM.wins[k] && WM.wins[k].document === doc) || 'main';
+  if (P.dragAccepted) P.dragAccepted(id);
+}
 WM.onDocs('drop', async (e) => {
   e.preventDefault();
   const dd = dropDocOf(e);
@@ -1416,10 +1445,21 @@ WM.onDocs('drop', async (e) => {
   for (const z of zips) { const k = await openSharedZip(z); if (k >= 0 && zips.length === 1 && paths.length === 1 && S.tabs[k].items.length) playIndex(0); }
   if (paths.length > zips.length) { await addPaths(paths.filter(p => !ZIP_RE.test(p)), at); return; }
   if (paths.length) return;
-  const text = dt.getData('text/uri-list') || dt.getData('text/plain') || '';
-  const urls = extractUrls(text);
+  const urls = dropUrls(dt);
   if (urls.length) addUrls(urls, at);
 });
+// The links in a drop. Linux (3.2.0): a drag from a Wayland app (Chrome) comes through XWayland, where text/uri-list can
+// be empty or garbled while text/plain or the HTML still holds the link: the first type that has one is used.
+function dropUrls(dt) {
+  if (!LINUX) return extractUrls(dt.getData('text/uri-list') || dt.getData('text/plain') || '');
+  const html = () => [...String(dt.getData('text/html') || '').matchAll(/href\s*=\s*["']?([^"'\s>]+)/gi)].map(m => m[1].replace(/&amp;/g, '&')).join('\n');
+  for (const get of [() => dt.getData('text/uri-list'), () => dt.getData('text/plain'), html]) { const u = extractUrls(get()); if (u.length) return u; }
+  // Chrome's address bar shows a page's address without "https://" (and "www.") until it's clicked, and a drag from it
+  // carries that text: the full address is only in text/x-moz-url, which Electron on X11 doesn't give the page. So a
+  // YouTube or X address with no scheme counts too (the first drag from each site added nothing; 3.2.0).
+  return String(dt.getData('text/plain') || '').split(/[\s<>"']+/).filter(s => BARE_WEB_RE.test(s)).map(s => `https://${s}`);
+}
+const BARE_WEB_RE = /^(?:(?:www|m|music|mobile|d|dl)\.)?(?:youtube\.com|youtube-nocookie\.com|youtu\.be|(?:x|twitter|fxtwitter|vxtwitter|fixupx|fixvx)\.com|t\.co)\/\S/i;
 WM.onDocs('paste', (e) => {
   if (e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) return;
   const text = e.clipboardData.getData('text/plain');
@@ -1965,7 +2005,7 @@ function moveTabTo(i, where) {
 // Drag playlist rows onto a tab: move (hold Ctrl to copy).
 $('#tabStrip').addEventListener('dragover', (e) => {
   const el = e.target.closest('.ptab'); if (!el) return;
-  if (!draggingInternal) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; for (const x of $('#tabStrip').children) x.classList.toggle('drop', x === el); return; }
+  if (!draggingInternal) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; if (LINUX) dragAccepted(dropDocOf(e)); for (const x of $('#tabStrip').children) x.classList.toggle('drop', x === el); return; }
   e.preventDefault(); e.stopPropagation();
   e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move';
   for (const x of $('#tabStrip').children) x.classList.toggle('drop', x === el && +el.dataset.t !== S.tab);
@@ -1978,7 +2018,7 @@ $('#tabStrip').addEventListener('drop', (e) => {
     for (const x of $('#tabStrip').children) x.classList.remove('drop');
     $('#dropHint').classList.add('hidden'); dragDepth = 0;
     const t = +el.dataset.t, tab = S.tabs[t]; if (!tab) return;
-    const urls = extractUrls(e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || '');
+    const urls = dropUrls(e.dataTransfer);
     if (!urls.length) return;
     if (isHist(tab)) { toast(histNoAdd(histKind(tab)), 3500); return; }
     if (t === S.tab) { addUrls(urls); return; }
@@ -2214,7 +2254,7 @@ function histMenu(anchor, k = histScreenKind() || 'yt') {
   openPop((add, hr) => {
     add('dm-sec', K.full);
     add('dm-item' + (h.on ? ' cur' : ''), K.record, set({ on: !h.on }), h.on ? K.tipOn : `${K.full} is off: nothing new is added`);
-    const file = `${(histDirs && histDirs.playlists) || 'Downloads\\SlopAMP\\Playlists'}\\${K.file}`;
+    const file = `${(histDirs && histDirs.playlists) || osText('Downloads\\SlopAMP\\Playlists')}${PSEP}${K.file}`;
     add('dm-item' + (h.mirror ? ' cur' : ''), 'Keep a synced copy in Playlists', set({ mirror: !h.mirror }), `${file}\nUpdated by itself whenever ${K.full} changes (shows in Library → Playlists).`);
     hr(); add('dm-sec', 'Order');
     add('dm-item' + (h.order === 'newest' ? ' cur' : ''), 'Newest at the top', set({ order: 'newest' }));
@@ -2354,11 +2394,41 @@ function openUrlDialog() {
 }
 $('#urlDlg').addEventListener('close', () => { if ($('#urlDlg').returnValue === 'ok') { const urls = extractUrls($('#urlText').value); if (urls.length) addUrls(urls); } });
 $('#urlText').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); $('#urlDlg').close('ok'); } });
+// 3.2.0: a Paste button and a right-click menu on the field (Ctrl+V was the only way). A link pasted after other text
+// goes on a line of its own.
+async function urlPaste() {
+  const t = $('#urlText'), s = String((await P.clipboardText().catch(() => '')) || '');
+  if (!s.trim()) {
+    const b = $('#urlPaste'); b.textContent = 'Clipboard is empty';
+    clearTimeout(urlPaste.t); urlPaste.t = setTimeout(() => { b.textContent = 'Paste'; }, 1800);
+    t.focus(); return;
+  }
+  const a = t.selectionStart, z = t.selectionEnd, before = t.value.slice(0, a);
+  t.setRangeText((before && !/\s$/.test(before) ? '\n' : '') + s.trim(), a, z, 'end');
+  t.focus();
+}
+$('#urlPaste').addEventListener('click', urlPaste);
+$('#urlText').addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  const t = $('#urlText'), a = t.selectionStart, z = t.selectionEnd, sel = t.value.slice(a, z);
+  showCtxMenu([
+    ['Cut', () => { P.clipboardWrite(sel); t.setRangeText('', a, z, 'end'); t.focus(); }, !sel],
+    ['Copy', () => { P.clipboardWrite(sel); t.focus(); }, !sel],
+    ['Paste\tCtrl+V', urlPaste],
+    null,
+    ['Select all\tCtrl+A', () => { t.focus(); t.select(); }, !t.value],
+  ], e.clientX, e.clientY, e.target.ownerDocument);
+});
 async function openAbout() {      // 2.9.2: About only (the settings moved to the Settings window)
   const info = await P.info();
   $('#aboutVer').textContent = `version ${info.version}`;
   $('#licFrame').classList.add('hidden'); $('#aboutLic').textContent = 'View licenses';
   $('#aboutEnc').textContent = info.hasFfmpeg ? `FFmpeg ready · video converter: ${info.encoder || 'detecting…'}` : 'FFmpeg not found — only natively supported formats will play.';
+  // Linux (3.2.0): how this copy runs, and the Chromium sandbox (the AppImage launcher turns it off where it can't work)
+  const lx = info.linux;
+  $('#aboutSys').classList.toggle('hidden', !lx);
+  if (lx) $('#aboutSys').textContent = `Linux · ${({ appimage: 'AppImage', deb: '.deb (/opt/SlopAMP)', dev: 'from a checkout' })[lx.kind] || 'unpacked folder'} · `
+    + (lx.sandbox ? 'Chromium sandbox on' : lx.sandboxBlocked ? 'Chromium sandbox OFF: this system (Ubuntu 23.10 and later) blocks it for AppImages. The .deb keeps it on.' : 'Chromium sandbox OFF (--no-sandbox)');
   $('#aboutDlg').showModal();
 }
 $('#aboutSet').onclick = () => { $('#aboutDlg').close(); setOpen(); };
@@ -2393,6 +2463,14 @@ const UPD_ERRORS = {
   download: 'Update download failed',
   offline: 'Couldn’t reach GitHub to check for updates'
 };
+if (LINUX) {     // 3.2.0: the AppImage updates itself with the release's AppImage
+  Object.assign(UPD_ERROR_TIPS, {
+    badhash: 'The downloaded AppImage didn’t match the SHA256 in the release notes, so it was deleted and nothing was changed.',
+    nohash: 'The release notes have no SHA256 line for the AppImage, so SlopAMP won’t use it.',
+    noasset: 'The release has no SlopAMP AppImage.'
+  });
+  UPD_ERRORS.noasset = 'Update stopped: no AppImage in the release';
+}
 // Release notes (GitHub Markdown) -> safe HTML: headings, bullets, paragraphs, **bold**, `code`, [links](https://...).
 function updNotesHtml(md) {
   const inline = (t) => updEsc(t)
@@ -2419,7 +2497,9 @@ function updBarHtml(st) {
   switch (st.status) {
     case 'available': return st.canInstall
       ? `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is out</span><button class="link" data-a="notes">What’s new</button><button data-a="notes">Install update…</button>${x}`
-      : `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is out (portable)</span><button class="link" data-a="notes">What’s new</button><button data-a="page">Download page</button>${x}`;
+      // a copy that can't update itself: on Windows the Portable exe; on Linux (3.2.0) the .deb (or an AppImage in a
+      // folder it can't write to), which isn't "portable"
+      : `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is out${st.platform === 'linux' ? '' : ' (portable)'}</span><button class="link" data-a="notes">What’s new</button><button data-a="page">Download page</button>${x}`;
     case 'downloading': {
       const p = st.total ? Math.min(100, Math.floor(st.received / st.total * 100)) : 0;
       const bg = st.mode === 'auto' && !st.installAfter;
@@ -2491,7 +2571,7 @@ function openUpdNotes() {
   $('#updSub').textContent = after ? (date ? `Released ${date}` : '') : `You have ${st.current}${date ? ` · released ${date}` : ''}`;
   $('#updNotes').innerHTML = updNotesHtml(r.notes);
   $('#updMeta').innerHTML = after ? '' : st.canInstall
-    ? `<span>SlopAMP-Setup-${updEsc(r.version)}.exe${r.size ? ` · ${updMB(r.size)}` : ''}</span><span class="ok">&#x2713; SHA256 checked before installing</span><span>Your playlists and settings are kept.</span>`
+    ? `<span>${LINUX ? updEsc(r.file || `SlopAMP-${r.version}-x86_64.AppImage`) : `SlopAMP-Setup-${updEsc(r.version)}.exe`}${r.size ? ` · ${updMB(r.size)}` : ''}</span><span class="ok">&#x2713; SHA256 checked before installing</span><span>Your playlists and settings are kept.</span>`
     : '<span>This copy can’t update itself. Download the new version from GitHub.</span>';
   $('#updSkip').classList.toggle('hidden', after);
   $('#updLater').textContent = after ? 'Close' : 'Later';
@@ -2922,7 +3002,7 @@ function confirmBox(title, text, okLabel) { return choiceBox(title, text, okLabe
 function choiceBox(title, text, okLabel, altLabel) {
   return new Promise((resolve) => {
     const d = $('#confirmDlg');
-    $('#confirmTitle').textContent = title; $('#confirmText').textContent = text; $('#confirmOk').textContent = okLabel || 'OK';
+    $('#confirmTitle').textContent = osText(title); $('#confirmText').textContent = osText(text); $('#confirmOk').textContent = okLabel || 'OK';
     $('#confirmAlt').textContent = altLabel || ''; $('#confirmAlt').classList.toggle('hidden', !altLabel);
     d.returnValue = 'cancel';
     d.addEventListener('close', () => resolve(['ok', 'alt'].includes(d.returnValue) ? d.returnValue : 'cancel'), { once: true });
@@ -2992,7 +3072,7 @@ async function verifyLocalCopies() {
 function openPop(build, anchor, above) {
   const m = $('#popMenu'); m.innerHTML = ''; m.classList.remove('wide');
   const add = (cls, text, fn, title) => {
-    const d = document.createElement('div'); d.className = cls; d.textContent = text; if (title) d.title = title;
+    const d = document.createElement('div'); d.className = cls; d.textContent = osText(text); if (title) d.title = osText(title);
     if (fn) d.onclick = () => { hidePop(); fn(); };
     m.appendChild(d); return d;
   };
@@ -3258,7 +3338,15 @@ WM.sys = {
   get: () => P.sysGet(),
   set: async (k, v) => { const c = await P.sysSet(k, v); if (k === 'mediaKeys') mediaSessionKeys(c.mediaKeys); sysRender(c); toast(k === 'tray' ? (c.tray ? 'Minimize to tray: on. The – button now hides SlopAMP next to the clock.' : 'Minimize to tray: off.') : (c.mediaKeys ? 'Media keys: SlopAMP uses them.' : 'Media keys: SlopAMP leaves them to other players (fully after a restart).'), 3500); return c; }
 };
-function sysRender(c) { $('#sysTray').checked = !!c.tray; $('#sysKeys').checked = !!c.mediaKeys; $('#btnMin').title = c.tray ? 'Minimize to the tray' : 'Minimize'; }
+function sysRender(c) {
+  $('#sysTray').checked = !!c.tray; $('#sysKeys').checked = !!c.mediaKeys; $('#btnMin').title = c.tray && c.trayHost !== false ? 'Minimize to the tray' : 'Minimize';
+  if (c.trayHost !== undefined) {     // Linux (3.2.0): only with a tray on this desktop (main.js trayHost)
+    const tr = $('#sysTray'), hint = tr.closest('.set-row').querySelector('small');
+    tr.disabled = !c.trayHost && !c.tray;
+    hint.textContent = c.trayHost ? 'The \u2013 button hides SlopAMP in the system tray; its icon\u2019s menu brings it back. \u2715 still quits.'
+      : 'This desktop has no system tray for SlopAMP\u2019s icon (on GNOME, the AppIndicator extension adds one), so \u2013 minimizes as usual.';
+  }
+}
 P.sysGet().then((c) => { sysRender(c); if (!c.mediaKeys) mediaSessionKeys(false); });
 $('#sysTray').onchange = (e) => WM.sys.set('tray', e.target.checked);
 $('#sysKeys').onchange = (e) => WM.sys.set('mediaKeys', e.target.checked);
@@ -3548,11 +3636,11 @@ function roomBox(o) {
     const btns = [];
     $('#roomFreeRow').classList.toggle('hidden', o.mode !== 'manual');
     if (o.mode === 'room') {
-      $('#roomWhat').innerHTML = `To make room, SlopAMP moves ${p.pick.length === 1 ? 'the oldest file' : `the ${b(`${p.pick.length} oldest files`)}`} to the Recycle Bin (${fmtGB(p.freed)}):`;
+      $('#roomWhat').innerHTML = osText(`To make room, SlopAMP moves ${p.pick.length === 1 ? 'the oldest file' : `the ${b(`${p.pick.length} oldest files`)}`} to the Recycle Bin (${fmtGB(p.freed)}):`);
       $('#roomList').innerHTML = list(p.pick);
       btns.push(['choose', 'Choose files…', 'l'], ['cancel', 'Cancel download'], ['delete', `Delete ${p.pick.length} and download`, 'red']);
     } else if (o.mode === 'full') {
-      $('#roomWhat').innerHTML = p.may.length ? `Even moving every download that isn’t in a playlist or a ★ favorite to the Recycle Bin (${p.may.length} file${p.may.length === 1 ? '' : 's'}, ${fmtGB(p.maySize)}) wouldn’t make enough room.` : 'Every download is in a playlist or a ★ favorite, so there’s nothing SlopAMP can remove.';
+      $('#roomWhat').innerHTML = osText(p.may.length ? `Even moving every download that isn’t in a playlist or a ★ favorite to the Recycle Bin (${p.may.length} file${p.may.length === 1 ? '' : 's'}, ${fmtGB(p.maySize)}) wouldn’t make enough room.` : 'Every download is in a playlist or a ★ favorite, so there’s nothing SlopAMP can remove.');
       $('#roomList').innerHTML = '';
       btns.push(['library', 'Open Library', 'l'], ['cancel', 'Cancel download'], ['anyway', 'Download anyway']);
     } else {
@@ -3560,7 +3648,7 @@ function roomBox(o) {
         const want = $('#roomFree').value, need = want === 'all' ? Infinity : want === 'limit' ? u.total - lim : +want * GIB;
         const q = roomPlan(u.rows, o.names, need);
         ROOM.manual = q;
-        $('#roomWhat').innerHTML = q.pick.length ? `SlopAMP moves ${q.pick.length === 1 ? 'the oldest file' : `the ${b(`${q.pick.length} oldest files`)}`} to the Recycle Bin (${fmtGB(q.freed)})${q.enough ? '' : ', all it can'}:` : 'There’s nothing SlopAMP can remove: every download is in a playlist or a ★ favorite.';
+        $('#roomWhat').innerHTML = osText(q.pick.length ? `SlopAMP moves ${q.pick.length === 1 ? 'the oldest file' : `the ${b(`${q.pick.length} oldest files`)}`} to the Recycle Bin (${fmtGB(q.freed)})${q.enough ? '' : ', all it can'}:` : 'There’s nothing SlopAMP can remove: every download is in a playlist or a ★ favorite.');
         $('#roomList').innerHTML = list(q.pick);
         const del = d.querySelector('[data-v=delete]'); if (del) { del.textContent = `Delete ${q.pick.length}`; del.disabled = !q.pick.length; }
       };
@@ -4473,7 +4561,7 @@ async function cbRender() {
   const est = CB.est = cbEstimate(set), lim = limitBytes();
   const notes = [`To Downloads\\SlopAMP\\Converted, one at a time, each as “name (${mp4 ? CV_NAMES[set.preset] : 'converted'}).${set.kind === 'gif' ? 'gif' : set.kind}” (a new name if it’s taken). The originals are never changed.`,
     est ? `About ${fmtSize(est)} in all.` : '', CB.left ? `200 at a time: ${CB.left} left out.` : '', CB.bad ? `${CB.bad === 1 ? 'One file isn’t' : `${CB.bad} files aren’t`} a video or a song.` : ''].filter(Boolean);
-  $('#cbNote').textContent = notes.join(' ');
+  $('#cbNote').textContent = osText(notes.join(' '));
   // 2H: the downloads limit (Converted counts toward it)
   CB.over = 0; $('#cbWarn').classList.add('hidden'); $('#cbRoom').classList.add('hidden');
   $('#cbGo').textContent = `Convert ${n} file${n === 1 ? '' : 's'}`;
@@ -4550,7 +4638,7 @@ function cbSummary(R) {
   const row = (f, cls, what, extra) => `<tr><td class="n" title="${htmlEsc(f.path)}">${htmlEsc(f.name)}</td><td class="${cls}">${what}</td><td class="dim">${extra || ''}</td></tr>`;
   $('#cbSumList').innerHTML = [...R.done.map(x => row(x.f, 'ok', '&#10003; saved', `${htmlEsc(cbBase(x.out.path))}${x.xNote ? ` · <span class="bad">${htmlEsc(x.xNote)}</span>` : ''}`)),
     ...R.failed.map(x => row(x.f, 'bad', `failed: ${htmlEsc(x.why)}`)), ...R.skipped.map(x => row(x.f, 'dim', `skipped: ${htmlEsc(x.why)}`))].join('');
-  $('#cbSumNote').textContent = `${R.canceled ? 'Canceled: the file being converted was stopped and nothing half-made was kept. ' : ''}${d ? `${fmtSize(bytes)} saved in Downloads\\SlopAMP\\Converted. ` : ''}The originals are never changed.`;
+  $('#cbSumNote').textContent = osText(`${R.canceled ? 'Canceled: the file being converted was stopped and nothing half-made was kept. ' : ''}${d ? `${fmtSize(bytes)} saved in Downloads\\SlopAMP\\Converted. ` : ''}The originals are never changed.`);
   cbSetupMode(false);
   if (!$('#cbDlg').open) $('#cbDlg').showModal();
 }
@@ -4800,7 +4888,7 @@ function clipRender() {
     if (k === 'more') continue;               // More formats… comes with Convert (2.9.5)
     b.classList.toggle('on', k === CL.kind);
     b.disabled = k === 'mp3' ? !i.hasAudio : !i.hasVideo;
-    b.title = b.disabled ? (k === 'mp3' ? 'This file has no sound' : 'This file has no video') : k === 'gif' ? 'An animated GIF (no sound) → Downloads\\SlopAMP\\gifs' : k === 'webp' ? 'An animated WebP (no sound; full colour, smaller than a GIF; not for X) → Downloads\\SlopAMP\\gifs' : '';
+    b.title = osText(b.disabled ? (k === 'mp3' ? 'This file has no sound' : 'This file has no video') : k === 'gif' ? 'An animated GIF (no sound) → Downloads\\SlopAMP\\gifs' : k === 'webp' ? 'An animated WebP (no sound; full colour, smaller than a GIF; not for X) → Downloads\\SlopAMP\\gifs' : '');
   }
   if (CL.whole && CL.join.on) CL.join.on = false;                 // 2.9.7: Convert (the whole file) and Join don't mix
   if (joinActive() && CL.kind !== 'mp4') CL.kind = 'mp4';           // a join is an MP4
@@ -4897,7 +4985,7 @@ function clipRenderSaved() {
   box.classList.toggle('hidden', !CL.saved.length);
   if (!CL.saved.length) return;
   const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const dirs = [...new Set(CL.saved.map(f => (f.converted ? 'Converted' : { mp4: 'mp4clips', gif: 'gifs', webp: 'gifs' }[f.kind] || 'mp3clips')))].map(d => `Downloads\\SlopAMP\\${d}`).join(' · ');
+  const dirs = [...new Set(CL.saved.map(f => (f.converted ? 'Converted' : { mp4: 'mp4clips', gif: 'gifs', webp: 'gifs' }[f.kind] || 'mp3clips')))].map(d => osText(`Downloads\\SlopAMP\\${d}`)).join(' · ');
   box.innerHTML = `<div class="ed-lh">SAVED FROM THIS ${CL.info && CL.info.hasVideo ? 'VIDEO' : 'FILE'} · ${esc(dirs)}</div><div class="ed-files">${CL.saved.map((f, i) => `<span class="ed-file clip-file" data-i="${i}" title="${esc(f.path)}\nClick: show in folder">${{ mp4: '&#x1F39E;', gif: '&#x1F5BC;', webp: '&#x1F5BC;' }[f.kind] || '&#9835;'} ${esc(f.path.split(/[\\/]/).pop())} ${clipFmt(f.duration, false)}</span>`).join('')}</div>`;
 }
 $('#clipSaved').addEventListener('click', (e) => { const el = e.target.closest('.clip-file'); if (el) { const f = CL.saved[+el.dataset.i]; if (f) P.showInFolder(f.path); } });
@@ -5242,7 +5330,7 @@ function clipRenderConvert() {
   const c = CL.cv, V = CL.kind === 'mp4', A = CL.kind === 'mp3', G = clipAnim();
   $('#clipWhole').checked = CL.whole;
   $('#clipPaneConvert').classList.toggle('off-whole', !CL.whole);
-  $('#clipWholeNote').innerHTML = CL.whole ? `&middot; ${clipFmt(clipDur(), false)}, no trimming: In / Out are ignored &middot; a new file in Downloads\\SlopAMP\\Converted` : '&middot; off: Save makes a clip from In to Out (turn this on to convert the whole file)';
+  $('#clipWholeNote').innerHTML = osText(CL.whole ? `&middot; ${clipFmt(clipDur(), false)}, no trimming: In / Out are ignored &middot; a new file in Downloads\\SlopAMP\\Converted` : '&middot; off: Save makes a clip from In to Out (turn this on to convert the whole file)');
   $('#clipCvMp4').classList.toggle('hidden', !V);
   $('#clipCvMp3').classList.toggle('hidden', !A);
   $('#clipFitRow').classList.toggle('hidden', !V);
@@ -6860,10 +6948,10 @@ async function renameItem(it) {
 // Rename from the Library (right-click → Rename… / F2): the Library is your files, so the file is renamed
 async function libRename(r) {
   if (!r || r.missing) return;
-  const dirTail = String(r.path).split(/[\\/]/).slice(-3, -1).join('\\');
+  const dirTail = String(r.path).split(/[\\/]/).slice(-3, -1).join(PSEP);
   const o = { mode: 'always', value: r.title, tail: fileTail(r.path) };
   if (r.kind === 'playlist') {
-    Object.assign(o, { title: 'Rename playlist', note: 'The playlist file in Downloads\\SlopAMP\\Playlists gets the new name.', hintOn: () => 'An open tab that came from it is renamed with it.' });
+    Object.assign(o, { title: 'Rename playlist', note: osText('The playlist file in Downloads\\SlopAMP\\Playlists gets the new name.'), hintOn: () => 'An open tab that came from it is renamed with it.' });
     o.check = (nm) => P.plRename(r.path, nm, true);
   } else {
     const clip = isClipRow(r);
@@ -7295,9 +7383,9 @@ function sklRender() {
       : `<button type="button" class="skl-b" data-a="apply" title="Put this skin on">Apply</button>`)
     + (user ? '<button type="button" class="skl-b dim" data-a="edit" title="Open the Skin Editor on this skin">&#9998; Edit</button>'
       : '<button type="button" class="skl-b dim" data-a="edit" title="Built-in skins can’t be changed: this opens the Skin Editor on a copy you save as your own">&#9998; Edit a copy</button>')
-    + (user ? '<button type="button" class="skl-b red" data-a="del" title="Move this skin to the Recycle Bin">&#x1F5D1; Delete</button>'
+    + (user ? '<button type="button" class="skl-b red" data-a="del" title="' + osText('Move this skin to the Recycle Bin') + '">&#x1F5D1; Delete</button>'
       : '<span class="skl-lock" title="Built-in skins can’t be deleted">&#x1F512; built-in</span>')
-    + `<button type="button" class="skl-b dim skl-more" data-a="more" title="More: ${user ? 'Rename, Export, Show in Explorer' : 'Export'}">&#8943;</button></span>`;
+    + `<button type="button" class="skl-b dim skl-more" data-a="more" title="More: ${user ? osText('Rename, Export, Show in Explorer') : 'Export'}">&#8943;</button></span>`;
   // 2.7 Preview: a tile per skin (a big mini-player in its colours); the same buttons, shown on hover
   const pvS = lpOn('skins');
   const skPv = (s) => { const [fr, tb, lc, onc, li, tx] = s.sw && s.sw.length === 6 ? s.sw : WM.skins.list[0].sw; return `<div class="skt-pv" style="background:${htmlEsc(fr)}"><div class="tb" style="background:${htmlEsc(tb)}"></div><div class="bd"><div class="lcd" style="background:${htmlEsc(lc)};color:${htmlEsc(onc)};text-shadow:0 0 5px ${htmlEsc(onc)}">0:42</div><div class="ls" style="background:${htmlEsc(li)}">${[85, 60, 72, 50, 66].map((x, k) => `<i style="width:${x}%;background:${htmlEsc(tx)};opacity:${1 - k * 0.14}"></i>`).join('')}</div></div></div>`; };
@@ -7372,7 +7460,7 @@ $('#sklList').addEventListener('contextmenu', (e) => {
 });
 function sklMenu(id, x, y, doc) {
   const user = sklUser(id), on = id === WM.skins.saved;
-  const en = user ? [['Rename…', () => sklRename(id)], ['Export…', () => sklExport(id)], ['Show in Explorer', () => P.skinReveal(id)], null] : [['Export…', () => sklExport(id)], null];
+  const en = user ? [['Rename…', () => sklRename(id)], ['Export…', () => sklExport(id)], [osText('Show in Explorer'), () => P.skinReveal(id)], null] : [['Export…', () => sklExport(id)], null];
   en.push([on ? '✓ On now' : 'Apply', () => sklApply(id), on], [user ? 'Edit' : 'Edit a copy', () => sklEdit(id)]);
   if (user) en.push(['Delete…', () => sklDelete([id])]);
   showCtxMenu(en, x, y, doc);
@@ -7535,6 +7623,7 @@ setInterval(() => { blink = !blink; }, 500);
 
 // ------------------------------------------------------------------ boot
 (async function boot() {
+  osTextDocs();      // Linux words in the page (3.2.0); nothing on Windows
   const st = await P.loadState();
   const okItem = (i) => i && (i.type === 'file' || i.type === 'youtube' || (i.type === 'x' && !!parseXUrl(i.url))) && (i.path || i.url);
   let savedCur = -1;

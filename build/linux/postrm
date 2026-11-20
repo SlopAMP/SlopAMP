@@ -1,0 +1,12 @@
+#!/bin/sh
+# SlopAMP .deb (3.2.0): remove the AppArmor profile postinst put in place (removing or purging, not upgrading).
+set -e
+if [ "$1" = remove ] || [ "$1" = purge ]; then
+  if [ -f /etc/apparmor.d/slopamp ]; then
+    if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
+      apparmor_parser --remove /etc/apparmor.d/slopamp >/dev/null 2>&1 || true
+    fi
+    rm -f /etc/apparmor.d/slopamp
+  fi
+fi
+exit 0

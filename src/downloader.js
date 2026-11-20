@@ -8,6 +8,9 @@ const path = require('path');
 const { spawn, spawnSync, execFile } = require('child_process');
 
 const EXE = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+// Linux (3.2.0): yt-dlp_linux is a one-file program that unpacks itself and runs the real yt-dlp as its child, and that
+// starts FFmpeg. It runs in a process group of its own (detached), so Cancel and quitting end all of them (killTree).
+const GROUP = process.platform === 'linux';
 const UPDATE_EVERY_MS = 24 * 3600 * 1000;
 
 class Downloader {
@@ -29,6 +32,7 @@ class Downloader {
     if (!fs.existsSync(this.bundled)) return null;
     fs.mkdirSync(this.toolsDir, { recursive: true });
     fs.copyFileSync(this.bundled, this.exe);
+    if (GROUP) fs.chmodSync(this.exe, 0o755);      // the bundled copy may be read-only (AppImage, /opt)
     return this.exe;
   }
 
@@ -36,7 +40,7 @@ class Downloader {
     const st = this.getState();
     if (!force && st.ytdlpUpdatedAt && Date.now() - st.ytdlpUpdatedAt < UPDATE_EVERY_MS) return;
     await new Promise((resolve) => {
-      this.updating = execFile(this.exe, ['-U', '--update-to', 'stable'], { windowsHide: true, timeout: 90000 }, (err, stdout, stderr) => {
+      this.updating = execFile(this.exe, ['-U', '--update-to', 'stable'], { windowsHide: true, timeout: 90000, ...(GROUP ? { detached: true } : {}) }, (err, stdout, stderr) => {
         this.updating = null;
         this.log('yt-dlp update:', (stdout || '').trim().split('\n').pop(), err ? `(${(stderr || err.message).trim().split('\n').pop()})` : '');
         resolve();
@@ -221,7 +225,7 @@ class Downloader {
       const args = this.args(job, android);
       this.log('yt-dlp', args.join(' '));
       const env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', ...(this.jsRuntime ? this.jsRuntime.env : {}) };
-      const proc = spawn(this.exe, args, { windowsHide: true, env });
+      const proc = spawn(this.exe, args, { windowsHide: true, env, ...(GROUP ? { detached: true } : {}) });
       job.proc = proc;
       let file = null, errTail = '', outBuf = '', errBuf = '', phase = 'downloading', part = 0, lastPct = 0;
       const onLine = (line) => {
@@ -275,7 +279,34 @@ function killTree(proc, sync) {
   const args = ['/pid', String(proc.pid), '/T', '/F'];
   if (process.platform === 'win32' && sync) spawnSync('taskkill', args, { windowsHide: true, timeout: 5000 });
   else if (process.platform === 'win32') spawn('taskkill', args, { windowsHide: true });
+  else if (GROUP) killGroup(proc.pid, sync);
   else { try { proc.kill('SIGKILL'); } catch (_) {} }
+}
+// Linux: SIGTERM to the whole group (yt-dlp_linux passes it on and removes its unpacked files; FFmpeg stops), then
+// SIGKILL to whatever is left. Quitting (sync) waits up to 1.5 s for that, so nothing outlives SlopAMP.
+function killGroup(pgid, sync) {
+  const kill = (sig) => { try { process.kill(-pgid, sig); return true; } catch (_) { return false; } };
+  if (!kill('SIGTERM')) return;
+  if (sync) {
+    const until = Date.now() + 1500, nap = new Int32Array(new SharedArrayBuffer(4));
+    while (groupAlive(pgid) && Date.now() < until) Atomics.wait(nap, 0, 0, 50);
+    if (groupAlive(pgid)) kill('SIGKILL');
+  } else {
+    setTimeout(() => { if (groupAlive(pgid)) kill('SIGKILL'); }, 3000).unref();
+  }
+}
+// Is any process of the group still running? (A finished one SlopAMP hasn't reaped yet doesn't count.)
+function groupAlive(pgid) {
+  let names = [];
+  try { names = fs.readdirSync('/proc'); } catch (_) { return false; }
+  for (const n of names) {
+    if (!/^\d+$/.test(n)) continue;
+    let st = '';
+    try { st = fs.readFileSync(`/proc/${n}/stat`, 'utf8'); } catch (_) { continue; }
+    const f = st.slice(st.lastIndexOf(')') + 2).split(' ');     // state ppid pgrp ...
+    if (+f[2] === pgid && f[0] !== 'Z') return true;
+  }
+  return false;
 }
 
 function friendlyError(msg) {
@@ -296,4 +327,4 @@ function friendlyError(msg) {
   return last.replace(/^ERROR:\s*/, '').replace(/\[(youtube|twitter)\]\s*[\w-]+:\s*/, '').slice(0, 240);
 }
 
-module.exports = { Downloader, sizeFromInfo };
+module.exports = { Downloader, sizeFromInfo, killTree };     // killTree: for tests (linux-320.js)

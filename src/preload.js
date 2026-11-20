@@ -2,6 +2,7 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('phosphor', {
+  platform: process.platform,     // 3.2.0: 'win32' / 'linux' (app.js words a few things differently on Linux)
   pathForFile: (file) => { try { return webUtils.getPathForFile(file); } catch (_) { return ''; } },
   describeFiles: (paths) => ipcRenderer.invoke('files:describe', paths),
   filesExpand: (paths) => ipcRenderer.invoke('files:expand', paths),   // 2.9.6
@@ -66,6 +67,9 @@ contextBridge.exposeInMainWorld('phosphor', {
   onCloseAsk: (cb) => ipcRenderer.on('app:close-ask', () => cb()),
   onSysSettings: (cb) => ipcRenderer.on('sys:settings', () => cb()),
   setFullscreen: (on) => ipcRenderer.invoke('win:fullscreen', on),
+  clipboardText: () => ipcRenderer.invoke('clipboard:read'),          // 3.2.0
+  clipboardWrite: (s) => ipcRenderer.invoke('clipboard:write', s),
+  dragAccepted: (id) => ipcRenderer.send('dnd:accepted', id),           // 3.2.0, Linux X11: see x11.js xdndAccept
   setMini: (on) => ipcRenderer.invoke('win:mini', on),
   // movable windows (renderer/winmgr.js <-> windows.js)
   wmSync: (list, reflow) => ipcRenderer.send('wm:sync', list, reflow),

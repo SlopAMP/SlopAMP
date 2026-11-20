@@ -98,8 +98,9 @@ SKINS
 
 ADDING THINGS
   * Drag files or folders onto any SlopAMP window (or onto SlopAMP.exe).
-  * Paste a YouTube or X link anywhere with Ctrl+V, or use +URL. X links
-    from x.com, twitter.com, fxtwitter, vxtwitter, fixupx and t.co work.
+  * Paste a YouTube or X link anywhere with Ctrl+V, or use +URL (its box
+    has a Paste button and a right-click menu too). X links from x.com,
+    twitter.com, fxtwitter, vxtwitter, fixupx and t.co work.
   * Double-click an item to play it. Drag items to reorder them. Del removes them.
   * Your playlist is saved automatically.
   * SAVE / LOAD (bottom bar, or Ctrl+S / Ctrl+L) write and open .m3u8 playlist

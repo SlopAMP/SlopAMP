@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Generate licenses.html (shown in SlopAMP's About box) and the licenses/ folder.
 
-usage: make_licenses.py <project_root> <electron_dir> <ffmpeg_dir> <out_app_renderer_dir> <out_licenses_dir> <electron_version> <ffmpeg_version> <ffmpeg_commit>
+usage: make_licenses.py <project_root> <electron_dir> <ffmpeg_dir> <out_app_renderer_dir> <out_licenses_dir> <electron_version> <ffmpeg_version> <ffmpeg_commit> [ytdlp_version] [win|linux]
+
+linux (3.2.0): THIRD_PARTY_NOTICES in Linux file names and paths, the AppImage runtime added, LF line ends.
 """
 import html, os, re, shutil, sys
 
 root, edir, fdir, out_r, out_l, ever, fver, fcommit = sys.argv[1:9]
 yver = sys.argv[9] if len(sys.argv) > 9 else 'bundled'
+plat = sys.argv[10] if len(sys.argv) > 10 else 'win'
+nl = '\n' if plat == 'linux' else '\r\n'
 os.makedirs(out_l, exist_ok=True)
 
 def rd(p):
@@ -15,6 +19,37 @@ def rd(p):
 
 notices = rd(os.path.join(root, 'THIRD_PARTY_NOTICES.md'))
 notices = notices.replace('@ELECTRON_VERSION@', ever).replace('@FFMPEG_VERSION@', fver).replace('@FFMPEG_COMMIT@', fcommit).replace('@YTDLP_VERSION@', yver)
+
+def linux_notices(n):
+    swaps = [
+        ('next to `SlopAMP.exe`.', 'next to the `slopamp` program (`/opt/SlopAMP` for the .deb, inside the AppImage).'),
+        ('`resources\\ytdlp\\yt-dlp.exe`, used by the Download button', '`resources/ytdlp/yt-dlp`, the yt-dlp_linux build, used by the Download button'),
+        ('bundled inside `yt-dlp.exe`', 'bundled inside `yt-dlp`'),
+        ('(`ffmpeg.exe`, `ffprobe.exe`, `av*.dll`, `sw*.dll`)', '(`resources/ffmpeg/bin/ffmpeg`, `ffprobe`, `resources/ffmpeg/lib/libav*.so`, `libsw*.so`)'),
+        ('statically linked into the FFmpeg DLLs', 'statically linked into the FFmpeg libraries'),
+        ('"win64-lgpl-shared"', '"linux64-lgpl-shared"'),
+        ('own compatible build. SlopAMP will use whatever FFmpeg it finds there.',
+         'own compatible build (for the AppImage: extract it with `--appimage-extract`, replace them and start\n  `squashfs-root/AppRun`). SlopAMP will use whatever FFmpeg it finds there.'),
+    ]
+    for a, b in swaps:
+        assert a in n, a
+        n = n.replace(a, b)
+    n = re.sub(r'`[^`\n]*\\[^`\n]*`', lambda m: m.group(0).replace('\\', '/'), n)     # paths in code spans
+    row = ('| AppImage runtime (type2-runtime 20251108: the start of the `.AppImage` file, which mounts it; not part of the .deb) '
+           '| 20251108 | MIT; statically links libfuse 3 (LGPL-2.1), squashfuse (BSD-2-Clause), zstd (BSD-3-Clause) and zlib (Zlib) '
+           '| source and build scripts: <https://github.com/AppImage/type2-runtime> |')
+    lines = n.split('\n')
+    i = max(k for k, l in enumerate(lines) if l.startswith('|'))
+    lines.insert(i + 1, row)
+    # 3.2.0: the Electron binary is modified (build/patch-electron-linux.py)
+    lines.insert(i + 2, f'\n**Electron on Linux is modified:** the `slopamp` program is Electron {ever}\'s linux-x64 build with two small '
+                 'fixes to Chromium\'s X11 drag and drop (a crash on a dropped link with an odd number of bytes, and dragged data '
+                 'lost while it is fetched); `build/patch-electron-linux.py` in SlopAMP\'s source has the exact changes. '
+                 'Electron\'s and Chromium\'s licenses allow this; their notices are unchanged (`LICENSES.chromium.html`, '
+                 '`licenses/Electron-LICENSE.txt`).')
+    return '\n'.join(lines)
+if plat == 'linux':
+    notices = linux_notices(notices)
 
 texts = [
     ('SlopAMP (MIT)', rd(os.path.join(root, 'LICENSE')), 'SlopAMP-LICENSE.txt'),
@@ -26,9 +61,9 @@ texts = [
     ('butterchurn-presets 2.4.7 (MIT)', rd(os.path.join(root, 'build', 'butterchurn-presets-LICENSE.txt')), 'butterchurn-presets-LICENSE.txt'),
 ]
 for _, body, fn in texts:
-    with open(os.path.join(out_l, fn), 'w', encoding='utf-8', newline='\r\n') as f:
+    with open(os.path.join(out_l, fn), 'w', encoding='utf-8', newline=nl) as f:
         f.write(body)
-with open(os.path.join(out_l, 'THIRD_PARTY_NOTICES.md'), 'w', encoding='utf-8', newline='\r\n') as f:
+with open(os.path.join(out_l, 'THIRD_PARTY_NOTICES.md'), 'w', encoding='utf-8', newline=nl) as f:
     f.write(notices)
 
 def md_to_html(md):

@@ -1036,7 +1036,9 @@ class Clipper {
     if (j.proc) try { j.proc.kill(); } catch (_) {}
   }
   rm(f) { try { fs.rmSync(f, { force: true }); } catch (_) {} }
+  // (hwArgs: an encode with VA-API or Vulkan on Linux gets its GPU and upload step, media.js hwUploadArgs; others unchanged)
   run(args, timeout) {
+    if (this.server.hwArgs) args = this.server.hwArgs(args);
     return new Promise((resolve) => {
       const p = execFile(this.ffmpeg(), args, { windowsHide: true, timeout, maxBuffer: 96 * 1024 * 1024, encoding: 'buffer' }, (err, stdout, stderr) =>
         resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout: stdout || Buffer.alloc(0), stderr: String(stderr || (err && err.message) || '') }));
@@ -1045,6 +1047,7 @@ class Clipper {
   }
   // ffmpeg with -progress pipe:1: reports 0..1 as it goes
   runJob(job, args, len, onPct, cwd) {
+    if (this.server.hwArgs) args = this.server.hwArgs(args);
     return new Promise((resolve) => {
       const p = spawn(this.ffmpeg(), args, { windowsHide: true, ...(cwd ? { cwd } : {}) });
       const j = this.jobs.get(job); if (j) j.proc = p;
@@ -1108,7 +1111,7 @@ class Clipper {
     if (!x) return { ok: false, error: info ? 'There’s no picture in this file.' : 'SlopAMP can’t read this file.' };
     if (!this.server.encoder && this.server.detectEncoder) await this.server.detectEncoder().catch(() => null);
     const enc = this.xEncoder();
-    const names = { h264_nvenc: 'NVIDIA (h264_nvenc)', h264_amf: 'AMD (h264_amf)', h264_qsv: 'Intel (h264_qsv)', libopenh264: 'OpenH264' };
+    const names = { h264_nvenc: 'NVIDIA (h264_nvenc)', h264_amf: 'AMD (h264_amf)', h264_qsv: 'Intel (h264_qsv)', h264_vaapi: 'VA-API (h264_vaapi)', h264_vulkan: 'Vulkan (h264_vulkan)', libopenh264: 'OpenH264' };
     return { ok: true, file, title: path.basename(file).replace(/\.[^.]+$/, ''), x, plan: X.plan(info, st.size), out: X.outName(file, fs.existsSync), encoder: names[enc] || enc };
   }
   // Fix for X: "<name> (X).mp4" next to the original (kept). o: { job, file }. Progress: { type: 'xprogress', job, pct }.

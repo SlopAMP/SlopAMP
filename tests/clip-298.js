@@ -17,7 +17,7 @@ const H = path.join(os.tmpdir(), 'slopamp-test-298');
 const O = process.env.SLOPAMP_SHOTS || path.join(os.tmpdir(), 'slopamp-298-shots');
 fs.mkdirSync(O, { recursive: true });
 const FF = process.env.SLOPAMP_FFMPEG || 'ffmpeg', FP = FF.replace(/ffmpeg(\.exe)?$/, 'ffprobe$1');
-const APPFF = path.join(process.env.SLOPAMP_APP || path.join(__dirname, '..'), 'vendor/ffmpeg/linux');     // the bundled one reads animated WebP
+const APPFF = ((d) => (require('fs').existsSync(path.join(d, 'bin', 'ffmpeg')) ? path.join(d, 'bin') : d))(path.join(process.env.SLOPAMP_APP || path.join(__dirname, '..'), 'vendor/ffmpeg/linux'))   // 3.2.0: bin/ + lib/;     // the bundled one reads animated WebP
 const probe = (f, fp = FP) => JSON.parse(execFileSync(fp, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', f]).toString());
 const vOf = (f) => probe(f).streams.find(s => s.codec_type === 'video');
 const aOf = (f) => probe(f).streams.find(s => s.codec_type === 'audio');

@@ -1,6 +1,6 @@
 # SlopAMP
 
-A free, retro-styled media player for Windows 10/11. It has the classic late-'90s player look (green LCD deck, equalizer, green-on-black playlist) with modern play-almost-anything playback.
+A free, retro-styled media player for Windows 10/11 and Linux (x86-64). It has the classic late-'90s player look (green LCD deck, equalizer, green-on-black playlist) with modern play-almost-anything playback.
 
 **[Download the latest release](https://github.com/SlopAMP/SlopAMP/releases/latest)** · [slopamp.com](https://slopamp.com)
 
@@ -24,6 +24,13 @@ Download `SlopAMP-Setup-<version>.exe` from [Releases](https://github.com/SlopAM
 
 SlopAMP isn't code-signed yet, so Windows SmartScreen shows "Windows protected your PC" the first time. Click **More info → Run anyway**.
 
+**Linux** (3.2.0 and later), from the same [Releases](https://github.com/SlopAMP/SlopAMP/releases) page:
+
+- `SlopAMP-<version>-amd64.deb` for Ubuntu, Debian and distributions based on them: `sudo apt install ./SlopAMP-<version>-amd64.deb` (or open it with your software app). It adds SlopAMP to your apps and to Open With.
+- `SlopAMP-<version>-x86_64.AppImage` for other distributions: make it executable and run it. It updates itself. On Ubuntu 23.10 and later it runs without Chromium's sandbox (the system allows that sandbox only to installed apps); the .deb keeps it on.
+
+Your playlists and settings are in `~/.config/SlopAMP`, downloads in `~/Downloads/SlopAMP`.
+
 ## How it works
 
 ```
@@ -36,10 +43,11 @@ Main process            ── src/main.js     window, state, playlists, downloa
          /f/KEY   local file with Range support (MP4/H.264, WebM, MP3, FLAC, WAV, OGG, AAC)
          /s/KEY   FFmpeg live remux/transcode → fragmented MP4 (MKV, AVI, ProRes, WMV, HEVC, AC3…)
                   encoder auto-picked: NVENC → AMF → QuickSync → Media Foundation → OpenH264
+                  (Linux: NVENC → VAAPI (libva 2.21+) → Vulkan → OpenH264)
          /v/KEY   subtitles converted to WebVTT
 ```
 
-- **State** (playlists, tabs, settings, download index) lives in `%APPDATA%\SlopAMP\slopamp-state.json`. The portable exe uses `SlopAMP Data\` next to the exe instead.
+- **State** (playlists, tabs, settings, download index) lives in `%APPDATA%\SlopAMP\slopamp-state.json` (Linux: `~/.config/SlopAMP`). The portable exe uses `SlopAMP Data\` next to the exe instead (the AppImage too, if that folder is there).
 - **Downloads** go to `Downloads\SlopAMP\Video`, `\Audio`, and playlists to `\Playlists`. Every downloaded file is named `Title [VIDEOID].ext`, so SlopAMP can re-find copies from the folders alone.
 - **Visualizer:** `src/renderer/vendor/` holds the Butterchurn bundle and presets. `build/butterchurn/build.sh` rebuilds them from the upstream sources. Preset equations are precompiled so the app's Content-Security-Policy can forbid `eval`.
 
@@ -52,6 +60,8 @@ On Windows with Node.js installed:
 3. Run `npx electron@45.3.3 .`
 
 ## Building the installers
+
+Linux packages: `bash build/fetch-linux-tools.sh`, then `bash build/build-linux.sh` (see [BUILDING.md](BUILDING.md)).
 
 The release build runs on Linux (or WSL) and uses Wine only for `rcedit`:
 

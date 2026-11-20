@@ -1,0 +1,18 @@
+#!/bin/sh
+# SlopAMP .deb (3.2.0): put the AppArmor profile in place where this AppArmor can read it (Ubuntu 23.10 and later
+# need it for the Chromium sandbox; older versions can't parse it, and don't need it).
+set -e
+if [ "$1" = configure ] && command -v apparmor_parser >/dev/null 2>&1; then
+  SRC=/opt/SlopAMP/resources/apparmor-profile
+  DST=/etc/apparmor.d/slopamp
+  if apparmor_parser --skip-kernel-load --debug "$SRC" >/dev/null 2>&1; then
+    cp -f "$SRC" "$DST"
+    # load it now (not in a chroot, where AppArmor isn't running for real)
+    if ! { [ -x /usr/bin/ischroot ] && /usr/bin/ischroot; } && [ -d /sys/kernel/security/apparmor ]; then
+      apparmor_parser --replace --write-cache --skip-read-cache "$DST" || echo "SlopAMP: couldn't load the AppArmor profile now; it loads at the next boot"
+    fi
+  else
+    echo "SlopAMP: this AppArmor version doesn't read the bundled profile; not needed here, skipped"
+  fi
+fi
+exit 0

@@ -1,0 +1,12 @@
+# SlopAMP (installed by the .deb, 3.2.0): lets its Chromium sandbox create the user namespaces it needs, which
+# Ubuntu 23.10 and later allow only to programs with a profile. Otherwise unconfined, like the profiles Ubuntu
+# ships for Chrome and VS Code.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile slopamp /opt/SlopAMP/slopamp flags=(unconfined) {
+  userns,
+
+  # Site-specific additions and overrides. See local/README for details.
+  include if exists <local/slopamp>
+}

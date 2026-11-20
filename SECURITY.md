@@ -21,7 +21,7 @@ Report them privately through GitHub's private vulnerability reporting:
 
 Helpful things to include:
 
-- the SlopAMP version and whether it's the Setup (installed) or Portable exe, plus your Windows version
+- the SlopAMP version and whether it's the Setup (installed) or Portable exe, plus your Windows version (on Linux: the .deb or the AppImage, plus your distribution and version)
 - what an attacker could do, and what they'd need (a crafted media file or playlist, a link, local access…)
 - steps to reproduce it, or a proof of concept
 - any idea for a fix, if you have one
@@ -34,6 +34,6 @@ Helpful things to include:
 
 ## Scope
 
-In scope: SlopAMP itself, meaning the app, its local media server (127.0.0.1 only), the auto-updater, and the Setup and Portable installers.
+In scope: SlopAMP itself, meaning the app, its local media server (127.0.0.1 only), the auto-updater, the Setup and Portable installers, and the Linux .deb (with its AppArmor profile) and AppImage.
 
 Problems in the bundled third-party programs (Electron/Chromium, FFmpeg, yt-dlp, Butterchurn) should go to those projects. Tell us as well if SlopAMP needs an updated copy.

@@ -241,6 +241,7 @@ dialog::backdrop { background: var(--shadow); }
 .dlg-title { font-weight: bold; color: var(--menu-accent); margin-bottom: 8px; font-size: var(--fs-l); }
 .dlg-note { font-size: var(--fs-m); color: var(--ink-muted); margin: 6px 0 10px; }
 .dlg-btns { display: flex; justify-content: flex-end; gap: 8px; }
+#urlPaste { margin-right: auto; }       /* 3.2.0: on the left, apart from Cancel / Add */
 #urlText { width: 100%; background: var(--black); color: var(--green); border: 1px solid var(--line-dim); font: var(--fs-base) var(--font-lcd); padding: 6px; resize: vertical; user-select: text; }
 .about-body p { margin: 0 0 8px; color: var(--base-81b); }
 #licFrame { width: 100%; height: 220px; border: 1px solid var(--line-dim); background: var(--doc-bg); }

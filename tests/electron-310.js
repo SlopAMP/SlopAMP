@@ -88,7 +88,9 @@ const MEDIA = path.join(__dirname, 'media');
   // media keys
   await ev(() => window.phosphor.sysSet('mediaKeys', true)); await sleep(300);
   const keys = await app.evaluate(({ globalShortcut }) => ['MediaPlayPause', 'MediaNextTrack', 'MediaPreviousTrack', 'MediaStop'].filter(k => globalShortcut.isRegistered(k)));
-  ok(keys.length === 4, `media keys registered: ${keys.join(', ')}`);
+  // 3.2.0: on Linux the desktop hands the keys over MPRIS (navigator.mediaSession), so none are grabbed
+  if (process.platform === 'linux') ok(keys.length === 0, `Linux: no media keys grabbed (MPRIS instead): ${keys.join(', ') || 'none'}`);
+  else ok(keys.length === 4, `media keys registered: ${keys.join(', ')}`);
 
   // the YOUTUBE window's page (a WebContentsView in its own session; offline here, so only its set-up)
   await ev(() => ytwShow(true)); await sleep(2500);
