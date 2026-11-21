@@ -5451,12 +5451,16 @@ function capParse(text) {
   text = String(text || '').replace(/\r/g, '').replace(/^﻿/, '');
   const tm = (s) => { const m = /(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})/.exec(s || ''); return m ? (+(m[1] || 0)) * 3600 + (+m[2]) * 60 + (+m[3]) + (+m[4].padEnd(3, '0')) / 1000 : NaN; };
   const ent = (s) => s.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+  // 3.2.2 (CodeQL): tags (<i>, <font …>, <c.color…>) and {\an8}-style codes are stripped until none is left; only then
+  // are the entities decoded (ent, &amp; last)
+  const strip = (l) => { let s = l, prev; do { prev = s; s = s.replace(/<[^>]*>/g, '').replace(/\{\\[^}]*\}/g, ''); } while (s !== prev); return s; };
   for (const block of text.split(/\n{2,}/)) {
-    const ls = block.split('\n'), k = ls.findIndex(l => /-->/.test(l));
+    // the timing line ("00:00:01,000 --> 00:00:03,000"), by a plain search (3.2.2: CodeQL took a regex for an HTML filter)
+    const ls = block.split('\n'), k = ls.findIndex(l => l.includes('-->'));
     if (k < 0) continue;
     const [x, y] = ls[k].split('-->'), a = tm(x), b = tm(y);
     if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) continue;
-    const body = ls.slice(k + 1).map(l => ent(l.replace(/<[^>]*>/g, '').replace(/\{\\[^}]*\}/g, '')).replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const body = ls.slice(k + 1).map(l => ent(strip(l)).replace(/\s+/g, ' ').trim()).filter(Boolean);
     if (body.length) raw.push({ a, b, t: body.join('\n') });
   }
   const res = [];
@@ -5590,7 +5594,7 @@ function capAddLine() {
 }
 function capPasteLines(text) {
   text = String(text || '');
-  let lines = /-->/.test(text) ? capParse(text) : [];
+  let lines = text.includes('-->') ? capParse(text) : [];      // .srt / .vtt timing lines (3.2.2: a plain search, see capParse)
   if (!lines.length) {
     let t = capAt();
     lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean).map(s => { const l = { id: ++capSeq, a: +t.toFixed(3), b: +(t + 3).toFixed(3), t: s.slice(0, 500), ed: true }; t += 3; return l; });

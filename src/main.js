@@ -383,9 +383,18 @@ function skinFile(id) {              // 'user:<slug>' or a built-in id -> its fi
 }
 function skinMeta(text) { const m = /slopamp:\s*(\{.*\})/.exec(String(text)); try { return m ? JSON.parse(m[1]) : {}; } catch (_) { return {}; } }
 // Imported CSS can't fetch anything or run anything: no @import, no url() except data:, no old IE tricks.
+// 3.2.2 (CodeQL): the whole clean-up runs again until nothing changes, so pieces that join up once what's between them
+// is removed ("@im@importport", "<sty<style>le>", "url(url(…))") go too; behavior: becomes x-behavior: once (not
+// x-x-behavior: on the next round). Still changing after 10 rounds: only made-up input does that, and none of it is kept.
 function cleanSkinCss(text) {
-  return String(text).replace(/@import[^;]*;?/gi, '').replace(/url\(\s*(?!['"]?data:)[^)]*\)/gi, 'none')
-    .replace(/expression\s*\(/gi, '(').replace(/behavior\s*:/gi, 'x-behavior:').replace(/-moz-binding/gi, 'x-binding').replace(/<\/?\s*style[^>]*>/gi, '');
+  let s = String(text), prev;
+  for (let round = 0; round < 10; round++) {
+    prev = s;
+    s = s.replace(/@import[^;]*;?/gi, '').replace(/url\(\s*(?!['"]?data:)[^)]*\)/gi, 'none')
+      .replace(/expression\s*\(/gi, '(').replace(/(?<!x-)behavior\s*:/gi, 'x-behavior:').replace(/-moz-binding/gi, 'x-binding').replace(/<\/?\s*style[^>]*>/gi, '');
+    if (s === prev) return s;
+  }
+  return '';
 }
 // A skin file -> { vars: Map('--name' -> value), extra: the rules after :root }
 function splitSkin(text) {
@@ -1295,10 +1304,14 @@ async function fetchMeta(url) {
     return { title: x ? text.slice(0, 140) : (j.title || ''), author: j.author_name || '', status: 200 };
   } catch (e) { return null; }
 }
+// 3.2.2 (CodeQL): the tags are stripped until none is left, and only then are the entities decoded, &amp; last (in
+// the same pass as &#N;, so neither is decoded twice): text that X sent as "&amp;lt;b&amp;gt;" or "&amp;#60;" stays
+// the text it was ("&lt;b&gt;", "&#60;") instead of turning into a tag (before, "&amp;#60;" came out as "<").
 function htmlText(h) {
-  return String(h).replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '')
-    .replace(/&(amp|lt|gt|quot|#39|apos|nbsp|mdash);/g, (_, e) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: ' ', mdash: '—' }[e]))
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n));
+  let s = String(h).replace(/<br\s*\/?>/gi, ' '), prev;
+  do { prev = s; s = s.replace(/<[^>]+>/g, ''); } while (s !== prev);
+  return s.replace(/&(lt|gt|quot|#39|apos|nbsp|mdash);/g, (_, e) => ({ lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: ' ', mdash: '—' }[e]))
+    .replace(/&(?:#(\d+)|amp);/g, (_, n) => (n ? String.fromCodePoint(+n) : '&'));
 }
 // A t.co short link -> the URL it points to ('' if it can't be followed).
 async function resolveShortLink(u) {

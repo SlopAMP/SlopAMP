@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.2.2 — Security hardening: tighter text clean-up for skins, X titles and captions (CodeQL)
+
+Windows and Linux. GitHub's code scanning (CodeQL) flagged five places where SlopAMP cleans up text that comes from outside; each one is now complete. Normal skins, X posts and caption files look exactly as before.
+
+- **Imported skins.** The clean-up that stops a skin from loading anything from the internet or running anything (`@import`, `url()` except pictures inside the file, `<style>`, old Internet Explorer tricks) now runs again until nothing changes, so pieces joined up around something it removes (`@im@importport`, `<sty<style>le>`) can't get through. A file still changing after 10 rounds, which only one made to get around it does, is dropped. An old `behavior:` line is renamed `x-behavior:` once, not again at every clean-up.
+- **X post titles.** The title SlopAMP takes from an X post is cleared of HTML tags completely before its `&…;` codes are turned back into characters, and each code is turned back only once: a post that shows `&#60;` as text keeps it (it came out as `<`).
+- **Captions** (.srt / .vtt): their formatting tags and `{\an8}`-style codes are removed until none is left, then the `&…;` codes are turned back into characters, as before. Timing lines (`-->`) are found with a plain text search.
+- Tests: `tests/codeql-322.js`.
+
 ## 3.2.1 — released Nov 20, 2026
 
 Windows only: the FFmpeg and yt-dlp inside SlopAMP are now the same versions as in the Linux version, and the Windows build pins its tools the way the Linux build does. Nothing else changes.
