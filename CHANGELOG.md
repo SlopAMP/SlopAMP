@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.2.1 — unreleased
+## 3.2.1 — released Nov 20, 2026
 
 Windows only: the FFmpeg and yt-dlp inside SlopAMP are now the same versions as in the Linux version, and the Windows build pins its tools the way the Linux build does. Nothing else changes.
 
