@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.2.2 — Security hardening: tighter text clean-up for skins, X titles and captions (CodeQL)
+## 3.2.2 — released Nov 21, 2026
 
 Windows and Linux. GitHub's code scanning (CodeQL) flagged five places where SlopAMP cleans up text that comes from outside; each one is now complete. Normal skins, X posts and caption files look exactly as before.
 
