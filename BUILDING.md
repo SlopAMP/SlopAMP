@@ -57,20 +57,22 @@ On Windows with Node.js installed:
 
 ## Building the installers
 
-The release build runs on Linux (or WSL) and uses Wine only for `rcedit`:
+The release build runs on Linux (or WSL) and uses Wine for `rcedit` and to read the bundled FFmpeg's and yt-dlp's versions:
 
 ```
-TOOLS=/path/to/tools bash build/build-win.sh
+bash build/fetch-win-tools.sh                          # once: the pinned tools in vendor/win-tools
+TOOLS=vendor/win-tools bash build/build-win.sh
 ```
 
-`TOOLS` must contain:
+`build/fetch-win-tools.sh` (3.2.1) downloads the pinned tools, checks each file's SHA256 and unpacks them into the layout below (`TOOLS`, default `vendor/win-tools`; the archives stay in its `downloads/`). FFmpeg and yt-dlp are the same releases as the Linux build's (`fetch-linux-tools.sh`). `TOOLS` contains:
 
 - `electron-win/`: unzipped `electron-v45.3.3-win32-x64.zip` (from Electron's GitHub releases)
-- `ffmpeg-win/<dir>/`: BtbN `ffmpeg-master-latest-win64-lgpl-shared`
-- `ffmpeg-linux/`: the matching linux64 LGPL build (used to read the version)
-- `ytdlp/`: `yt-dlp.exe`, plus `yt-dlp_linux` (used to read the version)
-- `nsis/`: electron-builder-binaries `nsis-3.0.4.1`
-- `rcedit-x64.exe`, plus a Wine install
+- `ffmpeg-win/<dir>/`: BtbN `ffmpeg-N-129046-g3a78197c4c-win64-lgpl-shared` (autobuild-2026-11-18-12-39, as on Linux); exactly one folder
+- `ytdlp/yt-dlp.exe`: yt-dlp 2026.10.26
+- `nsis/`: electron-builder-binaries `nsis-3.0.4.1` (with its Linux `makensis`)
+- `rcedit-x64.exe` (v2.0.0) and `wine-11.2-amd64-wow64/` (Kron4ek's Wine build); `wineprefix/` is made on the first run
+
+The versions in the licenses and FFmpeg's written offer come from the Windows files that ship: FFmpeg's from the BtbN folder's name, checked against what its `ffmpeg.exe` reports (which adds the build date), and yt-dlp's from `yt-dlp.exe --version`; the build stops if either can't be read (3.2.1; before, they came from a Linux FFmpeg and yt-dlp, which could be other builds).
 
 `build-win.sh` also writes `dist/uninstall-files.nsh` with `build/make_uninstall_list.py`: one `Delete` per installed file and an `RMDir` (empty folders only) per folder. The uninstaller uses only that list and never deletes the install folder recursively, because it may be shared. `installer.nsi` refuses to compile without it.
 

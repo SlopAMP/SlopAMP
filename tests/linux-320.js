@@ -17,7 +17,7 @@
 const fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto');
 const { spawn, spawnSync, execFileSync } = require('child_process');
 const { launch, sleep, APP } = require('./lib');
-const { parseRelease, Updater, PLATFORMS } = require(path.join(APP, 'src/updater.js'));
+const { parseRelease, Updater, PLATFORMS, isNewer } = require(path.join(APP, 'src/updater.js'));
 const { hwUploadArgs, vaapiUsable, encoderArgs } = require(path.join(APP, 'src/media.js'));
 const vaapiArgs = (a, d) => hwUploadArgs(a, { h264_vaapi: d });
 const { killTree } = require(path.join(APP, 'src/downloader.js'));
@@ -29,7 +29,7 @@ const waitFor = async (f, ms = 8000) => { const end = Date.now() + ms; while (Da
 (async () => {
   // ================= the updater's platforms
   const pkg = JSON.parse(fs.readFileSync(path.join(APP, 'package.json'), 'utf8'));
-  ok(pkg.version === '3.2.0' && pkg.desktopName === 'com.slopamp.SlopAMP.desktop', `package.json: ${pkg.version}, desktopName ${pkg.desktopName}`);
+  ok((pkg.version === '3.2.0' || isNewer(pkg.version, '3.2.0')) && pkg.desktopName === 'com.slopamp.SlopAMP.desktop', `package.json: ${pkg.version} (3.2.0 or later), desktopName ${pkg.desktopName}`);
   const D = 'https://github.com/SlopAMP/SlopAMP/releases/download/';
   const h = (c) => c.repeat(64);
   const rel = (v, names, body) => ({ tag_name: `v${v}`, html_url: `https://github.com/SlopAMP/SlopAMP/releases/tag/v${v}`,

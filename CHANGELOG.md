@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.2.1 — unreleased
+
+Windows only: the FFmpeg and yt-dlp inside SlopAMP are now the same versions as in the Linux version, and the Windows build pins its tools the way the Linux build does. Nothing else changes.
+
+- **FFmpeg N-129046-g3a78197c4c** (BtbN autobuild 2026-11-18, LGPL) instead of N-127579-g5cb9fcd211 (October 16), and **yt-dlp 2026.10.26** instead of 2026.08.19: what the Linux version bundles. yt-dlp still keeps itself up to date after installing.
+- **The build pins its tools.** `build/fetch-win-tools.sh` downloads Electron 45.3.3, that FFmpeg, that yt-dlp, NSIS, rcedit and Wine at fixed versions and checks each file's SHA256, like `fetch-linux-tools.sh` does for Linux.
+- **The licenses name what ships.** The versions in the licenses page and FFmpeg's written offer now come from the Windows `ffmpeg.exe` and `yt-dlp.exe` that are bundled (they came from a Linux FFmpeg and yt-dlp, which could be other builds), and the build stops if it can't read them.
+
 ## 3.2.0 — released Nov 20, 2026
 
 The first Linux version of SlopAMP: the same player, with the same features, as a **.deb** (Ubuntu, Debian and distributions based on them) and an **AppImage** (other x86-64 distributions). Windows works as in 3.1.0; the only changes there are the update check and the Add link dialog's Paste (below).

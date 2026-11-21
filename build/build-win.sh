@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the Windows x64 app folder, NSIS installer and portable exe.
-# Inputs (TOOLS dir): electron-win/ (Electron win32-x64 zip, extracted),
-# ffmpeg-win/<build>/ (BtbN win64-lgpl-shared), nsis/, rcedit-x64.exe, wine.
+# Inputs (TOOLS dir; bash build/fetch-win-tools.sh makes it): electron-win/ (Electron win32-x64 zip, extracted),
+# ffmpeg-win/<build>/ (BtbN win64-lgpl-shared), ytdlp/yt-dlp.exe, nsis/, rcedit-x64.exe, wine-11.2-amd64-wow64/.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/build"
@@ -10,7 +10,18 @@ OUT="$ROOT/dist"
 VER="$(node -p "require('$ROOT/package.json').version")"
 EVER="$(cat "$TOOLS/electron-win/version")"
 FFDIR="$(ls -d "$TOOLS"/ffmpeg-win/*/ | head -1)"
-FFVER="$("$TOOLS/ffmpeg-linux/bin/ffmpeg" -version | head -1 | awk '{print $3}')"
+[ "$(ls -d "$TOOLS"/ffmpeg-win/*/ | wc -l)" = 1 ] || { echo "expected exactly one FFmpeg build in $TOOLS/ffmpeg-win"; exit 1; }
+# Wine: runs rcedit, and (3.2.1) the bundled Windows ffmpeg.exe and yt-dlp.exe for their versions
+export WINEPREFIX="$TOOLS/wineprefix" WINEDEBUG=-all
+WINE="$TOOLS/wine-11.2-amd64-wow64/bin/wine"
+# 3.2.1: the versions in the licenses and FFmpeg's written offer come from the Windows files that ship (they used to
+# come from a Linux FFmpeg and yt-dlp, which could be other builds): FFmpeg's from the BtbN folder's name
+# (ffmpeg-<version>-win64-lgpl-shared), checked against what that ffmpeg.exe says (which adds the build date);
+# yt-dlp's from yt-dlp.exe --version. A version that can't be read stops the build.
+FFNAME="$(basename "$FFDIR")"
+FFDIRVER="$(echo "$FFNAME" | sed -E 's/^ffmpeg-//; s/-win64-.*$//')"
+FFVER="$("$WINE" "${FFDIR}bin/ffmpeg.exe" -hide_banner -version 2>/dev/null | tr -d '\r' | head -1 | awk '{print $3}' || true)"
+case "$FFVER" in "$FFDIRVER"|"$FFDIRVER"-*) ;; *) echo "FFmpeg version mismatch: folder $FFNAME, ffmpeg.exe says '$FFVER'"; exit 1 ;; esac
 FFCOMMIT="$(echo "$FFVER" | sed -E 's/.*-g([0-9a-f]+).*/\1/')"
 STAGE="$OUT/SlopAMP-win-x64"
 BUILDID="$(date +%Y%m%d%H%M%S)"
@@ -50,7 +61,9 @@ cp "$FFDIR/bin/ffmpeg.exe" "$FFDIR/bin/ffprobe.exe" "$FFDIR"/bin/*.dll "$STAGE/r
 # yt-dlp (Unlicense) for the Download button
 mkdir -p "$STAGE/resources/ytdlp"
 cp "$TOOLS/ytdlp/yt-dlp.exe" "$STAGE/resources/ytdlp/"
-YTVER="$("$TOOLS/ytdlp/yt-dlp_linux" --version 2>/dev/null || echo bundled)"
+YTVER="$("$WINE" "$TOOLS/ytdlp/yt-dlp.exe" --version 2>/dev/null | tr -d '\r' | head -1 || true)"
+[[ "$YTVER" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]] || { echo "could not read yt-dlp.exe's version (got '$YTVER')"; exit 1; }
+echo "yt-dlp $YTVER"
 
 # licenses
 python3 "$BUILD/make_licenses.py" "$ROOT" "$TOOLS/electron-win" "$FFDIR" "$STAGE/resources/app/src/renderer" "$STAGE/licenses" "$EVER" "$FFVER" "$FFCOMMIT" "$YTVER"
@@ -59,8 +72,6 @@ cp "$STAGE/licenses/THIRD_PARTY_NOTICES.md" "$STAGE/THIRD_PARTY_NOTICES.txt"
 cp "$ROOT/docs/README-users.txt" "$STAGE/README.txt"
 
 # exe branding (icon + version info) via rcedit under Wine
-export WINEPREFIX="$TOOLS/wineprefix" WINEDEBUG=-all
-WINE="$TOOLS/wine-11.2-amd64-wow64/bin/wine"
 "$WINE" "$TOOLS/rcedit-x64.exe" "Z:${STAGE//\//\\}\\SlopAMP.exe" \
   --set-icon "Z:${BUILD//\//\\}\\icon.ico" \
   --set-file-version "$VER" --set-product-version "$VER" \
