@@ -26,7 +26,10 @@ const MODES = ['auto', 'notify', 'off'];
 // Windows, say) is skipped quietly; one with a file for it but not the right one is still an error ('noasset').
 const PLATFORMS = {
   win32: { file: (v) => `SlopAMP-Setup-${v}.exe`, any: /\.exe$/i },
-  linux: { file: (v) => `SlopAMP-${v}-x86_64.AppImage`, any: /\.(AppImage|deb)$/i }
+  linux: { file: (v) => `SlopAMP-${v}-x86_64.AppImage`, any: /\.(AppImage|deb)$/i },
+  // macOS: one .dmg per kind of Mac (Apple silicon / Intel). A Mac never installs it by itself (canInstall is false):
+  // it shows that the version is out and opens the download page, like the Portable exe.
+  darwin: { file: (v) => `SlopAMP-${v}-mac-${process.arch === 'arm64' ? 'arm64' : 'x64'}.dmg`, any: /\.dmg$/i }
 };
 const platformOf = (platform) => PLATFORMS[platform] || PLATFORMS.win32;
 
@@ -181,7 +184,7 @@ class Updater {
       if (i.error === 'noplatform') { if (i.newer) skipped.push(i.version); continue; }
       if (!best || isNewer(i.version, best.version)) best = i;
     }
-    if (skipped.length) this.log(`update: ${skipped.join(', ')} not for ${this.platform === 'linux' ? 'Linux' : 'Windows'} (no file for it); skipped`);
+    if (skipped.length) this.log(`update: ${skipped.join(', ')} not for ${{ linux: 'Linux', darwin: 'macOS' }[this.platform] || 'Windows'} (no file for it); skipped`);
     return best;
   }
 

@@ -335,7 +335,13 @@
       }, 10);
     });
   }
+  // macOS: ⌘ is the Mac's Ctrl. Every shortcut and Ctrl+click in app.js asks for e.ctrlKey, so here, before anything
+  // else sees the event, a key press or click with ⌘ held says Ctrl too (the real Ctrl key still counts as well; on a
+  // Mac Ctrl+click is a right-click). What the system itself does with the event (⌘C / ⌘V in a text box) is untouched.
+  const MAC_CMD = window.phosphor && window.phosphor.platform === 'darwin';
+  const cmdIsCtrl = (e) => { if (e.metaKey && !e.ctrlKey) Object.defineProperty(e, 'ctrlKey', { value: true }); };
   function track(doc) {
+    if (MAC_CMD) for (const type of ['keydown', 'keyup', 'mousedown', 'mouseup', 'click', 'dblclick', 'dragover', 'drop']) doc.addEventListener(type, cmdIsCtrl, true);
     const mark = () => { WM.activeDoc = doc; };
     doc.addEventListener('pointerdown', mark, true);
     doc.addEventListener('contextmenu', mark, true);

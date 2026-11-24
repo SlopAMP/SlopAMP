@@ -46,6 +46,22 @@ const LINUX_SANDBOX = LINUX && !app.commandLine.hasSwitch('no-sandbox');
 const LINUX_X11 = LINUX && (app.commandLine.getSwitchValue('ozone-platform') === 'x11'
   || (!app.commandLine.getSwitchValue('ozone-platform') && !process.env.WAYLAND_DISPLAY));
 
+// ---------- macOS ----------
+// The same app in a .app bundle (build/build-mac.sh). What differs from Windows and Linux is marked MAC in this file,
+// windows.js (the panels aren't child windows there) and media.js (the VideoToolbox encoder); BUILDING.md has the rest.
+const MAC = process.platform === 'darwin';
+// Files opened from the Finder ("Open With", a double-click, a drop on the Dock icon) come as open-file events instead
+// of arguments; the first ones can come before the app is ready, so this is listened for from the very start.
+if (MAC) {
+  app.on('open-file', (e, file) => {
+    e.preventDefault();
+    const files = openable([file]);
+    if (!files.length) return;
+    if (win && !win.isDestroyed() && wm && wm.started) { fromTray(); if (win.isMinimized()) win.restore(); win.show(); win.webContents.send('open-files', files); }
+    else pendingOpen.push(...files);
+  });
+}
+
 // Look like a normal Chrome browser to embed hosts (removes "Electron/x" tokens).
 app.userAgentFallback = app.userAgentFallback
   .replace(/\s?Electron\/[\d.]+/i, '')
@@ -100,11 +116,14 @@ if (!gotLock) {
   });
 }
 
+// 2.4 (#6 / #5): playlist files (.m3u8 / .m3u / .pls) and shared .zip playlists come through too
+function openable(list) {
+  return list.filter(a => { try { return fs.existsSync(a) && (isMediaFile(a) || /\.(m3u8?|pls|zip)$/i.test(a) || fs.statSync(a).isDirectory()); } catch (_) { return false; } })
+    .map(a => path.resolve(a));
+}
 function argvFiles(argv) {
   const appPath = path.resolve(app.getAppPath());
-  // 2.4 (#6 / #5): playlist files (.m3u8 / .m3u / .pls) and shared .zip playlists come through too
-  return argv.slice(1).filter(a => !a.startsWith('-') && path.resolve(a) !== appPath && path.resolve(a) !== path.resolve(process.execPath) && fs.existsSync(a) && (isMediaFile(a) || /\.(m3u8?|pls|zip)$/i.test(a) || fs.statSync(a).isDirectory()))
-    .map(a => path.resolve(a));
+  return openable(argv.slice(1).filter(a => !a.startsWith('-') && path.resolve(a) !== appPath && path.resolve(a) !== path.resolve(process.execPath)));
 }
 
 // 2.4 #6: SlopAMP as a playlist app for the current user (the installer does the same at install time).
@@ -188,20 +207,23 @@ function createWindow() {
     legacyPlHeight: state.plHeight,
     version: app.getVersion(),
     x11: LINUX_X11,
+    mac: MAC,
     log
   });
   // backgroundColor = --frame-outer in skins/classic.css (only seen for a moment before the page paints)
   // Linux (3.2.0): transparent (painted opaque by backgroundColor and the page). On X11 Chromium otherwise puts a drop
   // shadow and a 10 px invisible border that takes clicks around every frameless window, over the neighbouring
   // windows' edges when they're docked; what thickFrame: false does on Windows.
-  const base = { backgroundColor: '#1b1d24', title: APP_NAME, icon: path.join(__dirname, 'renderer', 'icon.png'), webPreferences: webPrefs(), ...(LINUX ? { transparent: true } : {}) };
+  const base = { backgroundColor: '#1b1d24', title: APP_NAME, icon: path.join(__dirname, 'renderer', 'icon.png'), webPreferences: webPrefs(), ...(LINUX ? { transparent: true } : {}),
+    // macOS: square corners and no drop shadow, so docked windows meet cleanly (what thickFrame: false does on Windows)
+    ...(MAC ? { roundedCorners: false, hasShadow: false } : {}) };
   win = new BrowserWindow(wm.mainOptions({ ...base, frame: false, show: false }));
   wm.attach('main', win);
   // The YOUTUBE window's page appears / goes with its panel (2.3)
   ytweb = new YtWeb({ wm, log, send: (ch, v) => { if (win && !win.isDestroyed()) win.webContents.send(ch, v); } });
   wm.onPanel = (id, shown) => { if (id === 'ytweb') { if (shown) ytweb.show(); else ytweb.hide(); } };
   if (isDev) global.__slopamp = { wm, ytweb, get clipper() { return clipper; }, get thumbs() { return thumbs; }, get xstream() { return xstream; }, get server() { return server; }, sys: { toTray: () => toTray(), fromTray: () => fromTray(), get inTray() { return inTray; }, get tray() { return tray; }, get title() { return trayTitle; }, menu: () => trayMenu().items.map(i => i.label), mediaKeys: () => Object.keys(MEDIA_KEYS).filter(a => globalShortcut.isRegistered(a)) } };   // for the test scripts
-  Menu.setApplicationMenu(null);
+  Menu.setApplicationMenu(MAC ? macMenu() : null);
 
   const panelUrl = `${server.base}/app/panel.html`;
   win.webContents.setWindowOpenHandler(({ url, frameName }) => {
@@ -254,6 +276,26 @@ function createWindow() {
 
   win.loadURL(`${server.base}/app/index.html`);
   if (process.env.PHOSPHOR_DEVTOOLS === '1') win.webContents.openDevTools({ mode: 'detach' });
+}
+
+// macOS: the menu bar. Short on purpose (SlopAMP's own buttons and right-click menus do the work), but the Edit menu
+// has to be there: on macOS Cut / Copy / Paste / Select All in a text box only work through it. Quit goes the same
+// way as the tray's Quit, so "Ask before closing while something downloads" still asks.
+function macMenu() {
+  const toPage = (ch) => () => { fromTray(); if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.webContents.send(ch); } };
+  return Menu.buildFromTemplate([
+    { label: APP_NAME, submenu: [
+      { role: 'about', label: `About ${APP_NAME}` },
+      { type: 'separator' },
+      { label: 'Settings…', accelerator: 'Cmd+,', click: toPage('sys:settings') },
+      { type: 'separator' },
+      { role: 'hide', label: `Hide ${APP_NAME}` }, { role: 'hideOthers' }, { role: 'unhide' },
+      { type: 'separator' },
+      { label: `Quit ${APP_NAME}`, accelerator: 'Cmd+Q', click: () => { if (win && !win.isDestroyed()) win.webContents.send('sys:quit'); else app.quit(); } }
+    ] },
+    { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
+    { label: 'Window', submenu: [{ label: 'Minimize', click: () => { if (win && !win.isDestroyed()) win.minimize(); } }] }
+  ]);
 }
 
 function setMainState(patch) {
@@ -1285,6 +1327,7 @@ function registerIpc() {
     platform: process.platform,
     // Linux (3.2.0, About): how this copy runs and whether the Chromium sandbox is on
     linux: LINUX ? { kind: LINUX_KIND, sandbox: LINUX_SANDBOX, sandboxBlocked: process.env.SLOPAMP_NO_SANDBOX === '1' } : undefined,
+    mac: MAC ? { kind: app.isPackaged ? 'app' : 'dev', arch: process.arch } : undefined,     // macOS (About)
     pendingOpen: pendingOpen.splice(0)
   }));
 }
@@ -1344,6 +1387,7 @@ app.whenReady().then(async () => {
   });
   await server.start();
   log(`${APP_NAME} ${app.getVersion()} started on ${server.base}; ffmpeg=${server.hasFfmpeg()}`);
+  if (MAC) log(`macOS ${process.getSystemVersion()}, ${process.arch}, ${app.isPackaged ? 'SlopAMP.app' : 'a checkout'}`);
   if (LINUX) log(`linux: ${LINUX_KIND}, ${app.commandLine.getSwitchValue('ozone-platform') || 'x11'} (${process.env.XDG_SESSION_TYPE || '?'} session, ${process.env.XDG_CURRENT_DESKTOP || '?'}), sandbox ${LINUX_SANDBOX ? 'on' : `OFF${process.env.SLOPAMP_NO_SANDBOX === '1' ? ' (the AppImage launcher: this system blocks it for AppImages; the .deb keeps it on)' : ' (--no-sandbox)'}`}`);
   // 2.7 Library preview: the pictures, cached in <userData>\thumbs; old ones cleaned up a minute after start
   thumbs = new Thumbs({ dir: path.join(app.getPath('userData'), 'thumbs'), ffmpeg: ffmpegExe, server, urlOf: (f) => fileUrl(f), log });
@@ -1386,6 +1430,8 @@ app.whenReady().then(async () => {
   server.fetch = (u, o) => net.fetch(u, o);
   xstream = new XStream({ downloader, server, log });
   // Only the installed Windows build updates itself; the portable exe and dev runs just open the download page.
+  // macOS: the same as the portable exe for now: SlopAMP says a new version is out (one with a .dmg) and opens the
+  // download page. (Replacing a .app by itself needs a signed and notarized build to be worth trusting.)
   // Linux (3.2.0): the AppImage updates itself when its folder is writable (also with a "SlopAMP Data" folder next
   // to it, which stays where it is); the .deb, unpacked folders and dev runs open the download page.
   const portable = !!(PORTABLE_DIR || process.env.SLOPAMP_PORTABLE) || /-portable$/i.test(path.basename(path.dirname(process.execPath)));
@@ -1409,6 +1455,8 @@ app.whenReady().then(async () => {
     log
   });
   registerIpc();
+  // macOS, a checkout: the Dock would show Electron's icon (the .app has its own, build/build-mac.sh)
+  if (MAC && !app.isPackaged && app.dock) { try { app.dock.setIcon(path.join(__dirname, 'renderer', 'icon.png')); } catch (_) {} }
   createWindow();
   updater.start();
   if (sysCfg().mediaKeys) registerMediaKeys();
@@ -1421,7 +1469,10 @@ function registerMediaKeys() {
   // Linux: the desktop owns the media keys and hands them to the player over MPRIS, which Chromium provides from the
   // page's navigator.mediaSession (app.js). Grabbing them as well would press Play/Pause twice (and on Wayland a
   // grab only works while SlopAMP has the focus). "Use media keys" off turns the mediaSession handlers off.
-  if (LINUX) return;
+  // macOS: the same through Now Playing (the media keys, the menu bar's and Control Centre's controls, headphone
+  // buttons), also from the page's mediaSession. A global shortcut for a media key would need the Accessibility
+  // permission there, and would take the keys from every other player.
+  if (LINUX || MAC) return;
   for (const [acc, action] of Object.entries(MEDIA_KEYS)) {
     try {
       if (globalShortcut.isRegistered(acc)) continue;
@@ -1442,6 +1493,11 @@ let tray = null, inTray = false, trayTitle = '', trayNote = '';
 function trayIcon() {
   const img = nativeImage.createFromPath(path.join(__dirname, 'renderer', 'icon.png'));
   const px = LINUX ? 32 : 16;     // Linux: the panel scales the icon itself (and is often HiDPI)
+  if (MAC && !img.isEmpty()) {    // macOS menu bar: 18 pt, with a second picture for Retina screens
+    const out = nativeImage.createEmpty();
+    for (const f of [1, 2]) out.addRepresentation({ scaleFactor: f, width: 18 * f, height: 18 * f, buffer: img.resize({ width: 18 * f, height: 18 * f, quality: 'best' }).toPNG() });
+    return out;
+  }
   return img.isEmpty() ? img : img.resize({ width: px, height: px });
 }
 // Linux: is there a tray for the icon? Tray icons show through a StatusNotifier host (KDE, Cinnamon, XFCE, Budgie;
@@ -1527,6 +1583,11 @@ app.on('will-quit', (e) => {
 });
 
 app.on('window-all-closed', () => app.quit());
+// macOS: a click on the Dock icon brings SlopAMP back from the menu bar ("Minimize to the tray")
+if (MAC) {
+  app.on('activate', () => { if (inTray) fromTray(); });
+  app.on('did-become-active', () => { try { if (wm && wm.started && !inTray) wm.macRaise(); } catch (e) { log('raise failed', e); } });
+}
 app.on('before-quit', () => {
   log('quitting');
   // Quitting must end every SlopAMP process, even if something below hangs.

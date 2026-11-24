@@ -6,14 +6,19 @@ const P = window.phosphor;
 // stays exactly as it was. Applied by toast(), the confirm box and the popup menus, to index.html once at the start
 // (osTextDocs), and by hand where code builds a text straight into the page.
 const LINUX = P.platform === 'linux';
-const PSEP = LINUX ? '/' : '\\';
-const osText = !LINUX ? (t) => t : (t) => String(t)
+// macOS: the same again in Mac words: the Trash, "Show in Finder", the menu bar for the tray, and ⌘ for Ctrl in the
+// shortcuts that are shown (winmgr.js makes ⌘ work as Ctrl; Ctrl+Tab stays, ⌘Tab is the Mac's own).
+const MAC = P.platform === 'darwin';
+const PSEP = LINUX || MAC ? '/' : '\\';
+const macText = (t) => t.replace(/Show in folder/g, 'Show in Finder').replace(/Minimize to (the )?tray/g, 'Minimize to the menu bar')
+  .replace(/Ctrl\+Alt\+/g, '\u2325\u2318').replace(/Ctrl\+Shift\+/g, '\u21e7\u2318').replace(/Ctrl\+(?!Tab)/g, '\u2318');
+const osText = !LINUX && !MAC ? (t) => t : (t) => (MAC ? macText : (x) => x)(String(t)
   .replace(/Downloads\\[^\n"“”]*/g, (m) => m.replace(/\\/g, '/'))
   .replace(/Recycle Bin/g, 'Trash')
-  .replace(/Show in Explorer/g, 'Show in folder');
+  .replace(/Show in Explorer/g, 'Show in folder'));
 function osTextDocs() {
-  if (!LINUX) return;
-  const hit = /Downloads\\|Recycle Bin|Show in Explorer/;
+  if (!LINUX && !MAC) return;
+  const hit = MAC ? /Downloads\\|Recycle Bin|Show in Explorer|Ctrl\+|Minimize to (the )?tray/ : /Downloads\\|Recycle Bin|Show in Explorer/;
   for (const d of WM.docs) {
     const w = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT);
     for (let n = w.nextNode(); n; n = w.nextNode()) if (hit.test(n.nodeValue)) n.nodeValue = osText(n.nodeValue);
@@ -21,7 +26,8 @@ function osTextDocs() {
   }
   // Settings → Minimize to the tray: no taskbar clock on Linux (sysRender adds the no-tray case)
   const tr = $('#sysTray'), hint = tr && tr.closest('.set-row').querySelector('small');
-  if (hint) hint.textContent = 'The \u2013 button hides SlopAMP in the system tray; its icon\u2019s menu brings it back. \u2715 still quits.';
+  if (hint) hint.textContent = MAC ? 'The \u2013 button hides SlopAMP in the menu bar; its icon\u2019s menu, or a click on SlopAMP in the Dock, brings it back. \u2715 still quits.'
+    : 'The \u2013 button hides SlopAMP in the system tray; its icon\u2019s menu brings it back. \u2715 still quits.';
 }
 // The player's panels are spread over several windows (winmgr.js): $ / $$ search all of them.
 const $ = WM.$, $$ = WM.$$;
@@ -2426,7 +2432,8 @@ async function openAbout() {      // 2.9.2: About only (the settings moved to th
   $('#aboutEnc').textContent = info.hasFfmpeg ? `FFmpeg ready · video converter: ${info.encoder || 'detecting…'}` : 'FFmpeg not found — only natively supported formats will play.';
   // Linux (3.2.0): how this copy runs, and the Chromium sandbox (the AppImage launcher turns it off where it can't work)
   const lx = info.linux;
-  $('#aboutSys').classList.toggle('hidden', !lx);
+  $('#aboutSys').classList.toggle('hidden', !lx && !info.mac);
+  if (info.mac) $('#aboutSys').textContent = `macOS \u00b7 ${info.mac.arch === 'arm64' ? 'Apple silicon' : 'Intel'} \u00b7 ${info.mac.kind === 'dev' ? 'from a checkout' : 'SlopAMP.app'}`;
   if (lx) $('#aboutSys').textContent = `Linux · ${({ appimage: 'AppImage', deb: '.deb (/opt/SlopAMP)', dev: 'from a checkout' })[lx.kind] || 'unpacked folder'} · `
     + (lx.sandbox ? 'Chromium sandbox on' : lx.sandboxBlocked ? 'Chromium sandbox OFF: this system (Ubuntu 23.10 and later) blocks it for AppImages. The .deb keeps it on.' : 'Chromium sandbox OFF (--no-sandbox)');
   $('#aboutDlg').showModal();
@@ -2499,7 +2506,7 @@ function updBarHtml(st) {
       ? `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is out</span><button class="link" data-a="notes">What’s new</button><button data-a="notes">Install update…</button>${x}`
       // a copy that can't update itself: on Windows the Portable exe; on Linux (3.2.0) the .deb (or an AppImage in a
       // folder it can't write to), which isn't "portable"
-      : `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is out${st.platform === 'linux' ? '' : ' (portable)'}</span><button class="link" data-a="notes">What’s new</button><button data-a="page">Download page</button>${x}`;
+      : `${UPD_ICON.bolt}<span class="msg">SlopAMP ${v} is out${st.platform === 'linux' || st.platform === 'darwin' ? '' : ' (portable)'}</span><button class="link" data-a="notes">What’s new</button><button data-a="page">Download page</button>${x}`;
     case 'downloading': {
       const p = st.total ? Math.min(100, Math.floor(st.received / st.total * 100)) : 0;
       const bg = st.mode === 'auto' && !st.installAfter;
@@ -2663,7 +2670,7 @@ async function toggleMini(force) {
     WM.body.toggle('mini', on);
     if (on) renderMini();
     syncWindows({ reflow: false });
-    $('#btnMini').title = on ? 'Back to the full player (Ctrl+M)' : 'Mini mode (Ctrl+M)';
+    $('#btnMini').title = osText(on ? 'Back to the full player (Ctrl+M)' : 'Mini mode (Ctrl+M)');
   } finally { miniBusy = false; }
 }
 WM.mini = { on: () => WM.body.contains('mini'), toggle: () => toggleMini() };

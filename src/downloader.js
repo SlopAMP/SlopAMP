@@ -10,7 +10,8 @@ const { spawn, spawnSync, execFile } = require('child_process');
 const EXE = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
 // Linux (3.2.0): yt-dlp_linux is a one-file program that unpacks itself and runs the real yt-dlp as its child, and that
 // starts FFmpeg. It runs in a process group of its own (detached), so Cancel and quitting end all of them (killTree).
-const GROUP = process.platform === 'linux';
+// macOS: yt-dlp_macos is the same kind of program, so it runs and is ended the same way.
+const GROUP = process.platform === 'linux' || process.platform === 'darwin';
 const UPDATE_EVERY_MS = 24 * 3600 * 1000;
 
 class Downloader {
@@ -297,6 +298,10 @@ function killGroup(pgid, sync) {
 }
 // Is any process of the group still running? (A finished one SlopAMP hasn't reaped yet doesn't count.)
 function groupAlive(pgid) {
+  if (process.platform === 'darwin') {      // no /proc on macOS: ask ps for every process's group and state
+    const r = spawnSync('/bin/ps', ['-axo', 'pgid=,state='], { encoding: 'utf8', timeout: 2000 });
+    return String(r.stdout || '').split('\n').some((l) => { const f = l.trim().split(/\s+/); return +f[0] === pgid && f[1] && f[1][0] !== 'Z'; });
+  }
   let names = [];
   try { names = fs.readdirSync('/proc'); } catch (_) { return false; }
   for (const n of names) {
