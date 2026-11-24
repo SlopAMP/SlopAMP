@@ -44,6 +44,7 @@ Main process            ── src/main.js     window, state, playlists, downloa
          /s/KEY   FFmpeg live remux/transcode → fragmented MP4 (MKV, AVI, ProRes, WMV, HEVC, AC3…)
                   encoder auto-picked: NVENC → AMF → QuickSync → Media Foundation → OpenH264
                   (Linux: NVENC → VAAPI (libva 2.21+) → Vulkan → OpenH264)
+                  (macOS: VideoToolbox → OpenH264)
          /v/KEY   subtitles converted to WebVTT
 ```
 
@@ -59,9 +60,13 @@ On Windows with Node.js installed:
 2. Optionally put `yt-dlp.exe` in `vendor\ytdlp\win32\` for the Download button.
 3. Run `npx electron@45.3.3 .`
 
+On a Mac: `bash build/fetch-mac-tools.sh`, then `vendor/mac-tools/electron-darwin-arm64/Electron.app/Contents/MacOS/Electron .` (see [BUILDING.md](BUILDING.md)).
+
 ## Building the installers
 
 Linux packages: `bash build/fetch-linux-tools.sh`, then `bash build/build-linux.sh` (see [BUILDING.md](BUILDING.md)).
+
+macOS app and .dmg (on a Mac): `bash build/fetch-mac-tools.sh`, then `bash build/build-mac.sh` (see [BUILDING.md](BUILDING.md)).
 
 The release build runs on Linux (or WSL) and uses Wine for `rcedit` and to read the bundled FFmpeg's and yt-dlp's versions:
 

@@ -37,7 +37,8 @@ const r4 = (b) => ({ x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w),
 const overlap = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0);
 
 class WindowManager {
-  constructor({ getLayout, saveLayout, log, legacyWindow, legacyPlHeight, version, x11 }) {
+  constructor({ getLayout, saveLayout, log, legacyWindow, legacyPlHeight, version, x11, mac }) {
+    this.mac = !!mac;               // macOS
     this.log = log || (() => {});
     this.x11 = !!x11;               // Linux on X11 / XWayland (3.2.0)
     this.version = version || '';
@@ -199,6 +200,10 @@ class WindowManager {
       // GNOME never lets a dialog go fullscreen. The video window (fullscreen video and visualizer) is created without
       // one and gets the player as its parent right after (attach), so it still stays with the player.
       if (this.x11 && id === 'video') delete o.parent;
+      // macOS: a child window there is carried along by every move of its parent, by the system itself, whether it's
+      // docked to the player or not (and it can't have a fullscreen Space of its own). SlopAMP moves the docked
+      // windows itself, so on macOS the panels are plain windows; macPanels() does what the parent did for them.
+      if (this.mac) delete o.parent;
       return o;
     }
     // popup menus / dialogs: positioned and sized when they're used
@@ -217,7 +222,7 @@ class WindowManager {
           .then((r) => { if (r !== 'ok') this.log('video window: skip taskbar:', r); }, (e) => this.log('video window: skip taskbar failed:', e.message));
       });
     }
-    if (id === 'main') { this.watch(id, win); win.on('focus', () => this.dialogUp()); if (this.layout.onTop) win.setAlwaysOnTop(true); return; }
+    if (id === 'main') { this.watch(id, win); win.on('focus', () => this.dialogUp()); if (this.layout.onTop) win.setAlwaysOnTop(true); if (this.mac) this.macPanels(win); return; }
     if (!PANELS.includes(id) && !HOSTS.includes(id)) return;
     win.setMenu(null);
     // Alt+F4 on a panel hides it like its ✕ button; the windows only really close when SlopAMP quits.
@@ -240,6 +245,21 @@ class WindowManager {
         win.on('leave-full-screen', () => { this.toRenderer('fullscreen', false); setTimeout(() => this.apply('video'), 50); });
       }
     }
+  }
+  // macOS (the panels have no parent window there, see childOptions): they go to the Dock with the player and come
+  // back with it, and all come to the front together when SlopAMP is switched to with a click on one of them.
+  macPanels(main) {
+    const panels = () => PANELS.filter(id => id !== 'main').map(id => [id, this.wins.get(id)]).filter(([, w]) => w && !w.isDestroyed());
+    main.on('minimize', () => { for (const [, w] of panels()) if (w.isVisible() && !w.isFullScreen()) w.hide(); });
+    main.on('restore', () => {
+      for (const [id, w] of panels()) if (this.visible[id] && !w.isVisible()) w.showInactive();
+      this.applyAll();
+    });
+  }
+  macRaise() {
+    const f = BrowserWindow.getFocusedWindow();
+    for (const id of PANELS) { const w = this.wins.get(id); if (w && !w.isDestroyed() && w.isVisible() && w !== f && !w.isFullScreen()) w.moveTop(); }
+    if (f && !f.isDestroyed() && [...this.wins.values()].includes(f)) f.moveTop();
   }
   toRenderer(ch, ...a) { const m = this.wins.get('main'); if (m && !m.isDestroyed()) m.webContents.send(ch, ...a); }
   // Follow moves/resizes the user makes outside our own drag code (window edges, Win+arrow keys).

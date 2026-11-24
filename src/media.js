@@ -168,7 +168,9 @@ class MediaServer {
     if (va && !va.ok) this.log('video encoder: VA-API skipped:', va.why);
     const candidates = process.platform === 'win32'
       ? ['h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf', 'libopenh264']
-      : linux ? ['h264_nvenc', ...(va.ok ? ['h264_vaapi'] : []), 'h264_vulkan', 'libopenh264'] : ['h264_nvenc', 'libopenh264'];
+      : linux ? ['h264_nvenc', ...(va.ok ? ['h264_vaapi'] : []), 'h264_vulkan', 'libopenh264']
+        // macOS: VideoToolbox (the Mac's own hardware encoder, Apple silicon and Intel), then OpenH264
+        : process.platform === 'darwin' ? ['h264_videotoolbox', 'libopenh264'] : ['h264_nvenc', 'libopenh264'];
     for (const enc of candidates) {
       // VAAPI: each GPU (render node) in turn, the first that encodes is used; Vulkan: the first two GPUs
       const devices = enc === 'h264_vaapi' ? renderNodes() : enc === 'h264_vulkan' ? ['0', '1'] : [null];
@@ -356,6 +358,9 @@ function encoderArgs(enc) {
     case 'h264_amf': return ['-c:v', 'h264_amf', '-quality', 'speed', '-rc', 'cqp', '-qp_i', '22', '-qp_p', '24', '-pix_fmt', 'yuv420p'];
     case 'h264_qsv': return ['-c:v', 'h264_qsv', '-preset', 'veryfast', '-global_quality', '24', '-pix_fmt', 'nv12'];
     case 'h264_mf': return ['-c:v', 'h264_mf', '-rate_control', 'quality', '-quality', '60', '-pix_fmt', 'nv12'];
+    // macOS: constant quality (Apple silicon; an Intel Mac's VideoToolbox refuses -q:v, fails the startup test and
+    // OpenH264 is used instead)
+    case 'h264_videotoolbox': return ['-c:v', 'h264_videotoolbox', '-q:v', '62', '-pix_fmt', 'yuv420p'];
     case 'libopenh264': return ['-c:v', 'libopenh264', '-b:v', '5M', '-pix_fmt', 'yuv420p'];
     default: return ['-c:v', enc];
   }

@@ -1111,7 +1111,7 @@ class Clipper {
     if (!x) return { ok: false, error: info ? 'There’s no picture in this file.' : 'SlopAMP can’t read this file.' };
     if (!this.server.encoder && this.server.detectEncoder) await this.server.detectEncoder().catch(() => null);
     const enc = this.xEncoder();
-    const names = { h264_nvenc: 'NVIDIA (h264_nvenc)', h264_amf: 'AMD (h264_amf)', h264_qsv: 'Intel (h264_qsv)', h264_vaapi: 'VA-API (h264_vaapi)', h264_vulkan: 'Vulkan (h264_vulkan)', libopenh264: 'OpenH264' };
+    const names = { h264_nvenc: 'NVIDIA (h264_nvenc)', h264_amf: 'AMD (h264_amf)', h264_qsv: 'Intel (h264_qsv)', h264_vaapi: 'VA-API (h264_vaapi)', h264_vulkan: 'Vulkan (h264_vulkan)', h264_videotoolbox: 'Apple VideoToolbox (h264_videotoolbox)', libopenh264: 'OpenH264' };
     return { ok: true, file, title: path.basename(file).replace(/\.[^.]+$/, ''), x, plan: X.plan(info, st.size), out: X.outName(file, fs.existsSync), encoder: names[enc] || enc };
   }
   // Fix for X: "<name> (X).mp4" next to the original (kept). o: { job, file }. Progress: { type: 'xprogress', job, pct }.
